@@ -10,6 +10,7 @@ abstract final class HostProfileApi {
   /// Relations every host screen reads.
   static const populate = <String, dynamic>{
     'populate[audio_intro]': 'true',
+    'populate[video_intro]': 'true',
     'populate[language]': 'true',
     'populate[rates]': 'true',
     'populate[durations]': 'true',

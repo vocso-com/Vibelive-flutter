@@ -13,6 +13,7 @@ import '../../component/pressable.dart';
 import 'helper/external_link.dart';
 import 'helper/host_profile_rules.dart';
 import 'profile_sheets.dart';
+import 'video_intro.dart';
 import 'voice_intro.dart';
 
 /// Instagram / Facebook / Snapchat / website chips (verified ones tinted).
@@ -184,6 +185,13 @@ class ProfileVibeCard extends StatelessWidget {
                 ),
               if (host.audioIntro case final url?)
                 VoiceIntro(url: url, hostId: HostProfileRules.expertKey(host)),
+              // Only ever an approved clip: the server withholds the file for
+              // anything else and the listing model checks the status again.
+              // onTalkNow is deliberately not passed yet — the prompt stays
+              // hidden until it is wired to this profile's own call action,
+              // because a dead button is worse than no button.
+              if (host.videoIntro case final url?)
+                VideoIntro(url: url, hostName: host.name),
             ],
           ),
         ],

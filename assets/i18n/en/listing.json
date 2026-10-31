@@ -2,6 +2,11 @@
   "errors": {
     "profile_unavailable": "This profile is not available right now."
   },
+  "video_intro": {
+    "title": "VIDEO INTRO FROM {{name}}",
+    "title_generic": "VIDEO INTRO",
+    "talk_now": "Talk now"
+  },
   "host": {
     "unknown_name": "UNKNOWN",
     "default_city": "INDIA",

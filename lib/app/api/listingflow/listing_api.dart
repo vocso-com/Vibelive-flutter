@@ -22,6 +22,9 @@ abstract final class ListingApi {
     'populate[expert_verifications]': 'true',
     'populate[service_area_selections]': 'true',
     'populate[audio_intro]': 'true',
+    // The server withholds the file itself until a reviewer approves it, so an
+    // unapproved clip arrives as null rather than being filtered out here.
+    'populate[video_intro]': 'true',
     'populate[host_profile_images][populate][image]': 'true',
   };
 

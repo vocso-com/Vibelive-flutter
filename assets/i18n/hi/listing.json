@@ -2,6 +2,11 @@
   "errors": {
     "profile_unavailable": "यह प्रोफ़ाइल अभी उपलब्ध नहीं है।"
   },
+  "video_intro": {
+    "title": "{{name}} का वीडियो इंट्रो",
+    "title_generic": "वीडियो इंट्रो",
+    "talk_now": "अभी बात करें"
+  },
   "host": {
     "unknown_name": "अज्ञात",
     "default_city": "भारत",

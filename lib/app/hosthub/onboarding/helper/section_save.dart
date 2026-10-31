@@ -141,6 +141,7 @@ HostSaver useHostSectionSave(
             if (p.mediaId != null) p.mediaId!,
         ],
         audioIntro: draft.voiceIntro.value?.upload,
+        videoIntro: draft.videoIntro.value?.upload,
         userPatch: me == null ? const {} : HostSubmitPlan.userPatch(draft, me),
       ),
     );

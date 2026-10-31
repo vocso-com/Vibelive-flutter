@@ -83,6 +83,10 @@ dependencies:
   webview_flutter: ^4.14.1
   record: ^6.2.1
   path_provider: ^2.1.6
+  # Host video intros and statuses. The Flutter team's own player; the only
+  # alternative here was an HTML5 <video> inside webview_flutter, which costs a
+  # webview per clip and gives up aspect-ratio and playback control.
+  video_player: ^2.11.1
 
 dev_dependencies:
   flutter_test:

@@ -58,6 +58,7 @@ class HostCard implements HostTraits {
     required this.tags,
     required this.presence,
     required this.audioIntro,
+    this.videoIntro,
     required this.topics,
     required this.topicValues,
     required this.images,
@@ -128,6 +129,12 @@ class HostCard implements HostTraits {
     // pending whenever the recording changes.
     final audioUrl = Strapi.mediaFromAsset(e['audio_intro']);
     final audioApproved = _trimLower(e['audio_intro_status']) == 'approved';
+    // Checked here as well as on the server. The server withholds the file for
+    // anything other than `approved`, so this is the second of two locks rather
+    // than the only one — and it keeps the client honest if an older build of
+    // the backend ever serves one.
+    final videoUrl = Strapi.mediaFromAsset(e['video_intro']);
+    final videoApproved = _trimLower(e['video_intro_status']) == 'approved';
 
     final featuredSequence =
         e['featured_sequence'] ??
@@ -220,6 +227,7 @@ class HostCard implements HostTraits {
       ],
       presence: HostPresence.fromExpert(e),
       audioIntro: audioApproved ? audioUrl : null,
+      videoIntro: videoApproved ? videoUrl : null,
       topics: [
         for (final s in supportTopics)
           ?_nonEmpty(J.str(_dig(s, const ['snapshot', 'option', 'label']))),
@@ -294,6 +302,11 @@ class HostCard implements HostTraits {
 
   /// Playable voice intro: approved recordings only.
   final String? audioIntro;
+
+  /// An approved video intro's URL, or null. Null covers both "no clip" and
+  /// "not approved yet": the client has no reason to tell those apart, and a
+  /// profile should never hint that there is a clip it is not showing.
+  final String? videoIntro;
 
   /// Support-topic labels: what the person wants to talk about.
   @override

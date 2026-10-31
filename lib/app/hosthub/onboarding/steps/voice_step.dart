@@ -11,6 +11,7 @@ import '../helper/draft_controller.dart';
 import '../helper/draft_models.dart';
 import '../helper/host_palette.dart';
 import '../widgets/step_body.dart';
+import '../widgets/video_intro_field.dart';
 import '../widgets/voice_intro_field.dart';
 
 /// 5 of 12: "Introduce yourself", a short recorded hello callers hear before
@@ -33,6 +34,10 @@ class VoiceStep extends StatelessWidget {
         HostVoiceIntroField(draft: draft),
         SizedBox(height: 14.ms),
         _Opener(draft: draft),
+        // Below the opener on purpose: the recording is what this step is for
+        // and what Continue checks, so the clip is offered after it rather than
+        // competing with it. Optional — nothing here gates the step.
+        HostVideoIntroField(draft: draft),
         SizedBox(height: 12.ms),
         HostCard(
           color: p.tint,

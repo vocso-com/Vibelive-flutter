@@ -87,6 +87,7 @@ class HostProfilePatch {
     String website = '',
     required List<HostOption> languages,
     Object? audioIntroMediaId,
+    Object? videoIntroMediaId,
   }) {
     final data = <String, dynamic>{
       'handler': HostProfile.sanitizeHandle(handler),
@@ -101,12 +102,22 @@ class HostProfilePatch {
       // ("Invalid key audio_intro"), and sending `null` on every save took
       // unrelated edits down with it. An intro cannot be cleared from here.
       'audio_intro': ?audioIntroMediaId,
+      // Same rule, same reason: absent rather than null when there is no clip.
+      // The server also forces video_intro_status back to pending on any change
+      // here, so sending an unchanged clip would quietly unpublish an approved
+      // one — which is why a saved clip reports no upload at all.
+      'video_intro': ?videoIntroMediaId,
     };
     return HostProfilePatch(
       data,
       echo: {
         for (final e in data.entries)
-          if (e.key != 'language' && e.key != 'audio_intro') e.key: e.value,
+          // Media ids are not worth echoing into the local profile: the echo
+          // feeds the optimistic view, which reads intros by URL, not by id.
+          if (e.key != 'language' &&
+              e.key != 'audio_intro' &&
+              e.key != 'video_intro')
+            e.key: e.value,
         'language': [for (final l in languages) l.raw],
       },
     );
@@ -155,6 +166,7 @@ class ProfessionalDetailsInput {
     this.photos = const [],
     this.existingPhotos = const [],
     this.audioIntro,
+    this.videoIntro,
   });
 
   /// Owner; becomes the `user` relation when the profile is created.
@@ -177,6 +189,9 @@ class ProfessionalDetailsInput {
 
   /// A local recording is uploaded as `audio/mp4`.
   final HostMediaRef? audioIntro;
+
+  /// A local capture is uploaded as `video/mp4`.
+  final HostMediaRef? videoIntro;
 }
 
 class ProfessionalDetailsResult {

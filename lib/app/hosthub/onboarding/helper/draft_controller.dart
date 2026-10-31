@@ -32,6 +32,7 @@ class HostDraftController {
       topics,
       photos,
       voiceIntro,
+      videoIntro,
       audioOn,
       videoOn,
       audioRate,
@@ -87,6 +88,12 @@ class HostDraftController {
   final topics = ValueNotifier<List<HostTopic>>(const []);
   final photos = ValueNotifier<List<HostDraftPhoto>>(const []);
   final voiceIntro = ValueNotifier<HostVoiceIntro?>(null);
+
+  /// Optional, and never gates a step: [HostValidation] does not ask for it, so
+  /// a host who skips it is not held up. Added for existing hosts rather than
+  /// as a thirteenth onboarding step.
+  final videoIntro = ValueNotifier<HostVideoIntro?>(null);
+
   /// Off until the host turns a format on (then at the backend minimum).
   final audioOn = ValueNotifier(false);
   final videoOn = ValueNotifier(false);
@@ -163,6 +170,13 @@ class HostDraftController {
       final p? when !File(p).existsSync() => voice!.withoutRecording(),
       _ => voice,
     };
+    // Same fallback for the clip: a camera capture lives in a cache directory
+    // the OS is free to clear, and a vanished file must not fail the save.
+    final clip = HostVideoIntro.fromJson(json['videoIntro']);
+    videoIntro.value = switch (clip?.path) {
+      final p? when !File(p).existsSync() => clip!.withoutRecording(),
+      _ => clip,
+    };
     audioOn.value = json['audioOn'] == true;
     videoOn.value = json['videoOn'] == true;
     audioRate.value = _int(json['audioRate']) ?? defaultAudioRate;
@@ -200,6 +214,7 @@ class HostDraftController {
     'topics': [for (final t in topics.value) t.toJson()],
     'photos': [for (final p in photos.value) ?p.toJson()],
     'voiceIntro': voiceIntro.value?.toJson(),
+    'videoIntro': videoIntro.value?.toJson(),
     'audioOn': audioOn.value,
     'videoOn': videoOn.value,
     'audioRate': audioRate.value,
@@ -282,6 +297,7 @@ class HostDraftController {
       topics,
       photos,
       voiceIntro,
+      videoIntro,
       audioOn,
       videoOn,
       audioRate,

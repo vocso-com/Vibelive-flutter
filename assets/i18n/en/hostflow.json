@@ -456,6 +456,15 @@
     "subtitle": "Our community guidelines keep every conversation safe, respectful and genuine."
   },
   "counter": "{{count}}/{{max}}",
+  "video": {
+    "title": "Video intro (optional)",
+    "hint": "A few seconds of you saying hello. Callers see it on your profile before they call.",
+    "add": "Record a video intro",
+    "again": "Re-record",
+    "discard": "Discard",
+    "in_review": "Your video intro is with the review team.",
+    "failed": "Could not record that. Please try again."
+  },
   "voice": {
     "title": "Voice intro",
     "record_label": "Record voice intro",

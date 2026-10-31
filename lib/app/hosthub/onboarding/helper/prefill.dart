@@ -82,6 +82,12 @@ abstract final class HostPrefill {
         savedUrl: host.audioIntroUrl,
       );
     }
+    if (d.videoIntro.value == null && host.videoIntroUrl != null) {
+      d.videoIntro.value = HostVideoIntro(
+        savedMediaId: host.videoIntroMediaId,
+        savedUrl: host.videoIntroUrl,
+      );
+    }
     hostSettings(d, host);
   }
 

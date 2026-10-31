@@ -158,6 +158,16 @@ abstract final class CampaignLinks {
       hostRoute: AppRoutes.professionalDetails,
       params: [CampaignParam('step', required: true)],
     ),
+    // Where a rejected video intro sends the host. The clip lives on the voice
+    // step, next to the recording, so this lands them on the thing they have to
+    // redo rather than on Home. The backend's moderation push uses this name
+    // (`screen: 'host-video'`); without the route it fell back to Home.
+    CampaignRoute(
+      'host-video',
+      AppRoutes.hostOnboarding,
+      hostRoute: AppRoutes.professionalDetails,
+      fixed: {'step': 'voice'},
+    ),
     CampaignRoute(
       'verification-badge-info',
       AppRoutes.verificationBadge,

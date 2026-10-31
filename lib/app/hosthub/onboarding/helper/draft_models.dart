@@ -161,6 +161,99 @@ class HostVoiceIntro {
   };
 }
 
+/// A host's video intro: the same shape as [HostVoiceIntro], for a clip.
+///
+/// Deliberately a parallel class rather than a refactor of the voice one. The
+/// two hold the same five fields, and folding them into a shared base would
+/// mean editing the model the live host onboarding already saves through — a
+/// funnel that cannot afford a regression for the sake of forty lines. This
+/// duplication is inert data plumbing; the screening rule that MUST stay
+/// shared lives server-side, in INTRO_MEDIA.
+@immutable
+class HostVideoIntro {
+  const HostVideoIntro({
+    this.path,
+    this.seconds = 0,
+    this.uploadedId,
+    this.savedMediaId,
+    this.savedUrl,
+  });
+
+  /// Kept short on purpose: this plays on a profile before anyone has paid,
+  /// and a human reviews every second of it.
+  static const maxSeconds = 30;
+
+  static HostVideoIntro? fromJson(dynamic json) {
+    if (json is! Map) return null;
+    final intro = HostVideoIntro(
+      path: J.str(json['path']),
+      seconds: J.integer(json['seconds']) ?? 0,
+      uploadedId: json['uploadedId'],
+      savedMediaId: json['savedMediaId'],
+      savedUrl: J.str(json['savedUrl']),
+    );
+    return intro.isEmpty ? null : intro;
+  }
+
+  /// A clip recorded here, not uploaded yet.
+  final String? path;
+
+  /// Its length (the saved one's is unknown).
+  final int seconds;
+
+  /// Its media id once uploaded in the background; null until then, and the
+  /// save uploads the file itself.
+  final Object? uploadedId;
+  final Object? savedMediaId;
+  final String? savedUrl;
+
+  bool get isNew => path != null;
+  bool get isEmpty => path == null && savedUrl == null;
+
+  /// What the save sends: only a new clip, by id once uploaded. A saved clip
+  /// sends nothing, so re-saving an unchanged profile cannot re-post it — and
+  /// so cannot send an approved clip back to the review queue for no reason.
+  HostMediaRef? get upload => switch ((path, uploadedId)) {
+    (null, _) => null,
+    (_, final Object id) => HostMediaRef.media(id),
+    (final String p, null) => HostMediaRef.file(
+      p,
+      fileName: 'video-intro-${DateTime.now().millisecondsSinceEpoch}.mp4',
+      mimeType: 'video/mp4',
+    ),
+  };
+
+  /// [path] recorded now, the saved clip kept as the fallback.
+  HostVideoIntro withRecording(String path, int seconds) => HostVideoIntro(
+    path: path,
+    seconds: seconds,
+    savedMediaId: savedMediaId,
+    savedUrl: savedUrl,
+  );
+
+  /// The same clip, uploaded as [id].
+  HostVideoIntro withUploaded(Object id) => HostVideoIntro(
+    path: path,
+    seconds: seconds,
+    uploadedId: id,
+    savedMediaId: savedMediaId,
+    savedUrl: savedUrl,
+  );
+
+  /// The new clip dropped: back to the saved one, or nothing.
+  HostVideoIntro? withoutRecording() => savedUrl == null
+      ? null
+      : HostVideoIntro(savedMediaId: savedMediaId, savedUrl: savedUrl);
+
+  JsonMap toJson() => {
+    'path': path,
+    'seconds': seconds,
+    'uploadedId': uploadedId,
+    'savedMediaId': savedMediaId,
+    'savedUrl': savedUrl,
+  };
+}
+
 /// One time slot of a day, minutes since midnight.
 @immutable
 class HostSlot {

@@ -175,6 +175,23 @@ Future<ProfessionalDetailsResult> _saveProfessionalDetails(
               : audio,
         );
 
+  // The clip the host just captured. Defaults are filled in the same way the
+  // recording's are, because image_picker hands back a path with no mime type.
+  final clip = input.videoIntro;
+  final videoId = clip == null
+      ? null
+      : await _mediaId(
+          clip is HostMediaFile && clip.mimeType == null
+              ? HostMediaFile(
+                  clip.path,
+                  fileName:
+                      clip.fileName ??
+                      'video-intro-${DateTime.now().millisecondsSinceEpoch}.mp4',
+                  mimeType: 'video/mp4',
+                )
+              : clip,
+        );
+
   final patch = HostProfilePatch.professional(
     handler: input.handler,
     tagline: input.tagline,
@@ -183,6 +200,7 @@ Future<ProfessionalDetailsResult> _saveProfessionalDetails(
     website: input.website,
     languages: input.languages,
     audioIntroMediaId: audioId,
+    videoIntroMediaId: videoId,
   );
 
   final existingId = input.expertId;

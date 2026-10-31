@@ -56,6 +56,9 @@ class HostProfile {
     if (node.containsKey('audio_intro')) {
       out['audio_intro'] = Strapi.map(node['audio_intro']);
     }
+    if (node.containsKey('video_intro')) {
+      out['video_intro'] = Strapi.map(node['video_intro']);
+    }
     for (final k in const ['rates', 'durations']) {
       if (node.containsKey(k)) {
         out[k] = Strapi.map(node[k]) ?? <String, dynamic>{};
@@ -183,11 +186,17 @@ class HostProfile {
   Object? get audioIntroMediaId =>
       audioIntro?['id'] ?? audioIntro?['documentId'];
 
+  JsonMap? get videoIntro => Strapi.map(raw['video_intro']);
+  String? get videoIntroUrl => Strapi.mediaFromAsset(videoIntro);
+  Object? get videoIntroMediaId =>
+      videoIntro?['id'] ?? videoIntro?['documentId'];
+
   // ── Moderation (read by the RN ModerationStatus banners) ────────────────
   /// `pending_review`, `rejected`, … or null.
   String? get moderationStatus => J.str(raw['moderation_status']);
   String? get moderationNote => J.str(raw['moderation_note']);
   String? get audioIntroStatus => J.str(raw['audio_intro_status']);
+  String? get videoIntroStatus => J.str(raw['video_intro_status']);
 
   /// Fields waiting for review (`pending_changes` keys minus `submittedAt`).
   List<String> get pendingChangeFields {

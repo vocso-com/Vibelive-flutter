@@ -31,6 +31,7 @@ abstract final class HostSubmitPlan {
         if (p.mediaId != null) p.mediaId!,
     ],
     audioIntro: d.voiceIntro.value?.upload,
+    videoIntro: d.videoIntro.value?.upload,
     rates: HostValidation.ratesOf(d),
     callAnyTime: d.availableNow.value && !d.vacation.value,
     vacation: d.vacation.value,

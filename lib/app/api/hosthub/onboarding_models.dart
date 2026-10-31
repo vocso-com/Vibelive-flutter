@@ -18,6 +18,7 @@ class HostOnboardingInput {
     required this.languages,
     required this.photoMediaIds,
     this.audioIntro,
+    this.videoIntro,
     required this.rates,
     required this.callAnyTime,
     this.vacation = false,
@@ -45,6 +46,10 @@ class HostOnboardingInput {
 
   /// A new voice-intro recording to upload as `audio_intro`.
   final HostMediaRef? audioIntro;
+
+  /// A new video-intro clip to upload as `video_intro`. Optional, and never
+  /// required to submit: it is an addition for hosts who want one, not a step.
+  final HostMediaRef? videoIntro;
 
   /// A disabled call type is 0 (CallRatesScreen rule).
   final HostRates rates;
@@ -95,6 +100,7 @@ class HostProfileEditInput {
     required this.languages,
     required this.photoMediaIds,
     this.audioIntro,
+    this.videoIntro,
     this.userPatch = const {},
   });
 
@@ -104,6 +110,10 @@ class HostProfileEditInput {
   /// A new voice-intro recording to upload as `audio_intro` (none: the
   /// profile's stays as it is).
   final HostMediaRef? audioIntro;
+
+  /// A new video-intro clip to upload as `video_intro` (none: the profile's
+  /// stays as it is, and keeps whatever moderation state it had).
+  final HostMediaRef? videoIntro;
   final String handler;
   final String tagline;
   final String? gender;
