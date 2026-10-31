@@ -204,4 +204,44 @@ void main() {
       expect(NotificationTapRouter.tapKey(env({})), isNull);
     });
   });
+
+  group('host came online', () {
+    test('a host-online nudge opens that host profile', () {
+      final t = route({
+        'type': 'HOST_ONLINE',
+        'openUserId': 'usr_abc',
+        'expertProfileId': '42',
+      });
+      expect(t.destination, TapDestination.hostProfile);
+      expect(t.location, 'usr_abc');
+    });
+
+    test('the type is matched case-insensitively, as the envelope lowercases it', () {
+      final t = route({'type': 'host_online', 'openUserId': 'usr_abc'});
+      expect(t.destination, TapDestination.hostProfile);
+    });
+
+    test('a nudge with no openUserId has nothing to open', () {
+      // Better to fall through than to navigate somewhere arbitrary: the whole
+      // point of the nudge is the specific host.
+      final t = route({'type': 'HOST_ONLINE'});
+      expect(t.destination, isNot(TapDestination.hostProfile));
+    });
+
+    test('an empty openUserId is treated as absent', () {
+      final t = route({'type': 'HOST_ONLINE', 'openUserId': '   '});
+      expect(t.destination, isNot(TapDestination.hostProfile));
+    });
+
+    test('a live call still wins over a nudge', () {
+      // A ringing or ongoing call is the more urgent thing on the device.
+      final t = route({
+        'type': 'HOST_ONLINE',
+        'openUserId': 'usr_abc',
+        'callId': '7',
+        'callStatus': 'ongoing',
+      });
+      expect(t.destination, isNot(TapDestination.hostProfile));
+    });
+  });
 }

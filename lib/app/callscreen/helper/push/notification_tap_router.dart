@@ -24,6 +24,7 @@ enum TapDestination {
   incomingCall,
   callHistory,
   callback,
+  hostProfile,
   wallet,
   verification,
   referral,
@@ -37,7 +38,8 @@ class TapTarget {
   const TapTarget(this.destination, [this.location]);
   final TapDestination destination;
 
-  /// Route ([TapDestination.route]) or URL ([TapDestination.link]).
+  /// Route ([TapDestination.route]), URL ([TapDestination.link]), or the host's
+  /// user documentId ([TapDestination.hostProfile]).
   final String? location;
 
   @override
@@ -101,6 +103,18 @@ abstract final class NotificationTapRouter {
         // Everything else belongs to the live call flow.
         _ => const TapTarget(TapDestination.none),
       };
+    }
+    // A host the user favourited or looked at is reachable again. An explicit
+    // type, so it is settled before any keyword scan; after the call block on
+    // purpose, because a ringing or ongoing call is the more urgent thing on the
+    // device and a nudge can wait.
+    if (m.type == 'host_online') {
+      final open = m.data['openUserId']?.trim();
+      if (open != null && open.isNotEmpty) {
+        return TapTarget(TapDestination.hostProfile, open);
+      }
+      // No host to open. Falls through rather than navigating somewhere
+      // arbitrary: the specific host IS the point of this notification.
     }
     if (WalletClassifier.isExplicitTap(m)) {
       return const TapTarget(TapDestination.wallet, AppRoutes.wallet);
@@ -214,6 +228,13 @@ abstract final class NotificationTapRouter {
         // dropped with the page it sat on.
         DeepLinks.instance.queueRoute(AppRoutes.home);
         CallSignals.onCallbackRequest(m.raw);
+        return true;
+      case TapDestination.hostProfile:
+        // The id first, then Home: the profile sheet is opened by the Home shell
+        // watching DeepLinks.openUser, so setting it before navigating is what
+        // makes the sheet appear with the page rather than after it.
+        DeepLinks.instance.setOpenUser(target.location!);
+        DeepLinks.instance.queueRoute(AppRoutes.home);
         return true;
       case TapDestination.wallet:
         await WalletNotifications.requestRefresh(background: false);
