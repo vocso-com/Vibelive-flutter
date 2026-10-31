@@ -95,6 +95,7 @@ class _Backend implements HttpClientAdapter {
   final requests = <String>[];
   final reviewPages = <int>[];
   final posted = <String, Object?>{};
+  final patched = <String, Object?>{};
 
   @override
   Future<ResponseBody> fetch(
@@ -104,6 +105,7 @@ class _Backend implements HttpClientAdapter {
   ) async {
     requests.add('${o.method} ${o.path}');
     if (o.method == 'POST') posted[o.path] = o.data;
+    if (o.method == 'PATCH') patched[o.path] = o.data;
     // The full-profile read is slow enough to see its skeleton.
     if (o.path == '/api/expert-profiles') {
       await Future<void>.delayed(const Duration(milliseconds: 300));
@@ -150,6 +152,8 @@ class _Backend implements HttpClientAdapter {
             {'id': 1, 'wallet_type': 'CASH_WALLET', 'balance': cash},
           ],
         };
+      case 'POST /api/call-gate-blocks/record':
+        return {'documentId': 'gate1', 'outcome': 'pending'};
       case 'GET /api/report-categories':
         return {
           'data': [
@@ -418,9 +422,33 @@ void main() {
     expect(find.text('Add ₹90 to call MEERA'), findsOneWidget);
     expect(find.text('Calls start with 5 minutes at ₹20/min'), findsOneWidget);
 
+    // The block is on record BEFORE the sheet is answered: a caller who kills
+    // the app here is the most frustrated one there is, and the row has to
+    // exist for that to be visible at all.
+    final block = backend.posted['/api/call-gate-blocks/record'] as Map?;
+    // The EXPERT PROFILE id ('exp7'), not the host's user id ('usr7', which is
+    // what HostCard.documentId prefers): the backend resolves this against
+    // expert-profile, so the user id would silently store no host at all.
+    expect(block?['expertProfileDocumentId'], 'exp7');
+    expect(block?['callType'], 'voiceCall');
+    expect(block?['rate'], 20);
+    // The gate itself: without the multiplier in force a row cannot say why it
+    // fired, and a change to the minimum cannot be evaluated afterwards.
+    expect(block?['minMinutes'], 5);
+    expect(block?['required'], 100);
+    expect(block?['balance'], 10);
+    expect(block?['gap'], 90);
+    expect(block?['suggestedAmount'], 90);
+    expect(backend.patched, isEmpty);
+
     await tester.tap(find.text('ADD ₹90'));
     await _pump(tester, 800);
     expect(find.text('WALLET PAGE'), findsOneWidget);
+    // ...and the outcome settles the same row, so "could not afford it" stays
+    // distinguishable from "was not interested enough".
+    expect(backend.patched['/api/call-gate-blocks/gate1/outcome'], {
+      'outcome': 'add_money',
+    });
     await finish(tester);
   });
 

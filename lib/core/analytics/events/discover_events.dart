@@ -386,6 +386,45 @@ abstract final class DiscoverEvents {
     'accepted': accepted,
   });
 
+  /// The pre-call balance gate was shown, i.e. a caller was refused a call
+  /// before one existed. [rate] and [minMinutes] are the gate itself
+  /// (`required = rate x minMinutes`): without them a block cannot say why it
+  /// fired, and a change to the minimum cannot be evaluated afterwards.
+  ///
+  /// The durable record is the `call-gate-block` collection; this event is the
+  /// convenience copy. Kept under its original name so the rows already
+  /// collected stay comparable.
+  static void balanceGateShown({
+    required String expertId,
+    required String callType,
+    required double required,
+    required double balance,
+    required double gap,
+    required double rate,
+    required double minMinutes,
+    required int suggestedAmount,
+  }) => Analytics.log('balance_gate_shown', {
+    'expert_id': expertId,
+    'call_type': callType,
+    'required': required,
+    'balance': balance,
+    'gap': gap,
+    'rate': rate,
+    'min_minutes': minMinutes,
+    'suggested_amount': suggestedAmount,
+  });
+
+  /// The balance gate's "Add money".
+  static void balanceGateTopupTapped({
+    required String expertId,
+    required double gap,
+    required int suggestedAmount,
+  }) => Analytics.log('balance_gate_topup_tapped', {
+    'expert_id': expertId,
+    'gap': gap,
+    'suggested_amount': suggestedAmount,
+  });
+
   /// The balance gate's "Transfer earnings" (RN had none).
   static void balanceGateTransferTapped({
     required String expertId,

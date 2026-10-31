@@ -239,7 +239,8 @@ Helpers: `lib/core/analytics/events/discover_events.dart` (`DiscoverEvents`). Al
 | call_button_tapped | audio / video button on profile | host_id, call_type, rate, source, is_company | |
 | call_precheck_result | where pre-call checks ended | host_id, call_type, result (passed/own_profile/signed_out/incomplete_profile/balance_gate/safety_cancelled), enough_balance | |
 | call_prompt_answered | login / update-profile alert before a call | prompt (login/update_profile), accepted | |
-| balance_gate_shown / balance_gate_topup_tapped | (existing, RN parity) | expert_id, required, balance, gap / suggested_amount | |
+| balance_gate_shown | pre-call balance gate shown (a caller refused a call before one existed) | expert_id, call_type, required, balance, gap, rate, min_minutes, suggested_amount | rate x min_minutes IS the gate: without both, a block cannot say why it fired. Durable record is Strapi `call-gate-block`, not this event |
+| balance_gate_topup_tapped | gate's Add money | expert_id, gap, suggested_amount | |
 | balance_gate_transfer_tapped | gate's Transfer earnings | expert_id, gap | (transfer sheet opened with source=balance_gate) |
 | balance_gate_dismissed | gate closed without choice | expert_id, gap | |
 | safety_prompt_answered | "Before you connect" | call_type, result (accepted/cancelled) | |

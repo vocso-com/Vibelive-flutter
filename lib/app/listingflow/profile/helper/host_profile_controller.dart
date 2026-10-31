@@ -3,7 +3,6 @@ import 'dart:async';
 import 'package:flutter/widgets.dart';
 import 'package:flutter/services.dart';
 
-import '../../../../core/analytics/analytics.dart';
 import '../../../../core/analytics/events/discover_events.dart';
 import '../../../../core/i18n/i18n.dart';
 import '../../../../core/network/api_exception.dart';
@@ -12,6 +11,7 @@ import '../../../../core/session/session_store.dart';
 import '../../../../core/utils/log.dart';
 import '../../../api/client/client_queries.dart';
 import '../../../api/listingflow/listing_models.dart';
+import '../../../api/paymentscreen/call_gate_api.dart';
 import '../../../api/paymentscreen/payment_queries.dart';
 import '../../../api/paymentscreen/runtime_config_queries.dart';
 import '../../../api/paymentscreen/wallet_models.dart';
@@ -266,19 +266,51 @@ class HostProfileController {
         if (_disposed) return false;
         precheck('balance_gate', enoughBalance: false);
         final expertId = host.documentId ?? '${host.id}';
-        Analytics.log('balance_gate_shown', {
-          'expert_id': expertId,
-          'required': gate.required,
-          'balance': gate.balance,
-          'gap': gate.gap,
-        });
-        switch (await _showBalanceGate(gate, host)) {
+        DiscoverEvents.balanceGateShown(
+          expertId: expertId,
+          callType: callType,
+          required: gate.required,
+          balance: gate.balance,
+          gap: gate.gap,
+          rate: gate.rate,
+          minMinutes: gate.minutes,
+          suggestedAmount: gate.suggestedAmount,
+        );
+        // Started before the sheet, not after it: a caller who kills the app
+        // with the sheet open is the most frustrated one there is, and the row
+        // has to exist for that to be visible at all. Fails open — the sheet
+        // never waits on it. The durable record; the event above is the copy.
+        final blockRow = CallGateApi.record(
+          gate: gate,
+          // NOT `host.documentId`: that one is "user documentId, else
+          // expert-profile documentId", so it would fail the expert-profile
+          // lookup on almost every row and silently store no host at all.
+          expertProfileDocumentId: host.expertProfileDocumentId,
+          video: video,
+        );
+        final action = await _showBalanceGate(gate, host);
+        // Deliberately not guarded by `_disposed`: the outcome is worth
+        // recording even when the sheet has already gone.
+        unawaited(
+          blockRow.then(
+            (id) => CallGateApi.resolve(
+              documentId: id,
+              outcome: switch (action) {
+                BalanceGateAction.addMoney => CallGateOutcome.addMoney,
+                BalanceGateAction.transferEarnings =>
+                  CallGateOutcome.transferEarnings,
+                null => CallGateOutcome.dismissed,
+              },
+            ),
+          ),
+        );
+        switch (action) {
           case BalanceGateAction.addMoney:
-            Analytics.log('balance_gate_topup_tapped', {
-              'expert_id': expertId,
-              'gap': gate.gap,
-              'suggested_amount': gate.suggestedAmount,
-            });
+            DiscoverEvents.balanceGateTopupTapped(
+              expertId: expertId,
+              gap: gate.gap,
+              suggestedAmount: gate.suggestedAmount,
+            );
             // The wallet opens with the amount pre-filled.
             _leaveTo(
               '${AppRoutes.wallet}?amount=${gate.suggestedAmount}'
