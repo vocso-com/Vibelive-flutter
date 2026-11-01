@@ -522,5 +522,16 @@
     "photos_body": "Remove the photo marked \"Not approved\" (tap ✕), then add a clear photo of yourself.",
     "voice_title": "Your voice intro wasn't approved",
     "voice_body": "Tap Re-record and record a new one. It only takes a few seconds."
+  },
+  "my_status": {
+    "title": "Your status",
+    "hint": "A short clip your callers see for 24 hours.",
+    "add": "Add status",
+    "live": "LIVE",
+    "in_review": "IN REVIEW",
+    "rejected": "NOT APPROVED",
+    "finished": "FINISHED",
+    "posted": "Status posted. It shows once the team has checked it.",
+    "failed": "Could not post that. Please try again."
   }
 }

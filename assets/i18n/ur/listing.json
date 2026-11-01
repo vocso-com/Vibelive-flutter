@@ -23,5 +23,9 @@
     "title": "{{name}} کا ویڈیو تعارف",
     "title_generic": "ویڈیو تعارف",
     "talk_now": "ابھی بات کریں"
+  },
+  "status": {
+    "today": "آج",
+    "unavailable": "یہ کلپ دستیاب نہیں ہے۔"
   }
 }

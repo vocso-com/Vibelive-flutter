@@ -23,5 +23,9 @@
     "minutes": "On a call, about {{n}} min",
     "hour": "On a call, over an hour",
     "hours": "On a call, over {{n}} hours"
+  },
+  "status": {
+    "today": "TODAY",
+    "unavailable": "This clip is not available."
   }
 }

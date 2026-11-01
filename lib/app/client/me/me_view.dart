@@ -20,6 +20,7 @@ import '../../component/c_toast.dart';
 import '../../component/infinite_scroll.dart';
 import '../../homescreen/helper/home_controller.dart';
 import '../../hosthub/approved/host_status_section.dart';
+import '../../hosthub/approved/widgets/my_statuses_card.dart';
 import '../../navbar/bottombar/navbar_collapse.dart';
 import 'helper/me_actions.dart';
 import 'helper/me_data.dart';
@@ -109,6 +110,12 @@ class MeView extends HookWidget {
                 return MeActions.open(context, route);
               },
             ),
+          ),
+          // Below the moderation news, above the segmented sections: posting a
+          // status is a thing a host does today, not a setting they go looking
+          // for in a tab.
+          SliverToBoxAdapter(
+            child: MyStatusesCard(hostName: data.host?.handler ?? ''),
           ),
           SliverToBoxAdapter(
             child: Padding(

@@ -13,6 +13,7 @@ import '../../component/pressable.dart';
 import 'helper/external_link.dart';
 import 'helper/host_profile_rules.dart';
 import 'profile_sheets.dart';
+import 'host_statuses_strip.dart';
 import 'video_intro.dart';
 import 'voice_intro.dart';
 
@@ -192,6 +193,11 @@ class ProfileVibeCard extends StatelessWidget {
               // because a dead button is worse than no button.
               if (host.videoIntro case final url?)
                 VideoIntro(url: url, hostName: host.name),
+              // Renders nothing when there are none, which is most profiles.
+              HostStatusesStrip(
+                expertDocumentId: HostProfileRules.expertKey(host),
+                hostName: host.name,
+              ),
             ],
           ),
         ],
