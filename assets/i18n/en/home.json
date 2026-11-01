@@ -70,7 +70,9 @@
   },
   "talk_now": {
     "action": "Talk Now",
-    "subtitle": "We'll find someone for you"
+    "subtitle": "We'll find someone for you",
+    "voice": "Voice",
+    "video": "Video"
   },
   "feed": {
     "end": "END OF RESULTS",

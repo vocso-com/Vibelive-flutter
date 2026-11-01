@@ -43,6 +43,64 @@ void main() {
     await finishHost(tester);
   });
 
+  // Talk Now connects whoever is free, so the caller never sees a host's own
+  // price first. Without the rate on the button the only way to learn what it
+  // costs was to be charged it.
+  testWidgets('the per-minute rate is on the button', (tester) async {
+    final backend = await resetHost();
+    backend.instantConfig = {
+      'enabled': true,
+      'allowedCallTypes': 'voice_only',
+      'callerVoiceRate': 12,
+    };
+    await open(tester);
+    expect(find.textContaining('12'), findsWidgets);
+    await finishHost(tester);
+  });
+
+  testWidgets('an older backend that sends no rate still shows the button', (
+    tester,
+  ) async {
+    // Better a button with no price than no way to call at all.
+    final backend = await resetHost();
+    backend.instantConfig = {'enabled': true, 'allowedCallTypes': 'voice_only'};
+    await open(tester);
+    expect(button(), findsWidgets);
+    await finishHost(tester);
+  });
+
+  // `both` used to place a voice call with no way to ask for video and no sign
+  // that video existed at all.
+  testWidgets('both call types get a button each, with their own rates', (
+    tester,
+  ) async {
+    final backend = await resetHost();
+    backend.instantConfig = {
+      'enabled': true,
+      'allowedCallTypes': 'both',
+      'callerVoiceRate': 10,
+      'callerVideoRate': 25,
+    };
+    await open(tester);
+    expect(button(), findsNWidgets(2));
+    expect(find.textContaining('10'), findsWidgets);
+    expect(find.textContaining('25'), findsWidgets);
+    await finishHost(tester);
+  });
+
+  testWidgets('one allowed type stays one button', (tester) async {
+    final backend = await resetHost();
+    backend.instantConfig = {
+      'enabled': true,
+      'allowedCallTypes': 'video_only',
+      'callerVideoRate': 25,
+    };
+    await open(tester);
+    expect(button(), findsOneWidget);
+    expect(find.textContaining('25'), findsWidgets);
+    await finishHost(tester);
+  });
+
   // The server answers per user (company accounts or all, as the admin
   // set it); a host still never sees it unless a company account.
   testWidgets('hidden from a host, shown to a company account', (tester) async {
