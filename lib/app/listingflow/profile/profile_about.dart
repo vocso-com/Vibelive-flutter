@@ -115,8 +115,14 @@ class _SocialChip extends StatelessWidget {
 /// "THE_VIBE": tagline, description with Read more, voice intro, sparkle
 /// watermark.
 class ProfileVibeCard extends StatelessWidget {
-  const ProfileVibeCard({super.key, required this.host});
+  const ProfileVibeCard({super.key, required this.host, this.onTalkNow});
   final HostCard host;
+
+  /// Offered at the end of the video intro. Null hides the prompt — which is
+  /// what the host's own onboarding preview wants, and what any caller that
+  /// cannot run the pre-call checks must pass, since this has to go through
+  /// the same balance gate and safety prompt as the Call button above it.
+  final VoidCallback? onTalkNow;
 
   @override
   Widget build(BuildContext context) {
@@ -188,11 +194,12 @@ class ProfileVibeCard extends StatelessWidget {
                 VoiceIntro(url: url, hostId: HostProfileRules.expertKey(host)),
               // Only ever an approved clip: the server withholds the file for
               // anything else and the listing model checks the status again.
-              // onTalkNow is deliberately not passed yet — the prompt stays
-              // hidden until it is wired to this profile's own call action,
-              // because a dead button is worse than no button.
               if (host.videoIntro case final url?)
-                VideoIntro(url: url, hostName: host.name),
+                VideoIntro(
+                  url: url,
+                  hostName: host.name,
+                  onTalkNow: onTalkNow,
+                ),
               // Renders nothing when there are none, which is most profiles.
               HostStatusesStrip(
                 expertDocumentId: HostProfileRules.expertKey(host),
