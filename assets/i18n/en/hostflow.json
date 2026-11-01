@@ -533,5 +533,11 @@
     "finished": "FINISHED",
     "posted": "Status posted. It shows once the team has checked it.",
     "failed": "Could not post that. Please try again."
+  },
+  "status_errors": {
+    "disabled": "Statuses aren't switched on yet. We'll tell you when they are.",
+    "daily_limit": "You've posted all your statuses for today. Try again tomorrow.",
+    "too_long": "That clip is too long. Record a shorter one.",
+    "post_failed": "Couldn't post that status. Please try again."
   }
 }

@@ -1,6 +1,35 @@
 import '../../../core/network/api_client.dart';
+import '../../../core/network/api_exception.dart';
 import '../component/upload_api.dart';
 import 'host_status_models.dart';
+
+/// Translated copy for the refusals a host can actually do something about.
+abstract final class HostStatusErrorKeys {
+  /// Not switched on yet. Nothing for the host to do but wait.
+  static const disabled = 'hostflow:status_errors.disabled';
+
+  /// They have used today's allowance. Different from off: come back tomorrow.
+  static const dailyLimit = 'hostflow:status_errors.daily_limit';
+
+  /// The clip runs past the configured limit.
+  static const tooLong = 'hostflow:status_errors.too_long';
+
+  /// Anything else that went wrong while posting.
+  static const postFailed = 'hostflow:status_errors.post_failed';
+}
+
+/// The server's `code`, wherever the error envelope put it.
+String? _codeOf(ApiException e) {
+  final data = e.data;
+  if (data is! Map) return null;
+  final error = data['error'];
+  final details = error is Map ? error['details'] : null;
+  final code =
+      (details is Map ? details['code'] : null) ??
+      (error is Map ? error['code'] : null) ??
+      data['code'];
+  return code is String ? code.toLowerCase() : null;
+}
 
 /// Host statuses: a host's own, and what a client may see for one host.
 ///
@@ -39,6 +68,37 @@ abstract final class HostStatusApi {
     );
     final data = body is Map ? body['data'] : null;
     return HostOwnStatus.fromJson(data);
+  }
+
+  /// Our own translated key for a refusal the host can act on, or null when
+  /// there is nothing better to say than the generic failure.
+  ///
+  /// Matched on the server's `code` first and its wording second, because the
+  /// mapping shipped after the server did and an older build sends no code.
+  /// A server FAULT is deliberately not mapped: a 500 is ours to fix, and
+  /// telling a host "not switched on" would send them away from a feature that
+  /// is working.
+  static String? knownErrorKey(ApiException e) {
+    final m = (e.serverMessage ?? '').toLowerCase();
+    final code = _codeOf(e) ?? '';
+
+    if (code == 'daily_limit' ||
+        m.contains('a day') ||
+        m.contains('try again tomorrow')) {
+      return HostStatusErrorKeys.dailyLimit;
+    }
+    if (code == 'too_long' || m.contains('too long')) {
+      return HostStatusErrorKeys.tooLong;
+    }
+    // Everything else forbidden reads as "not switched on", which is both the
+    // likeliest reason and the least alarming thing to say.
+    if (code == 'disabled' ||
+        e.type == ApiErrorType.forbidden ||
+        m.contains('not switched on') ||
+        m.contains('disabled')) {
+      return HostStatusErrorKeys.disabled;
+    }
+    return null;
   }
 
   /// `GET /host-statuses/mine`: the host's own, including what is still in

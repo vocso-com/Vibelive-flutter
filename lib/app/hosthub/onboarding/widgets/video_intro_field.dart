@@ -11,6 +11,7 @@ import '../../../../core/utils/scale.dart';
 import '../../../component/c_text.dart';
 import '../../../component/c_toast.dart';
 import '../../../component/pressable.dart';
+import '../../../api/paymentscreen/runtime_config_queries.dart';
 import '../helper/draft_controller.dart';
 import '../helper/draft_models.dart';
 import '../helper/host_palette.dart';
@@ -43,7 +44,17 @@ class HostVideoIntroField extends StatefulWidget {
 }
 
 class _HostVideoIntroFieldState extends State<HostVideoIntroField> {
-  static const _max = Duration(seconds: HostVideoIntro.maxSeconds);
+  /// The server's limit, falling back to the shipped one.
+  ///
+  /// Read rather than hardcoded because the admin can change it, and the two
+  /// drifting apart means either a host is cut off early or records something
+  /// the server then rejects for being too long.
+  Duration get _max {
+    final seconds = currentRuntimeConfig().hostMedia.videoIntroMaxSeconds;
+    return seconds > 0
+        ? Duration(seconds: seconds.round())
+        : const Duration(seconds: HostVideoIntro.maxSeconds);
+  }
 
   VideoPlayerController? _player;
 

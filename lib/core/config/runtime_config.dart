@@ -61,6 +61,40 @@ class RuntimeBonus {
   bool get abandonOfferOn => abandonOfferEnabled && abandonOfferPercent > 0;
 }
 
+/// Whether host-recorded media is switched on, and the limits the app has to
+/// enforce before uploading.
+///
+/// Both off by default. A build that never reaches the server, or one talking
+/// to a server that predates these settings, must not offer a record button
+/// for a feature the server will refuse — a host who records and is then
+/// refused reads that as the app being broken, not as a feature that is off.
+///
+/// The limits carry their shipped values even while a feature is off, so they
+/// can never be missing at the moment they start to matter.
+@immutable
+class RuntimeHostMedia {
+  const RuntimeHostMedia({
+    this.videoIntroEnabled = false,
+    this.videoIntroMaxSeconds = 60,
+    this.statusEnabled = false,
+    this.statusMaxPerDay = 10,
+    this.statusVisibleHours = 24,
+  });
+
+  final bool videoIntroEnabled;
+  final double videoIntroMaxSeconds;
+  final bool statusEnabled;
+  final double statusMaxPerDay;
+  final double statusVisibleHours;
+
+  Duration get introLimit => Duration(seconds: videoIntroMaxSeconds.round());
+
+  /// A cap of zero means posting is stopped on purpose, which the switch alone
+  /// does not express.
+  bool get canPostStatus => statusEnabled && statusMaxPerDay > 0;
+  bool get canRecordIntro => videoIntroEnabled && videoIntroMaxSeconds > 0;
+}
+
 /// The single source for every pricing-derived number (RN
 /// `runtime-config.js`). Every default is the literal the app shipped with,
 /// so a failed or missing fetch changes nothing and no figure can read 0 or
@@ -73,6 +107,7 @@ class RuntimeConfig {
     this.bonus = const RuntimeBonus(),
     this.presetAmounts = defaultPresets,
     this.gstPercent = 18,
+    this.hostMedia = const RuntimeHostMedia(),
     this.configVersion,
     this.ttlSeconds = 900,
   });
@@ -88,6 +123,9 @@ class RuntimeConfig {
 
   /// GST added on top of a wallet top-up.
   final double gstPercent;
+
+  /// Host video intros and statuses: on or off, and their limits.
+  final RuntimeHostMedia hostMedia;
   final String? configVersion;
 
   /// How long a fetched config stays fresh (server-supplied).
@@ -214,9 +252,36 @@ class RuntimeConfig {
       ),
       presetAmounts: presets.isEmpty ? d.presetAmounts : presets,
       gstPercent: _num(server?['gstPercent']) ?? d.gstPercent,
+      hostMedia: _hostMedia(server?['hostMedia']),
       configVersion: J.str(server?['configVersion']),
       ttlSeconds: _positive(server?['ttlSeconds']) ?? d.ttlSeconds,
     );
+  }
+
+  /// The `hostMedia` block, or the shipped defaults when a server predates it.
+  ///
+  /// `statusMaxPerDay` uses [_count] rather than [_positive]: zero there is a
+  /// real answer — somebody stopped posting on purpose — whereas a zero-second
+  /// clip limit would refuse every recording a host makes.
+  static RuntimeHostMedia _hostMedia(Object? node) {
+    final m = Strapi.map(node);
+    const d = RuntimeHostMedia();
+    if (m == null) return d;
+    return RuntimeHostMedia(
+      videoIntroEnabled: J.boolean(m['videoIntroEnabled']),
+      videoIntroMaxSeconds:
+          _positive(m['videoIntroMaxSeconds']) ?? d.videoIntroMaxSeconds,
+      statusEnabled: J.boolean(m['statusEnabled']),
+      statusMaxPerDay: _count(m['statusMaxPerDay']) ?? d.statusMaxPerDay,
+      statusVisibleHours:
+          _positive(m['statusVisibleHours']) ?? d.statusVisibleHours,
+    );
+  }
+
+  /// A finite number that may legitimately be zero.
+  static double? _count(Object? v) {
+    final n = _num(v);
+    return n == null || n < 0 ? null : n;
   }
 
   /// RN `isRuntimeConfigStale`: no timestamp counts as stale.
@@ -228,9 +293,13 @@ class RuntimeConfig {
     Object? current = node;
     for (var depth = 0; depth < 4; depth++) {
       if (current is! Map) return null;
+      // Any key the server's runtime-config block carries identifies it. Leaving
+      // hostMedia out meant a response whose only block was hostMedia was not
+      // recognised as the config at all, and the features read as off.
       if (current['pricing'] != null ||
           current['bonus'] != null ||
-          current['presetAmounts'] != null) {
+          current['presetAmounts'] != null ||
+          current['hostMedia'] != null) {
         return Map<String, dynamic>.from(current);
       }
       current = current['data'] ?? current['attributes'];

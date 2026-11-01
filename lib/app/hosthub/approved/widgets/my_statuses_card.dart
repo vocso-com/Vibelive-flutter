@@ -7,6 +7,9 @@ import '../../../../core/theme/vibe_colors.dart';
 import '../../../../core/utils/log.dart';
 import '../../../../core/utils/scale.dart';
 import '../../../api/host_status/host_status_models.dart';
+import '../../../../core/network/api_exception.dart';
+import '../../../api/host_status/host_status_api.dart';
+import '../../../api/paymentscreen/runtime_config_queries.dart';
 import '../../../api/host_status/host_status_queries.dart';
 import '../../../component/c_text.dart';
 import '../../../component/c_toast.dart';
@@ -43,7 +46,13 @@ class MyStatusesCard extends HookWidget {
     final c = context.colors;
     final statuses = useMyStatuses(context);
     final post = usePostStatus();
+    final media = useRuntimeConfig(context).hostMedia;
     final rows = statuses.data ?? const <HostOwnStatus>[];
+
+    // Nothing at all while the server has statuses off, or capped at zero.
+    // The card exists to invite a host to post; inviting them to be refused
+    // is worse than not asking.
+    if (!media.canPostStatus) return const SizedBox.shrink();
 
     Future<void> capture() async {
       if (post.isPending) return;
@@ -59,9 +68,22 @@ class MyStatusesCard extends HookWidget {
           HostStatusDraft(file.path, recordedAt: DateTime.now()),
         );
         CToast.show('hostflow:my_status.posted');
+      } on ApiException catch (e) {
+        // The server refuses a status for reasons a host can act on: the
+        // feature is not switched on, or they have used today's allowance.
+        // Those need different things from them — wait for us, or come back
+        // tomorrow — so showing one generic failure for both helps nobody.
+        Log.d('MyStatuses', 'post refused: ${e.serverMessage ?? e}');
+        CToast.show(
+          HostStatusApi.knownErrorKey(e) ?? HostStatusErrorKeys.postFailed,
+          variant: CToastVariant.error,
+        );
       } catch (e) {
         Log.d('MyStatuses', 'post failed: $e');
-        CToast.show('hostflow:my_status.failed', variant: CToastVariant.error);
+        CToast.show(
+          HostStatusErrorKeys.postFailed,
+          variant: CToastVariant.error,
+        );
       }
     }
 

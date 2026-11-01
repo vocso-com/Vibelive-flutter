@@ -11,6 +11,7 @@ import '../helper/draft_controller.dart';
 import '../helper/draft_models.dart';
 import '../helper/host_palette.dart';
 import '../widgets/step_body.dart';
+import '../../../api/paymentscreen/runtime_config_queries.dart';
 import '../widgets/video_intro_field.dart';
 import '../widgets/voice_intro_field.dart';
 
@@ -37,7 +38,12 @@ class VoiceStep extends StatelessWidget {
         // Below the opener on purpose: the recording is what this step is for
         // and what Continue checks, so the clip is offered after it rather than
         // competing with it. Optional — nothing here gates the step.
-        HostVideoIntroField(draft: draft),
+        //
+        // Hidden entirely while the server has video intros off. Offering the
+        // tile would let a host record and upload a clip the server then drops
+        // on the way in, with nothing to show for it.
+        if (currentRuntimeConfig().hostMedia.canRecordIntro)
+          HostVideoIntroField(draft: draft),
         SizedBox(height: 12.ms),
         HostCard(
           color: p.tint,
