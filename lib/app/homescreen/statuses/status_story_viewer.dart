@@ -17,6 +17,13 @@ import '../../api/host_status/host_status_queries.dart';
 import '../../api/host_status/vibe_video_cache.dart';
 import '../../component/c_alert.dart';
 import '../../component/c_toast.dart';
+import '../../../core/query/query_client.dart';
+import '../../../core/session/session_store.dart';
+import '../../../core/theme/app_theme.dart';
+import '../../api/listingflow/listing_models.dart';
+import '../../api/listingflow/listing_queries.dart';
+import '../../listingflow/profile/helper/host_profile_rules.dart';
+import '../../listingflow/profile/profile_call_actions.dart';
 import '../../listingflow/profile/report_sheet.dart';
 import '../../component/c_image.dart';
 import '../../component/c_text.dart';
@@ -37,11 +44,29 @@ class StatusStoryViewer extends StatefulWidget {
     super.key,
     required this.groups,
     this.initialGroup = 0,
+    this.initialItem,
     this.own = false,
+    this.showCall = true,
+    this.showVisit = true,
+    this.hostCards = const {},
   });
 
   final List<StatusGroup> groups;
+
+  /// Hosts already known, by expert documentId (the profile passes its
+  /// own): their Audio / Video Call buttons show at once, no lookup.
+  final Map<String, HostCard> hostCards;
   final int initialGroup;
+
+  /// The clip to start on in [initialGroup]; null: its first unwatched one.
+  final int? initialItem;
+
+  /// Audio / Video Call under someone else's Vibe — the profile's own
+  /// buttons (off where calling is not possible here).
+  final bool showCall;
+
+  /// The ↗ to the host's profile (off when opened from that profile).
+  final bool showVisit;
 
   /// The host's own statuses: their view counts, no Call / Visit profile,
   /// nothing reported as watched.
@@ -53,7 +78,11 @@ class StatusStoryViewer extends StatefulWidget {
     BuildContext context, {
     required List<StatusGroup> groups,
     int initialGroup = 0,
+    int? initialItem,
     bool own = false,
+    bool showCall = true,
+    bool showVisit = true,
+    Map<String, HostCard> hostCards = const {},
   }) {
     if (groups.isEmpty) return Future.value();
     return Navigator.of(context, rootNavigator: true).push<StatusViewerExit>(
@@ -62,7 +91,11 @@ class StatusStoryViewer extends StatefulWidget {
         pageBuilder: (_, _, _) => StatusStoryViewer(
           groups: groups,
           initialGroup: initialGroup.clamp(0, groups.length - 1),
+          initialItem: initialItem,
           own: own,
+          showCall: showCall,
+          showVisit: showVisit,
+          hostCards: hostCards,
         ),
         transitionsBuilder: (_, animation, _, child) =>
             FadeTransition(opacity: animation, child: child),
@@ -79,7 +112,13 @@ class _StatusStoryViewerState extends State<StatusStoryViewer> {
     initialPage: widget.initialGroup,
   );
   late int _group = widget.initialGroup;
-  late int _item = _startOf(_group);
+  late int _item = () {
+    final start = widget.initialItem;
+    final count = _groups[_group].statuses.length;
+    return start != null && start >= 0 && start < count
+        ? start
+        : _startOf(_group);
+  }();
   VideoPlayerController? _player;
   bool _failed = false;
   bool _held = false; // finger down: paused
@@ -91,6 +130,41 @@ class _StatusStoryViewerState extends State<StatusStoryViewer> {
 
   /// The hosts being watched; a Vibe the host deletes here leaves its list.
   late final List<StatusGroup> _groups = [...widget.groups];
+
+  /// Hosts' rates for the call buttons, by expert documentId.
+  late final Map<String, HostCard> _cards = {...widget.hostCards};
+
+  /// The host's own: view counts read now, not the list cached on Home.
+  Map<String, int> _views = const {};
+
+  /// Looks up the host on screen for their call buttons (cached).
+  void _ensureCard() {
+    if (widget.own || !widget.showCall) return;
+    final id = _current.host.expertDocumentId;
+    if (id.isEmpty || _cards.containsKey(id)) return;
+    unawaited(
+      ensureHostDetail(expertDocumentId: id).then(
+        (card) {
+          if (mounted) setState(() => _cards[id] = card);
+        },
+        onError: (Object e) => Log.d('StatusStory', 'host lookup: $e'),
+      ),
+    );
+  }
+
+  /// Fresh counts for the host's own Vibes (and Home's copy refreshed).
+  Future<void> _loadOwnViews() async {
+    try {
+      final rows = await HostStatusApi.mine();
+      if (!mounted) return;
+      setState(() => _views = {for (final r in rows) r.documentId: r.views});
+      queryCache.invalidateAll(const [
+        ['host-statuses', 'mine'],
+      ]);
+    } catch (e) {
+      Log.d('StatusStory', 'views not refreshed: $e');
+    }
+  }
 
   StatusGroup get _current => _groups[_group];
 
@@ -111,6 +185,7 @@ class _StatusStoryViewerState extends State<StatusStoryViewer> {
       },
     );
     _load();
+    if (widget.own) unawaited(_loadOwnViews());
   }
 
   @override
@@ -135,6 +210,7 @@ class _StatusStoryViewerState extends State<StatusStoryViewer> {
     unawaited(previous?.dispose());
 
     final status = _current.statuses[_item];
+    _ensureCard();
     // Watched before or fetched ahead: from the phone, at once. Otherwise it
     // streams (and is not downloaded twice).
     final file = await VibeVideoCache.cached(status.media);
@@ -495,27 +571,17 @@ class _StatusStoryViewerState extends State<StatusStoryViewer> {
             child: Padding(
               padding: EdgeInsets.only(bottom: 18.ms),
               child: widget.own
-                  ? Center(child: _Views(count: status.views ?? 0))
-                  : Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        _ViewerButton(
-                          key: const ValueKey('status-call'),
-                          icon: LucideIcons.phone,
-                          label: 'home:statuses.call',
-                          filled: true,
-                          onTap: () => _close(
-                            StatusViewerExit(group.host, call: true),
-                          ),
-                        ),
-                        SizedBox(width: 10.ms),
-                        _ViewerButton(
-                          key: const ValueKey('status-visit-profile'),
-                          icon: LucideIcons.user,
-                          label: 'home:statuses.visit',
-                          onTap: () => _close(StatusViewerExit(group.host)),
-                        ),
-                      ],
+                  ? Center(
+                      child: _Views(
+                        count: _views[status.documentId] ?? status.views ?? 0,
+                      ),
+                    )
+                  : _Actions(
+                      card: _cards[group.host.expertDocumentId],
+                      showCall: widget.showCall,
+                      showVisit: widget.showVisit,
+                      onExit: (action) =>
+                          _close(StatusViewerExit(group.host, action: action)),
                     ),
             ),
           ),
@@ -637,49 +703,119 @@ class _Placeholder extends StatelessWidget {
 /// Why the viewer closed: call [host], or open their profile.
 @immutable
 class StatusViewerExit {
-  const StatusViewerExit(this.host, {this.call = false});
-
-  final StatusHost host;
-
-  /// Call the host straight away (else: Visit profile).
-  final bool call;
-}
-
-/// Call / Visit profile under someone else's Vibe.
-class _ViewerButton extends StatelessWidget {
-  const _ViewerButton({
-    super.key,
-    required this.icon,
-    required this.label,
-    required this.onTap,
-    this.filled = false,
+  const StatusViewerExit(
+    this.host, {
+    this.action = StatusViewerAction.profile,
   });
 
-  final IconData icon;
-  final String label;
-  final VoidCallback onTap;
+  final StatusHost host;
+  final StatusViewerAction action;
 
-  /// The main action (Call): the accent colour; else white.
-  final bool filled;
+  /// An audio or video call (else: the profile).
+  bool get call => action != StatusViewerAction.profile;
+  bool get video => action == StatusViewerAction.video;
+}
+
+/// What a button under someone else's Vibe asked for.
+enum StatusViewerAction { audio, video, profile }
+
+/// Under someone else's Vibe: the profile's own Audio / Video Call buttons
+/// (rates and all), and a ↗ to the profile. Drawn in the dark theme: they
+/// sit on the video.
+class _Actions extends StatelessWidget {
+  const _Actions({
+    required this.card,
+    required this.showCall,
+    required this.showVisit,
+    required this.onExit,
+  });
+
+  /// The host's rates; null while it is looked up.
+  final HostCard? card;
+  final bool showCall;
+  final bool showVisit;
+  final void Function(StatusViewerAction action) onExit;
 
   @override
   Widget build(BuildContext context) {
-    final c = context.colors;
-    final fg = filled ? c.onAccent : Colors.black87;
-    return Pressable(
-      onPressed: onTap,
-      child: Container(
-        padding: EdgeInsets.symmetric(horizontal: 18.ms, vertical: 11.ms),
-        decoration: BoxDecoration(
-          color: filled ? c.accent : Colors.white,
-          borderRadius: BorderRadius.circular(24.ms),
-        ),
+    final host = card;
+    final isCompany = HostProfileRules.isCompanyUser(
+      SessionStore.instance.value.user,
+    );
+    final audioRate = (host?.aPrice ?? 0) > 0;
+    final videoRate = (host?.vPrice ?? 0) > 0;
+    final showAudio = audioRate || (isCompany && !videoRate);
+    final showVideo = videoRate;
+    final calls = <Widget>[
+      if (showCall && host == null)
+        // The host's rates are on their way.
+        Expanded(child: SizedBox(height: 54.ms)),
+      if (showCall && host != null) ...[
+        if (showAudio)
+          Expanded(
+            child: ProfileCallButton(
+              key: const ValueKey('status-call-audio'),
+              video: false,
+              filled: !showVideo,
+              busy: false,
+              enabled: true,
+              label: isCompany ? 'host:call.audio' : null,
+              price: host.aPrice,
+              onTap: () => onExit(StatusViewerAction.audio),
+            ),
+          ),
+        if (showAudio && showVideo) SizedBox(width: 10.ms),
+        if (showVideo)
+          Expanded(
+            child: ProfileCallButton(
+              key: const ValueKey('status-call-video'),
+              video: true,
+              filled: true,
+              busy: false,
+              enabled: true,
+              label: isCompany ? 'host:call.video' : null,
+              price: host.vPrice,
+              onTap: () => onExit(StatusViewerAction.video),
+            ),
+          ),
+        if (!showAudio && !showVideo)
+          const Expanded(child: ProfileCallsUnavailable()),
+      ],
+    ];
+    return Theme(
+      data: AppTheme.dark(),
+      child: Padding(
+        padding: EdgeInsets.symmetric(horizontal: 16.ms),
         child: Row(
-          mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, size: 16.ms, color: fg),
-            SizedBox(width: 6.ms),
-            CText(label, size: 13, weight: FontWeight.w700, color: fg),
+            ...calls,
+            if (calls.isNotEmpty && showVisit) SizedBox(width: 10.ms),
+            if (showVisit)
+              Semantics(
+                button: true,
+                label: context.t('home:statuses.visit'),
+                child: Pressable(
+                  key: const ValueKey('status-visit-profile'),
+                  onPressed: () => onExit(StatusViewerAction.profile),
+                  child: Container(
+                    width: 54.ms,
+                    height: 54.ms,
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(20.ms),
+                      border: Border.all(
+                        width: 1.5.ms,
+                        color: Colors.white.withValues(alpha: 0.25),
+                      ),
+                    ),
+                    child: Icon(
+                      LucideIcons.arrowUpRight,
+                      size: 24.ms,
+                      color: Colors.white,
+                    ),
+                  ),
+                ),
+              ),
           ],
         ),
       ),

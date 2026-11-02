@@ -342,21 +342,15 @@ class _ProfileView extends HookWidget {
           ProfileSocialLinks(host: profile),
           ProfileVibeCard(
             host: profile,
-            // Goes through controller.placeCall, exactly as the Call button
-            // above does, so the video intro's prompt gets the same pre-call
-            // checks and safety notice. Calling CallActions.placeCall directly
-            // would skip both — its own doc says the profile has already run
-            // them.
-            //
-            // Offered only when the host can take a call right now: a prompt
-            // that leads to "not available" is worse than no prompt, and a
-            // host cannot be called by themselves.
-            onTalkNow: isMe || !profile.isAvailable
+            // Audio / Video Call under a Vibe: through controller.placeCall,
+            // exactly as the buttons above, so the same pre-call checks and
+            // safety notice apply. None on the host's own profile.
+            onCall: isMe
                 ? null
-                : () => unawaited(
+                : (video) => unawaited(
                     controller.placeCall(
                       profile,
-                      video: false,
+                      video: video,
                       isMe: isMe,
                       isCompany: isCompany,
                     ),

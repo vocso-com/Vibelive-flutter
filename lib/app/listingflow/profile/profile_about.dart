@@ -14,7 +14,6 @@ import 'helper/external_link.dart';
 import 'helper/host_profile_rules.dart';
 import 'profile_sheets.dart';
 import 'host_statuses_strip.dart';
-import 'video_intro.dart';
 import 'voice_intro.dart';
 
 /// Instagram / Facebook / Snapchat / website chips (verified ones tinted).
@@ -115,14 +114,14 @@ class _SocialChip extends StatelessWidget {
 /// "THE_VIBE": tagline, description with Read more, voice intro, sparkle
 /// watermark.
 class ProfileVibeCard extends StatelessWidget {
-  const ProfileVibeCard({super.key, required this.host, this.onTalkNow});
+  const ProfileVibeCard({super.key, required this.host, this.onCall});
   final HostCard host;
 
-  /// Offered at the end of the video intro. Null hides the prompt — which is
-  /// what the host's own onboarding preview wants, and what any caller that
-  /// cannot run the pre-call checks must pass, since this has to go through
-  /// the same balance gate and safety prompt as the Call button above it.
-  final VoidCallback? onTalkNow;
+  /// Audio / Video Call under one of the host's Vibes ([video]). Null hides
+  /// them — the host's own profile and the onboarding preview — since this
+  /// must go through the same balance gate and safety prompt as the Call
+  /// buttons above.
+  final void Function(bool video)? onCall;
 
   @override
   Widget build(BuildContext context) {
@@ -192,18 +191,14 @@ class ProfileVibeCard extends StatelessWidget {
                 ),
               if (host.audioIntro case final url?)
                 VoiceIntro(url: url, hostId: HostProfileRules.expertKey(host)),
-              // Only ever an approved clip: the server withholds the file for
-              // anything else and the listing model checks the status again.
-              if (host.videoIntro case final url?)
-                VideoIntro(
-                  url: url,
-                  hostName: host.name,
-                  onTalkNow: onTalkNow,
-                ),
+              // The video intro is the first slide of the photo carousel
+              // (ProfileGallery), not repeated here.
               // Renders nothing when there are none, which is most profiles.
               HostStatusesStrip(
-                expertDocumentId: HostProfileRules.expertKey(host),
-                hostName: host.name,
+                host: host,
+                // Call under a Vibe: the profile's own call path (checks and
+                // safety notice), hidden when the profile has none.
+                onCall: onCall,
               ),
             ],
           ),

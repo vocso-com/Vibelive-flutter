@@ -12,6 +12,12 @@ import 'package:package_info_plus/package_info_plus.dart';
 import 'package:pretty_dio_logger/pretty_dio_logger.dart';
 import 'package:shared_preferences_platform_interface/in_memory_shared_preferences_async.dart';
 import 'package:shared_preferences_platform_interface/shared_preferences_async_platform_interface.dart';
+import 'package:vibelive/core/query/query_persist.dart';
+import 'package:vibelive/app/api/host_status/vibe_previews.dart';
+import 'package:vibelive/app/homescreen/statuses/status_story_viewer.dart';
+import 'package:vibelive/app/api/host_status/vibe_video_cache.dart';
+import 'package:vibelive/app/listingflow/profile/profile_gallery.dart';
+import 'package:vibelive/app/listingflow/profile/gallery_video.dart';
 import 'package:vibelive/app/api/listingflow/listing_models.dart';
 import 'package:vibelive/app/authscreen/helper/link_parser.dart';
 import 'package:vibelive/app/callscreen/helper/call_permissions.dart';
@@ -91,6 +97,10 @@ class _Granted implements CallPermissionBackend {
 
 class _Backend implements HttpClientAdapter {
   bool profileComplete = true;
+
+  /// Vibes on the profile: the admin switch and the host's clips.
+  bool vibesOn = false;
+  List<Map<String, Object?>> vibes = const [];
   double cash = 1000;
   final requests = <String>[];
   final reviewPages = <int>[];
@@ -150,6 +160,14 @@ class _Backend implements HttpClientAdapter {
             {'id': 1, 'wallet_type': 'CASH_WALLET', 'balance': cash},
           ],
         };
+      case 'GET /api/app-config':
+        return {
+          'data': {
+            'hostMedia': {'statusVisible': vibesOn, 'statusEnabled': vibesOn},
+          },
+        };
+      case 'GET /api/host-statuses/host/exp7':
+        return {'results': vibes};
       case 'GET /api/report-categories':
         return {
           'data': [
@@ -523,6 +541,113 @@ void main() {
     await tester.tap(find.text('Share via…'));
     await _pump(tester, 600);
     expect(shared, 'Check out MEERA on Vibe: ${LinkParser.shareLink('meera')}');
+    await finish(tester);
+  });
+
+  testWidgets('an approved video intro is the first slide, with only a sound '
+      'button; photos follow', (tester) async {
+    VibeVideoCache.enabled = false;
+    GalleryVideo.muted.value = false;
+    await open(
+      tester,
+      row: {
+        ..._fullHost(),
+        'video_intro': {'url': 'https://cdn.example.com/intro.mp4'},
+        'video_intro_status': 'approved',
+        'host_profile_images': [
+          {
+            'status_enum': 'approved',
+            'image': {'url': 'https://cdn.example.com/p1.jpg'},
+          },
+        ],
+      },
+    );
+    final video = tester.widget<GalleryVideo>(find.byType(GalleryVideo));
+    expect(video.url, 'https://cdn.example.com/intro.mp4');
+    expect(video.active, isTrue, reason: 'plays by itself');
+    expect(find.byKey(const ValueKey('gallery-video-mute')), findsOneWidget);
+    // The one control: sound off, remembered.
+    await tester.tap(find.byKey(const ValueKey('gallery-video-mute')));
+    await _pump(tester, 100);
+    expect(GalleryVideo.muted.value, isTrue);
+    GalleryVideo.muted.value = false;
+    // On to the photo: the video pauses (stays loaded), the button goes.
+    final gallery = find.byType(ProfileGallery);
+    final box = tester.getRect(gallery);
+    await tester.tapAt(Offset(box.right - 20, box.center.dy));
+    await _pump(tester, 300);
+    expect(
+      tester.widget<GalleryVideo>(find.byType(GalleryVideo, skipOffstage: false)).active,
+      isFalse,
+    );
+    expect(find.byKey(const ValueKey('gallery-video-mute')), findsNothing);
+    tester.takeException(); // no video plugin in tests
+    await finish(tester);
+
+    // Not approved yet: no video slide at all.
+    await open(
+      tester,
+      row: {
+        ..._fullHost(),
+        'video_intro': {'url': 'https://cdn.example.com/intro.mp4'},
+        'video_intro_status': 'pending',
+      },
+    );
+    expect(find.byType(GalleryVideo, skipOffstage: false), findsNothing);
+    await finish(tester);
+  });
+
+  testWidgets('Vibes on the profile open the Home viewer on the tapped clip',
+      (tester) async {
+    VibeVideoCache.enabled = false;
+    VibePreviews.enabled = false;
+    await QueryPersist.clearAll();
+    backend
+      ..vibesOn = true
+      ..vibes = [
+        for (final (id, h) in const [('new', 1), ('old', 3)])
+          {
+            'documentId': id,
+            'media': 'https://cdn.example.com/$id.mp4',
+            'thumbnail': 'https://cdn.example.com/$id.jpg',
+            'recordedAt': DateTime.now()
+                .subtract(Duration(hours: h))
+                .toUtc()
+                .toIso8601String(),
+          },
+      ];
+    await open(tester);
+    expect(find.byKey(const ValueKey('profile-vibe-new')), findsOneWidget);
+    // Posting order in the row too: the older one comes first.
+    expect(
+      tester.getTopLeft(find.byKey(const ValueKey('profile-vibe-old'))).dx,
+      lessThan(
+        tester.getTopLeft(find.byKey(const ValueKey('profile-vibe-new'))).dx,
+      ),
+    );
+    await _tap(tester, find.byKey(const ValueKey('profile-vibe-old')));
+    await _pump(tester, 400);
+    final viewer = tester.widget<StatusStoryViewer>(
+      find.byType(StatusStoryViewer),
+    );
+    // Posting order, as on Home: the first posted plays first.
+    expect(viewer.groups.single.statuses.map((s) => s.documentId), [
+      'old',
+      'new',
+    ]);
+    expect(viewer.initialItem, 0);
+    expect(viewer.showVisit, isFalse, reason: 'already on this profile');
+    expect(find.byKey(const ValueKey('status-visit-profile')), findsNothing);
+    // This profile's own Audio / Video Call buttons, with its rates.
+    expect(find.byKey(const ValueKey('status-call-audio')), findsOneWidget);
+    expect(find.byKey(const ValueKey('status-call-video')), findsOneWidget);
+    expect(find.byKey(const ValueKey('status-more')), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('status-close')));
+    await _pump(tester, 400);
+    tester.takeException(); // no video plugin in tests
+    backend
+      ..vibesOn = false
+      ..vibes = const [];
     await finish(tester);
   });
 

@@ -166,6 +166,25 @@ abstract final class HostStatusApi {
   static Future<List<StatusGroup>> feed() async =>
       StatusGroup.listFrom(await ApiClient.get('/host-statuses/feed'));
 
+  /// `POST /host-media-views` for any host clip: [kind] `video_intro` /
+  /// `status`, [action] `view` / `play` / `complete`.
+  static Future<void> recordMediaView({
+    required String kind,
+    required String action,
+    required String hostDocumentId,
+    String? statusDocumentId,
+  }) async {
+    await ApiClient.post(
+      '/host-media-views',
+      data: {
+        'kind': kind,
+        'action': action,
+        'hostDocumentId': hostDocumentId,
+        'statusDocumentId': ?statusDocumentId,
+      },
+    );
+  }
+
   /// `POST /host-media-views`: this status was watched. Drives the grey ring
   /// for this viewer and the host's view count; the server ignores repeats.
   static Future<void> recordView({

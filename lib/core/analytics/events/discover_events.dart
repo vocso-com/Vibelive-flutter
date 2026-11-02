@@ -49,6 +49,19 @@ abstract final class DiscoverEvents {
   static void statusVisitProfile({required String hostId}) =>
       Analytics.log('status_visit_profile', {'host_id': hostId});
 
+  /// The video intro started playing by itself on a profile (first slide).
+  static void videoIntroAutoplayed({required String hostId}) =>
+      Analytics.log('video_intro_autoplay', {'host_id': hostId});
+
+  /// Sound on / off on the profile's video intro.
+  static void videoIntroMuteToggled({
+    required String hostId,
+    required bool muted,
+  }) => Analytics.log('video_intro_mute', {
+    'host_id': hostId,
+    'muted': muted,
+  });
+
   /// Call, under a status (then the profile's usual call checks).
   static void statusCallTapped({required String hostId}) =>
       Analytics.log('status_call_tapped', {'host_id': hostId});

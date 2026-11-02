@@ -244,7 +244,7 @@ void main() {
     await open(tester);
     await tester.tap(find.text('Asha'));
     await pumpFor(tester, 300);
-    expect(find.text('Visit profile'), findsOneWidget);
+    expect(find.byKey(const ValueKey('status-visit-profile')), findsOneWidget);
 
     // Each clip ends, the next starts; after the last host it closes.
     await pumpFor(tester, 4000);
@@ -253,7 +253,11 @@ void main() {
       'https://cdn.example/s2.mp4',
       'https://cdn.example/m1.mp4',
     ]);
-    expect(find.text('Visit profile'), findsNothing, reason: 'closed');
+    expect(
+      find.byKey(const ValueKey('status-visit-profile')),
+      findsNothing,
+      reason: 'closed',
+    );
     final views = backend.sent('POST', '/host-media-views');
     expect(
       [for (final v in views) (v.data as Map)['statusDocumentId']],
@@ -279,9 +283,10 @@ void main() {
     await open(tester);
     await tester.tap(find.text('Asha'));
     await pumpFor(tester, 300);
-    await tester.tap(find.text('Visit profile'));
+    // The ↗ under the Vibe.
+    await tester.tap(find.byKey(const ValueKey('status-visit-profile')));
     await pumpFor(tester, 600);
-    expect(find.text('Visit profile'), findsNothing);
+    expect(find.byKey(const ValueKey('status-visit-profile')), findsNothing);
     expect(
       backend.calls.where((c) => c.path == '/api/expert-profiles'),
       isNotEmpty,
@@ -361,9 +366,11 @@ void main() {
     expect(video.opened, ['https://cdn.example/v1.mp4']);
     // Their own: only how many watched it.
     expect(find.text('7 views'), findsOneWidget);
-    expect(find.text('Visit profile'), findsNothing);
-    expect(find.byKey(const ValueKey('status-call')), findsNothing);
+    expect(find.byKey(const ValueKey('status-visit-profile')), findsNothing);
+    expect(find.byKey(const ValueKey('status-call-audio')), findsNothing);
     expect(backend.sent('POST', '/host-media-views'), isEmpty);
+    // The counts are read fresh when the host opens their own.
+    expect(backend.sent('GET', '/host-statuses/mine').length, greaterThan(1));
     await tester.tap(find.byKey(const ValueKey('status-close')));
     await pumpFor(tester, 400);
     await finishHost(tester);
@@ -497,9 +504,8 @@ void main() {
     await finishHost(tester);
   });
 
-  testWidgets('a client gets Call and Visit profile under a Vibe', (
-    tester,
-  ) async {
+  testWidgets('a client gets the profile\'s Audio / Video Call and a ↗ to '
+      'the profile under a Vibe', (tester) async {
     final backend = await resetHost();
     statusesOn(backend);
     backend.replies['GET /api/host-statuses/feed'] = (_) => {
@@ -507,21 +513,30 @@ void main() {
         _group('e1', 'Asha', [_status('s1')]),
       ],
     };
+    // The host's rates, for the call buttons.
+    backend.replies['GET /api/expert-profiles'] = (_) => {
+      'data': [
+        {
+          'id': 1,
+          'documentId': 'e1',
+          'handler': 'asha',
+          'isActive': true,
+          'rates': {'voiceCallRate': 20, 'videoCallRate': 30},
+          'user': {'id': 5, 'documentId': 'u-e1', 'name': 'Asha'},
+        },
+      ],
+    };
     await open(tester);
     await tester.tap(find.text('Asha'));
-    await pumpFor(tester, 300);
-    expect(find.byKey(const ValueKey('status-call')), findsOneWidget);
-    expect(find.text('Call'), findsOneWidget);
-    expect(find.text('Visit profile'), findsOneWidget);
-    expect(find.byKey(const ValueKey('status-views')), findsNothing);
-    await tester.tap(find.byKey(const ValueKey('status-call')));
     await pumpFor(tester, 600);
-    // The viewer closed and the host is looked up for the call checks.
-    expect(find.byKey(const ValueKey('status-call')), findsNothing);
-    expect(
-      backend.calls.where((c) => c.path == '/api/expert-profiles'),
-      isNotEmpty,
-    );
+    expect(find.byKey(const ValueKey('status-call-audio')), findsOneWidget);
+    expect(find.byKey(const ValueKey('status-call-video')), findsOneWidget);
+    expect(find.byKey(const ValueKey('status-visit-profile')), findsOneWidget);
+    expect(find.byKey(const ValueKey('status-views')), findsNothing);
+    await tester.tap(find.byKey(const ValueKey('status-call-video')));
+    await pumpFor(tester, 600);
+    // The viewer closed; the profile's call checks take over.
+    expect(find.byKey(const ValueKey('status-call-video')), findsNothing);
     tester.takeException(); // the call checks' own reads are not faked
     await finishHost(tester);
   });

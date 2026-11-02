@@ -21,13 +21,18 @@ import '../../component/c_toast.dart';
 import '../../component/image_preview_modal.dart';
 import '../../component/pressable.dart';
 import '../../component/qr_code_sheet.dart';
+import 'gallery_video.dart';
 import 'helper/host_profile_controller.dart';
 import 'helper/host_profile_rules.dart';
 
 /// Photo carousel at the top (RN): the left / right quarter shows the
-/// previous / next photo, the middle opens the preview (copy link,
-/// favourite). Progress bars when there are several photos; the profile
+/// previous / next slide, the middle opens the photo preview (copy link,
+/// favourite). Progress bars when there are several slides; the profile
 /// card's rounded top overlaps the bottom edge.
+///
+/// A host with an approved video intro gets it as the FIRST slide: it plays
+/// by itself on a loop with only a sound button ([GalleryVideo]), and pauses
+/// while a photo is on screen.
 class ProfileGallery extends HookWidget {
   const ProfileGallery({
     super.key,
@@ -53,7 +58,16 @@ class ProfileGallery extends HookWidget {
     final c = context.colors;
     final images = host.images;
     final thumbs = host.imageThumbs;
-    final count = images.isEmpty ? 1 : images.length;
+    // Only ever an approved clip: the server withholds anything else and
+    // the listing model checks the status again.
+    final video = host.videoIntro;
+    final hasVideo = video != null;
+    final count = images.length + (hasVideo ? 1 : 0) < 1
+        ? 1
+        : images.length + (hasVideo ? 1 : 0);
+
+    /// The photo at carousel position [index]; -1 for the video slide.
+    int photoAt(int index) => index % count - (hasVideo ? 1 : 0);
     // Every photo's card-sized rendition (the first is already cached from
     // Discover), so a tap to the next photo shows at once.
     useEffect(() {
@@ -76,12 +90,13 @@ class ProfileGallery extends HookWidget {
 
     final hostId = HostProfileRules.expertKey(host);
     void openPreview() {
-      final image = images.isEmpty
-          ? null
-          : images[controller.activeImage.value % count];
+      final at = photoAt(controller.activeImage.value);
+      // The video slide has no preview: only its sound button.
+      if (at < 0) return;
+      final image = images.isEmpty ? null : images[at];
       DiscoverEvents.photoPreviewOpened(
         hostId: hostId,
-        index: controller.activeImage.value % count,
+        index: at,
         count: images.length,
       );
       // The row to delete when un-favouriting; follows the toggles made
@@ -144,18 +159,39 @@ class ProfileGallery extends HookWidget {
           LayoutBuilder(
             builder: (_, box) => ValueListenableBuilder<int>(
               valueListenable: controller.activeImage,
-              builder: (_, index, _) => images.isEmpty
-                  ? _Letter(name)
-                  : CImage(
-                      url: images[index % count],
-                      placeholderUrl: index % count < thumbs.length
-                          ? thumbs[index % count]
-                          : null,
-                      width: box.maxWidth,
-                      height: box.maxHeight,
-                      // Portraits keep the head, as on the cards.
-                      alignment: Alignment.topCenter,
-                    ),
+              builder: (_, index, _) {
+                Widget photo(int at) => images.isEmpty
+                    ? _Letter(name)
+                    : CImage(
+                        url: images[at],
+                        placeholderUrl: at < thumbs.length ? thumbs[at] : null,
+                        width: box.maxWidth,
+                        height: box.maxHeight,
+                        // Portraits keep the head, as on the cards.
+                        alignment: Alignment.topCenter,
+                      );
+                final at = photoAt(index);
+                final onVideo = at < 0;
+                return Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    // Kept alive under the photos so coming back to it does
+                    // not reload; paused while hidden.
+                    if (hasVideo)
+                      Offstage(
+                        offstage: !onVideo,
+                        child: GalleryVideo(
+                          key: const ValueKey('gallery-video'),
+                          url: video,
+                          hostId: hostId,
+                          active: onVideo,
+                          poster: photo(0),
+                        ),
+                      ),
+                    if (!onVideo) photo(at),
+                  ],
+                );
+              },
             ),
           ),
           ColoredBox(color: AppColors.blackA(0.2)),
@@ -195,6 +231,18 @@ class ProfileGallery extends HookWidget {
                     ],
                   ),
                 ),
+              ),
+            ),
+          // The video slide's one control: sound on / off.
+          if (hasVideo)
+            Positioned(
+              right: 16.ms,
+              bottom: lip + 12.ms,
+              child: ValueListenableBuilder<int>(
+                valueListenable: controller.activeImage,
+                builder: (_, index, _) => photoAt(index) < 0
+                    ? GalleryMuteButton(hostId: hostId)
+                    : const SizedBox.shrink(),
               ),
             ),
           // Rounded top of the profile card, with its drag bar.

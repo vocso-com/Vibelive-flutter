@@ -119,7 +119,7 @@ class StatusRow extends HookWidget {
         final host = await ensureHostDetail(expertDocumentId: hostId);
         if (!context.mounted) return;
         if (exit.call) {
-          await _call(context, host);
+          await _call(context, host, video: exit.video);
         } else {
           await showHostProfile(context, host, source: 'status');
         }
@@ -185,6 +185,12 @@ class _MyStatusCircle extends HookWidget {
   Widget build(BuildContext context) {
     final session = useValueListenable(SessionStore.instance);
     final mine = useMyStatuses(context);
+    // Views and review decisions arrive while the app is away: the host's
+    // own list reloads when it comes back to the front.
+    final refetchMine = useRef(mine.refetch)..value = mine.refetch;
+    useOnAppLifecycleStateChange((_, state) {
+      if (state == AppLifecycleState.resumed) refetchMine.value();
+    });
     final post = usePostStatus();
     final seen = useValueListenable(StatusSeen.ids);
     final media = useRuntimeConfig(context).hostMedia;
@@ -268,10 +274,14 @@ class _MyStatusCircle extends HookWidget {
   }
 }
 
-/// Call from a Vibe: the same checks as the profile's call button (signed
-/// in, profile complete, balance, the safety notice), then the call. Voice
-/// when the host takes voice calls, else video.
-Future<void> _call(BuildContext context, HostCard host) async {
+/// Audio / Video Call from a Vibe: the same checks as the profile's call
+/// buttons (signed in, profile complete, balance, the safety notice), then
+/// the call.
+Future<void> _call(
+  BuildContext context,
+  HostCard host, {
+  required bool video,
+}) async {
   final session = SessionStore.instance.value;
   final router = GoRouter.maybeOf(context);
   final controller = HostProfileController(
@@ -288,7 +298,7 @@ Future<void> _call(BuildContext context, HostCard host) async {
   try {
     await controller.placeCall(
       host,
-      video: host.aPrice <= 0 && host.vPrice > 0,
+      video: video,
       isMe: HostProfileRules.isMe(host, session),
       isCompany: HostProfileRules.isCompanyUser(session.user),
     );

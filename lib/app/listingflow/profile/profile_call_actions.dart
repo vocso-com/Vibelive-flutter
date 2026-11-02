@@ -82,7 +82,7 @@ class ProfileCallActions extends StatelessWidget {
               children: [
                 if (showAudio)
                   Expanded(
-                    child: _CallButton(
+                    child: ProfileCallButton(
                       video: false,
                       filled: !showVideo,
                       busy: busy && !controller.pendingVideo,
@@ -95,7 +95,7 @@ class ProfileCallActions extends StatelessWidget {
                 if (showAudio && showVideo) SizedBox(width: 10.ms),
                 if (showVideo)
                   Expanded(
-                    child: _CallButton(
+                    child: ProfileCallButton(
                       video: true,
                       filled: true,
                       busy: busy && controller.pendingVideo,
@@ -106,7 +106,7 @@ class ProfileCallActions extends StatelessWidget {
                     ),
                   ),
                 if (!showAudio && !showVideo)
-                  const Expanded(child: _CallsUnavailable()),
+                  const Expanded(child: ProfileCallsUnavailable()),
               ],
             ),
           ),
@@ -116,8 +116,10 @@ class ProfileCallActions extends StatelessWidget {
   }
 }
 
-class _CallButton extends StatelessWidget {
-  const _CallButton({
+/// Audio / Video Call on a host's profile (also under a Vibe).
+class ProfileCallButton extends StatelessWidget {
+  const ProfileCallButton({
+    super.key,
     required this.video,
     required this.filled,
     required this.busy,
@@ -219,8 +221,9 @@ class _CallButton extends StatelessWidget {
   }
 }
 
-class _CallsUnavailable extends StatelessWidget {
-  const _CallsUnavailable();
+/// "Calls unavailable" in place of both buttons.
+class ProfileCallsUnavailable extends StatelessWidget {
+  const ProfileCallsUnavailable({super.key});
 
   @override
   Widget build(BuildContext context) {
