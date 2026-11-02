@@ -31,6 +31,9 @@ import 'discover_hero.dart';
 import '../../api/host_status/host_status_models.dart';
 import '../../api/host_status/host_status_queries.dart';
 import '../../api/listingflow/host_index.dart';
+import '../../api/promo_banner/promo_banner_models.dart';
+import '../../api/promo_banner/promo_banner_queries.dart';
+import '../../promo/promo_banner_carousel.dart';
 import '../statuses/status_row.dart';
 import 'talk_now_button.dart';
 import 'topic_tabs.dart';
@@ -236,6 +239,7 @@ class DiscoverView extends HookWidget {
       DiscoverEvents.feedRefreshed(trigger: trigger, tab: tab.value.kind.name);
       invalidateWalletQueries();
       invalidateStatusFeed();
+      invalidatePromoBanners();
       isPopular ? await popular.refetch() : await feed.refresh();
     }
 
@@ -289,6 +293,11 @@ class DiscoverView extends HookWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         DiscoverHero(onExplore: explore),
+        // The admin's promo banners (Settings → App banners), if any are live.
+        PromoBannerCarousel(
+          placement: PromoPlacement.home,
+          padding: EdgeInsets.fromLTRB(6.ms, 8.ms, 6.ms, 2.ms),
+        ),
         const TalkNowButton(),
         TopicTabs(
           tabs: tabs,

@@ -208,6 +208,9 @@ Helpers: `lib/core/analytics/events/discover_events.dart` (`DiscoverEvents`). Al
 | discover_hero_explore_tapped | hero "Explore now" | – | |
 | talk_now_tapped | "Talk now" button | blocked_by_call | |
 | status_opened | a host's circle in the Home status row | host_id, position, seen | |
+| promo_banner_viewed | a promo banner came on screen (once per banner per session) | banner_id, placement (`home`/`wallet`), position | |
+| promo_banner_tapped | a promo banner was tapped | banner_id, placement, action (`app`/`url`/`none`) | |
+| promo_banner_dismissed | a closable promo banner was closed | banner_id, placement | |
 | status_visit_profile | Visit profile under a status | host_id | |
 | status_add_tapped | a host's own circle or its "+" (record a status) | has_live | |
 | host_card_tapped | feed card / Call Now on a card | host_id, action (open/call), position, tab, topic, is_online, featured, filtered, audio_rate, source=discover | |

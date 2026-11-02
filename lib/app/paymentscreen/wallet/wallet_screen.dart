@@ -6,6 +6,8 @@ import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../api/promo_banner/promo_banner_models.dart';
+import '../../promo/promo_banner_carousel.dart';
 import '../../../core/analytics/analytics.dart';
 import '../../../core/analytics/events/payment_events.dart';
 import '../../../core/i18n/i18n.dart';
@@ -379,6 +381,11 @@ class WalletScreen extends HookWidget {
                       );
                       unawaited(transfer(balance));
                     },
+                  ),
+                  // The admin's promo banners for the wallet, if any are live.
+                  PromoBannerCarousel(
+                    placement: PromoPlacement.wallet,
+                    padding: EdgeInsets.fromLTRB(16.ms, 4.ms, 16.ms, 10.ms),
                   ),
                   TransactionTabs(
                     selected: tab,

@@ -7,6 +7,7 @@ import '../../../api/authscreen/push_api.dart';
 import '../../../api/authscreen/push_queries.dart';
 import '../call_controller.dart';
 import '../call_signals.dart';
+import 'app_update_push.dart';
 import 'call_push_handler.dart';
 import 'campaign_push.dart';
 import 'heartbeat_handler.dart';
@@ -65,6 +66,9 @@ abstract final class PushRouter {
       case PushKind.heartbeat:
         await HeartbeatHandler.send(via: 'foreground_push');
         return;
+      case PushKind.appUpdate:
+        AppUpdatePush.onUpdate(m.type);
+        return;
       case PushKind.call:
         await CallPushHandler.handle(
           m,
@@ -104,6 +108,9 @@ abstract final class PushRouter {
     switch (kind) {
       case PushKind.heartbeat:
         await HeartbeatHandler.send(via: 'background_push');
+        return;
+      // Silent: the app reloads all of it when it comes back to the front.
+      case PushKind.appUpdate:
         return;
       case PushKind.call:
         // iOS: data-only FCM rarely reaches here, and never rings (VoIP owns
@@ -184,6 +191,7 @@ abstract final class PushRouter {
         );
       case PushKind.heartbeat:
       case PushKind.call:
+      case PushKind.appUpdate:
         return;
     }
   }

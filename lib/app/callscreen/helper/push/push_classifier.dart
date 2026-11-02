@@ -1,3 +1,4 @@
+import 'app_update_push.dart';
 import '../../../api/authscreen/push_queries.dart';
 import 'call_push_classifier.dart';
 import 'push_envelope.dart';
@@ -12,6 +13,9 @@ enum PushKind {
   milestone,
   wallet,
   verification,
+
+  /// A silent "banners / settings changed" (admin): reload, never shown.
+  appUpdate,
   general,
 }
 
@@ -21,6 +25,7 @@ abstract final class PushClassifier {
   static PushKind classify(PushEnvelope m) {
     if (isHeartbeat(m)) return PushKind.heartbeat;
     if (isCall(m)) return PushKind.call;
+    if (AppUpdatePush.matches(m.type)) return PushKind.appUpdate;
     if (isCampaign(m)) return PushKind.campaign;
     if (m.type == 'milestone_unlocked') return PushKind.milestone;
     if (WalletClassifier.isWallet(m)) return PushKind.wallet;

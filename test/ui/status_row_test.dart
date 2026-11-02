@@ -4,7 +4,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:vibelive/app/api/host_status/host_status_models.dart';
 import 'package:vibelive/app/api/host_status/host_status_queries.dart';
+import 'package:vibelive/app/callscreen/helper/push/app_update_push.dart';
 import 'package:vibelive/app/homescreen/statuses/status_circle.dart';
+import 'package:vibelive/app/hosthub/approved/widgets/status_capture.dart';
 import 'package:vibelive/app/homescreen/statuses/status_row.dart';
 import 'package:vibelive/core/network/strapi.dart';
 import 'package:vibelive/core/query/query_persist.dart';
@@ -136,10 +138,10 @@ void main() {
   });
 
   /// Statuses switched on in the admin (app-config's hostMedia block).
-  void statusesOn(HostBackend backend, {bool on = true}) {
+  void statusesOn(HostBackend backend, {bool on = true, int perDay = 3}) {
     backend.replies['GET /api/app-config'] = (_) => {
       'data': {
-        'hostMedia': {'statusEnabled': on, 'statusMaxPerDay': 3},
+        'hostMedia': {'statusEnabled': on, 'statusMaxPerDay': perDay},
       },
     };
   }
@@ -350,5 +352,59 @@ void main() {
     StatusSeen.mark('s1');
     expect(StatusSeen.ids.value, {'s1'});
     expect(StatusSeen.forUser('b'), isEmpty, reason: 'another account');
+  });
+
+  testWidgets("today's allowance used: told before recording", (tester) async {
+    const expert = {'id': 9, 'documentId': 'e9'};
+    final backend = await resetHost(expert: expert);
+    statusesOn(backend, perDay: 2);
+    final now = DateTime.now().toUtc();
+    backend.replies['GET /api/host-statuses/mine'] = (_) => {
+      'results': [
+        for (final h in [1, 3])
+          {
+            'documentId': 'p$h',
+            'status': 'pending',
+            'state': 'pending',
+            'recordedAt': now.subtract(Duration(hours: h)).toIso8601String(),
+          },
+      ],
+    };
+    await open(tester);
+    await tester.tap(find.byType(StatusAddBadge));
+    await pumpFor(tester, 300);
+    expect(find.textContaining('posted all your Vibes'), findsOneWidget);
+    await pumpFor(tester, 4000); // the toast leaves
+    await finishHost(tester);
+  });
+
+  test('posted today counts a rolling 24 hours', () {
+    final now = DateTime.utc(2026, 11, 2, 12);
+    HostOwnStatus at(int hoursAgo) => HostOwnStatus(
+      documentId: 'x$hoursAgo',
+      recordedAt: now.subtract(Duration(hours: hoursAgo)),
+    );
+    expect(postedToday([at(1), at(23), at(25)], now: now), 2);
+    expect(postedToday(const [], now: now), 0);
+  });
+
+  testWidgets('an admin switching Vibes on reaches an open app at once', (
+    tester,
+  ) async {
+    final backend = await resetHost();
+    statusesOn(backend, on: false);
+    backend.replies['GET /api/host-statuses/feed'] = (_) => {
+      'results': [
+        _group('e1', 'Asha', [_status('s1')]),
+      ],
+    };
+    await open(tester);
+    expect(find.text('Vibes'), findsNothing);
+    statusesOn(backend);
+    AppUpdatePush.onUpdate('config_updated'); // the silent push
+    await pumpFor(tester, 800);
+    expect(find.text('Vibes'), findsOneWidget);
+    expect(find.text('Asha'), findsOneWidget);
+    await finishHost(tester);
   });
 }

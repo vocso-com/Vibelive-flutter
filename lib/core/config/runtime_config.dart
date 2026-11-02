@@ -79,6 +79,8 @@ class RuntimeHostMedia {
     this.statusEnabled = false,
     this.statusMaxPerDay = 10,
     this.statusVisibleHours = 24,
+    this.statusMaxSeconds = 30,
+    this.statusAutoApprove = false,
   });
 
   final bool videoIntroEnabled;
@@ -86,6 +88,14 @@ class RuntimeHostMedia {
   final bool statusEnabled;
   final double statusMaxPerDay;
   final double statusVisibleHours;
+
+  /// Longest Vibe (status) the camera records (admin → Host Media).
+  final double statusMaxSeconds;
+
+  /// Vibes go live without review: a post shows at once.
+  final bool statusAutoApprove;
+
+  Duration get statusLimit => Duration(seconds: statusMaxSeconds.round());
 
   Duration get introLimit => Duration(seconds: videoIntroMaxSeconds.round());
 
@@ -275,6 +285,8 @@ class RuntimeConfig {
       statusMaxPerDay: _count(m['statusMaxPerDay']) ?? d.statusMaxPerDay,
       statusVisibleHours:
           _positive(m['statusVisibleHours']) ?? d.statusVisibleHours,
+      statusMaxSeconds: _positive(m['statusMaxSeconds']) ?? d.statusMaxSeconds,
+      statusAutoApprove: J.boolean(m['statusAutoApprove']),
     );
   }
 

@@ -532,6 +532,7 @@
     "rejected": "NOT APPROVED",
     "finished": "FINISHED",
     "posted": "Vibe posted. It shows once the team has checked it.",
+    "posted_live": "Vibe posted. It's live now.",
     "failed": "Could not post that. Please try again."
   },
   "status_errors": {

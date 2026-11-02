@@ -68,8 +68,11 @@ void main() {
         'hostMedia': {'statusEnabled': true, 'statusMaxPerDay': 0},
       });
       expect(c.hostMedia.statusMaxPerDay, 0);
-      expect(c.hostMedia.canPostStatus, isFalse,
-          reason: 'enabled but capped at zero still means no posting');
+      expect(
+        c.hostMedia.canPostStatus,
+        isFalse,
+        reason: 'enabled but capped at zero still means no posting',
+      );
     });
 
     test('canPostStatus and canRecordIntro fold the switch and the cap', () {
@@ -80,6 +83,26 @@ void main() {
       expect(on.hostMedia.canRecordIntro, isTrue);
       expect(RuntimeConfig.defaults.hostMedia.canPostStatus, isFalse);
       expect(RuntimeConfig.defaults.hostMedia.canRecordIntro, isFalse);
+    });
+
+    test('Vibe length and review switch come from the admin', () {
+      const d = RuntimeConfig.defaults;
+      expect(d.hostMedia.statusLimit, const Duration(seconds: 30));
+      expect(d.hostMedia.statusAutoApprove, isFalse);
+      final c = RuntimeConfig.resolve(const {
+        'hostMedia': {
+          'statusEnabled': true,
+          'statusMaxSeconds': 15,
+          'statusAutoApprove': true,
+        },
+      });
+      expect(c.hostMedia.statusLimit, const Duration(seconds: 15));
+      expect(c.hostMedia.statusAutoApprove, isTrue);
+      final junk = RuntimeConfig.resolve(const {
+        'hostMedia': {'statusMaxSeconds': 0, 'statusAutoApprove': 'yes'},
+      });
+      expect(junk.hostMedia.statusLimit, const Duration(seconds: 30));
+      expect(junk.hostMedia.statusAutoApprove, isFalse);
     });
   });
 }

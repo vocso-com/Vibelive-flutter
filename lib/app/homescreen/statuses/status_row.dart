@@ -139,6 +139,7 @@ class _MyStatusCircle extends HookWidget {
     final session = useValueListenable(SessionStore.instance);
     final mine = useMyStatuses(context);
     final post = usePostStatus();
+    final media = useRuntimeConfig(context).hostMedia;
     final rows = mine.data ?? const <HostOwnStatus>[];
     // Newest first from the server; played oldest first.
     final live = [
@@ -157,7 +158,7 @@ class _MyStatusCircle extends HookWidget {
 
     Future<void> record() {
       DiscoverEvents.statusAddTapped(hasLive: live.isNotEmpty);
-      return captureStatus(post);
+      return captureStatus(post, media: media, mine: rows);
     }
 
     return StatusCircle(

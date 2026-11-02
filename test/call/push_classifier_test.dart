@@ -491,4 +491,19 @@ void main() {
       expect(back.notificationId, 'wallet_topup_latest');
     });
   });
+
+  test(
+    'an admin banner or settings change is silent, never a notification',
+    () {
+      expect(
+        top({'type': 'BANNERS_UPDATED', 'reason': 'banner_updated', 'at': '1'}),
+        PushKind.appUpdate,
+      );
+      expect(
+        top({'type': 'CONFIG_UPDATED', 'reason': 'host_media'}),
+        PushKind.appUpdate,
+      );
+      expect(top({'type': 'banner'}), PushKind.general);
+    },
+  );
 }

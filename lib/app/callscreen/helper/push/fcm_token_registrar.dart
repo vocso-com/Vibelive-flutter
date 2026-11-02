@@ -9,6 +9,7 @@ import '../../../../core/session/session_store.dart';
 import '../../../../core/utils/log.dart';
 import '../../../api/authscreen/push_api.dart';
 import '../../../api/authscreen/push_queries.dart';
+import 'app_update_push.dart';
 
 // firebase_messaging 17 deprecates the registration-token API in favour of
 // FID direct-send (`register` / `onRegistered`). The backend sends with
@@ -44,6 +45,8 @@ abstract final class FcmTokenRegistrar {
     if (token != null) {
       await PushTokens.saveFcm(token);
       await syncIfSignedIn();
+      // The token means APNs answered (iOS): topics work from here on.
+      unawaited(AppUpdatePush.subscribe());
     }
   }
 
