@@ -33,10 +33,7 @@ enum PromoPopupExit {
 
 /// What a template can do: the main button, closing, copying the code.
 class PromoPopupCallbacks {
-  const PromoPopupCallbacks({
-    required this.onExit,
-    this.onCopied,
-  });
+  const PromoPopupCallbacks({required this.onExit, this.onCopied});
 
   /// Closes the popup with how it went away.
   final void Function(PromoPopupExit how) onExit;
@@ -84,7 +81,8 @@ class PromoPopupCard extends StatelessWidget {
       PromoPopupTemplate.spotlight => _spotlight(context, k),
       _ => _announcement(context, k),
     };
-    final vertical = popup.template == PromoPopupTemplate.offerCard ||
+    final vertical =
+        popup.template == PromoPopupTemplate.offerCard ||
         popup.template == PromoPopupTemplate.spotlight ||
         popup.template == PromoPopupTemplate.announcement;
     final onImage =
@@ -97,20 +95,21 @@ class PromoPopupCard extends StatelessWidget {
       width: width,
       constraints: BoxConstraints(maxHeight: maxHeight),
       clipBehavior: Clip.antiAlias,
-      decoration: promoBackground(
-        c.palette,
-        begin: vertical ? Alignment.topCenter : Alignment.topLeft,
-        end: vertical ? Alignment.bottomCenter : Alignment.bottomRight,
-        radius: BorderRadius.circular(28 * k),
-      ).copyWith(
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.35),
-            blurRadius: 40 * k,
-            offset: Offset(0, 16 * k),
+      decoration:
+          promoBackground(
+            c.palette,
+            begin: vertical ? Alignment.topCenter : Alignment.topLeft,
+            end: vertical ? Alignment.bottomCenter : Alignment.bottomRight,
+            radius: BorderRadius.circular(28 * k),
+          ).copyWith(
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.35),
+                blurRadius: 40 * k,
+                offset: Offset(0, 16 * k),
+              ),
+            ],
           ),
-        ],
-      ),
       child: Stack(
         children: [
           if (effect)
@@ -261,7 +260,12 @@ class PromoPopupCard extends StatelessWidget {
           _iconCircle(k, 72, 34),
         ],
         Padding(
-          padding: EdgeInsets.fromLTRB(20 * k, (c.hasImage ? 4 : 14) * k, 20 * k, 16 * k),
+          padding: EdgeInsets.fromLTRB(
+            20 * k,
+            (c.hasImage ? 4 : 14) * k,
+            20 * k,
+            16 * k,
+          ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -358,7 +362,11 @@ class PromoPopupCard extends StatelessWidget {
                     drift: false,
                     decodeWidth: size,
                   )
-                : Icon(promoBadgeIcon(c.icon), size: 44 * k, color: Colors.white),
+                : Icon(
+                    promoBadgeIcon(c.icon),
+                    size: 44 * k,
+                    color: Colors.white,
+                  ),
           ),
           SizedBox(height: 14 * k),
           if (c.badge.isNotEmpty) ...[_badge(k)!, SizedBox(height: 8 * k)],
@@ -676,7 +684,12 @@ class PromoPopupSheet extends StatelessWidget {
       child: Stack(
         children: [
           Padding(
-            padding: EdgeInsets.fromLTRB(20 * k, 10 * k, 20 * k, 12 * k + bottom),
+            padding: EdgeInsets.fromLTRB(
+              20 * k,
+              10 * k,
+              20 * k,
+              12 * k + bottom,
+            ),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [

@@ -18,14 +18,13 @@ abstract final class PromoMarkup {
 
   /// Plain text and coloured runs, in order. A run's colour is null for
   /// plain text.
-  static List<({String text, Color? color})> parse(
-    String text,
-    Color accent,
-  ) {
+  static List<({String text, Color? color})> parse(String text, Color accent) {
     final out = <({String text, Color? color})>[];
     var at = 0;
     for (final m in _pattern.allMatches(text)) {
-      if (m.start > at) out.add((text: text.substring(at, m.start), color: null));
+      if (m.start > at) {
+        out.add((text: text.substring(at, m.start), color: null));
+      }
       final words = m[2]!;
       final hex = m[1];
       final color = hex == null ? accent : (parsePromoHex(hex) ?? accent);

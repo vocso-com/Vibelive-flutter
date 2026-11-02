@@ -61,7 +61,7 @@ class PromoBannerCarousel extends HookWidget {
       final seconds = feed.rotateSeconds;
       if (count < 2 || seconds <= 0) return null;
       final timer = Timer.periodic(const Duration(seconds: 1), (_) {
-        if (!pages.hasClients || touching.value) return;
+        if (pages.positions.length != 1 || touching.value) return;
         idle.value += 1;
         if (idle.value < seconds) return;
         idle.value = 0;
@@ -230,8 +230,11 @@ class _Slide extends StatelessWidget {
     animation: pages,
     child: child,
     builder: (_, child) {
-      final at =
-          pages.hasClients && pages.position.haveDimensions
+      // While a page view is being replaced the controller briefly has two
+      // positions: stay put for that frame.
+      final settled =
+          pages.positions.length == 1 && pages.position.haveDimensions;
+      final at = settled
           ? pages.page ?? current.toDouble()
           : current.toDouble();
       final d = (index - at).clamp(-1.0, 1.0);

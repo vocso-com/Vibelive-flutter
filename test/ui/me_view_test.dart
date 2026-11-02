@@ -677,7 +677,11 @@ void main() {
     appRouter.go(AppRoutes.home);
     await _pump(tester, 800);
     expect(find.bySemanticsLabel(RegExp('Change availability')), findsNothing);
-    expect(find.text('Start Talking'), findsNothing, reason: 'no built-in hero');
+    expect(
+      find.text('Start Talking'),
+      findsNothing,
+      reason: 'no built-in hero',
+    );
     await finish(tester);
   });
 

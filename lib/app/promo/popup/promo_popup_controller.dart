@@ -122,8 +122,7 @@ class PromoPopupController {
     if (pick == null) return;
 
     final delay =
-        Duration(seconds: pick.rules.delaySeconds) -
-        now().difference(openedAt);
+        Duration(seconds: pick.rules.delaySeconds) - now().difference(openedAt);
     if (delay > Duration.zero) await Future<void>.delayed(delay);
     if (seq != _seq) return;
 
@@ -184,7 +183,8 @@ class PromoPopupController {
       PromoPopupTemplate.fullscreen => size.width,
       PromoPopupTemplate.celebration => 96 * card / PromoPopupCard.designWidth,
       PromoPopupTemplate.spotlight => 128 * card / PromoPopupCard.designWidth,
-      PromoPopupTemplate.bottomSheet => 72 * (size.width / 360).clamp(0.85, 1.15),
+      PromoPopupTemplate.bottomSheet =>
+        72 * (size.width / 360).clamp(0.85, 1.15),
       _ => card,
     };
     final memWidth = (width * MediaQuery.devicePixelRatioOf(ctx)).round();

@@ -39,10 +39,7 @@ class PromoBannerTemplateView extends StatelessWidget {
       t.baseHeight * width / designWidth;
 
   /// The outline: a rounded card; the offer ticket adds its two notches.
-  static CustomClipper<Path> clipperFor(
-    PromoBannerTemplate t,
-    double width,
-  ) {
+  static CustomClipper<Path> clipperFor(PromoBannerTemplate t, double width) {
     final k = width / designWidth;
     if (t == PromoBannerTemplate.offer) {
       return PromoTicketClipper(
@@ -160,7 +157,12 @@ class _Copy extends StatelessWidget {
 
 PromoCtaPill? _cta(PromoContent c, double k) => c.ctaLabel.isEmpty
     ? null
-    : PromoCtaPill(label: c.ctaLabel, icon: c.ctaIcon, palette: c.palette, k: k);
+    : PromoCtaPill(
+        label: c.ctaLabel,
+        icon: c.ctaIcon,
+        palette: c.palette,
+        k: k,
+      );
 
 /// 1. Spotlight (the old Discover hero): the photo on one side melts into
 /// the card; a two-colour title, a line, a button with an icon.
@@ -186,7 +188,9 @@ class _Spotlight extends StatelessWidget {
       child: DecoratedBox(
         position: DecorationPosition.foreground,
         decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(PromoBannerTemplateView.radius * k),
+          borderRadius: BorderRadius.circular(
+            PromoBannerTemplateView.radius * k,
+          ),
           border: Border.all(color: p.accent.withValues(alpha: 0.22)),
         ),
         child: Stack(
@@ -209,7 +213,9 @@ class _Spotlight extends StatelessWidget {
                   // The photo melts into the card behind the copy.
                   PromoImageFade(
                     color: p.fade,
-                    towards: left ? Alignment.centerRight : Alignment.centerLeft,
+                    towards: left
+                        ? Alignment.centerRight
+                        : Alignment.centerLeft,
                   ),
                 ],
               ),
@@ -218,9 +224,7 @@ class _Spotlight extends StatelessWidget {
               padding: EdgeInsets.all(18 * k),
               child: PromoFit(
                 width: w * 0.6,
-                alignment: left
-                    ? Alignment.centerRight
-                    : Alignment.centerLeft,
+                alignment: left ? Alignment.centerRight : Alignment.centerLeft,
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -469,7 +473,10 @@ class _Glass extends StatelessWidget {
                       ),
                     ),
                     if (cta != null)
-                      Padding(padding: EdgeInsets.only(top: 6 * k), child: cta),
+                      Padding(
+                        padding: EdgeInsets.only(top: 6 * k),
+                        child: cta,
+                      ),
                   ],
                 ),
               ),
@@ -527,11 +534,7 @@ class _Minimal extends StatelessWidget {
                       drift: false,
                       decodeWidth: circle,
                     )
-                  : Icon(
-                      promoBadgeIcon(c.icon),
-                      size: 24 * k,
-                      color: p.accent,
-                    ),
+                  : Icon(promoBadgeIcon(c.icon), size: 24 * k, color: p.accent),
             ),
             SizedBox(width: 12 * k),
             Expanded(
@@ -604,7 +607,9 @@ class _Countdown extends StatelessWidget {
                   ),
                   PromoImageFade(
                     color: p.fade,
-                    towards: left ? Alignment.centerRight : Alignment.centerLeft,
+                    towards: left
+                        ? Alignment.centerRight
+                        : Alignment.centerLeft,
                   ),
                 ],
               ),

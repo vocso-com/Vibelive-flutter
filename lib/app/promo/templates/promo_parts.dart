@@ -21,34 +21,36 @@ import 'promo_markup.dart';
 /// preview.
 
 /// The admin's icon keys (docs/promo_templates.md §5) → Lucide.
-IconData? promoIcon(String key, {IconData? fallback = LucideIcons.arrowRight}) =>
-    switch (key) {
-      'none' => null,
-      'arrow_right' => LucideIcons.arrowRight,
-      'chevron_right' => LucideIcons.chevronRight,
-      'phone' => LucideIcons.phone,
-      'video' => LucideIcons.video,
-      'wallet' => LucideIcons.wallet,
-      'gift' => LucideIcons.gift,
-      'sparkles' => LucideIcons.sparkles,
-      'star' => LucideIcons.star,
-      'heart' => LucideIcons.heart,
-      'zap' => LucideIcons.zap,
-      'crown' => LucideIcons.crown,
-      'tag' => LucideIcons.tag,
-      'percent' => LucideIcons.percent,
-      'bell' => LucideIcons.bell,
-      'play' => LucideIcons.play,
-      'users' => LucideIcons.users,
-      'message' => LucideIcons.messageCircle,
-      'power' => LucideIcons.power,
-      'sliders' => LucideIcons.slidersHorizontal,
-      'trophy' => LucideIcons.trophy,
-      'flame' => LucideIcons.flame,
-      'rocket' => LucideIcons.rocket,
-      'badge_check' => LucideIcons.badgeCheck,
-      _ => fallback,
-    };
+IconData? promoIcon(
+  String key, {
+  IconData? fallback = LucideIcons.arrowRight,
+}) => switch (key) {
+  'none' => null,
+  'arrow_right' => LucideIcons.arrowRight,
+  'chevron_right' => LucideIcons.chevronRight,
+  'phone' => LucideIcons.phone,
+  'video' => LucideIcons.video,
+  'wallet' => LucideIcons.wallet,
+  'gift' => LucideIcons.gift,
+  'sparkles' => LucideIcons.sparkles,
+  'star' => LucideIcons.star,
+  'heart' => LucideIcons.heart,
+  'zap' => LucideIcons.zap,
+  'crown' => LucideIcons.crown,
+  'tag' => LucideIcons.tag,
+  'percent' => LucideIcons.percent,
+  'bell' => LucideIcons.bell,
+  'play' => LucideIcons.play,
+  'users' => LucideIcons.users,
+  'message' => LucideIcons.messageCircle,
+  'power' => LucideIcons.power,
+  'sliders' => LucideIcons.slidersHorizontal,
+  'trophy' => LucideIcons.trophy,
+  'flame' => LucideIcons.flame,
+  'rocket' => LucideIcons.rocket,
+  'badge_check' => LucideIcons.badgeCheck,
+  _ => fallback,
+};
 
 /// A template's own icon (not a button's): never "none".
 IconData promoBadgeIcon(String key) =>
@@ -349,7 +351,11 @@ class PromoCouponChip extends StatelessWidget {
 }
 
 class _DashedRRect extends CustomPainter {
-  _DashedRRect({required this.color, required this.stroke, required this.radius});
+  _DashedRRect({
+    required this.color,
+    required this.stroke,
+    required this.radius,
+  });
 
   final Color color;
   final double stroke;
@@ -431,8 +437,7 @@ class PromoParallax extends InheritedWidget {
   final double offset;
 
   static double of(BuildContext context) =>
-      context.dependOnInheritedWidgetOfExactType<PromoParallax>()?.offset ??
-      0;
+      context.dependOnInheritedWidgetOfExactType<PromoParallax>()?.offset ?? 0;
 
   @override
   bool updateShouldNotify(PromoParallax old) => old.offset != offset;
@@ -584,9 +589,7 @@ class PromoTicketClipper extends CustomClipper<Path> {
         RRect.fromRectAndRadius(Offset.zero & size, Radius.circular(radius)),
       );
     final notches = Path()
-      ..addOval(
-        Rect.fromCircle(center: Offset(notchX, 0), radius: notchRadius),
-      )
+      ..addOval(Rect.fromCircle(center: Offset(notchX, 0), radius: notchRadius))
       ..addOval(
         Rect.fromCircle(
           center: Offset(notchX, size.height),

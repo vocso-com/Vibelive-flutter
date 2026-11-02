@@ -148,7 +148,11 @@ abstract final class PromoPopupStore {
   }
 
   /// Closed in any way; [acted]: by its main button.
-  static Future<void> closed(String id, DateTime at, {bool acted = false}) async {
+  static Future<void> closed(
+    String id,
+    DateTime at, {
+    bool acted = false,
+  }) async {
     final all = _read();
     final h = all[id] ?? PromoPopupHistory.none;
     all[id] = h.copyWith(lastClosedAt: at, acted: acted || h.acted);

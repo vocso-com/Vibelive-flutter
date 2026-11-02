@@ -32,12 +32,15 @@ enum PromoPopupTemplate {
     poster || fullscreen => c.hasImage,
     spotlight => c.hasImage && c.title.isNotEmpty,
     countdown => c.title.isNotEmpty && !c.endedAt(now),
-    offerCard || celebration || bottomSheet || announcement =>
-      c.title.isNotEmpty,
+    offerCard ||
+    celebration ||
+    bottomSheet ||
+    announcement => c.title.isNotEmpty,
   };
 
   /// Templates that cannot draw without their image.
-  bool get needsImage => this == poster || this == fullscreen || this == spotlight;
+  bool get needsImage =>
+      this == poster || this == fullscreen || this == spotlight;
 }
 
 /// How often a popup comes back (admin: "When it shows").

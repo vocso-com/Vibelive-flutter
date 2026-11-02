@@ -114,6 +114,5 @@ abstract final class PromoEvents {
     'reason': reason,
   });
 
-  static String _template(String? t) =>
-      t == null || t.isEmpty ? 'custom' : t;
+  static String _template(String? t) => t == null || t.isEmpty ? 'custom' : t;
 }

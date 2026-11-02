@@ -205,12 +205,17 @@ Helpers: `lib/core/analytics/events/discover_events.dart` (`DiscoverEvents`). Al
 | nav_tab_tapped | bottom-dock tab tapped | tab, reselect | |
 | top_bar_button_tapped | Discover/Me/History header button | button (search, filter, wallet, back, me_menu), tab | |
 | discover_topic_selected | topic chip tapped (user) | kind (all/popular/topic), topic, position | |
-| discover_hero_explore_tapped | hero "Explore now" | – | |
 | talk_now_tapped | "Talk now" button | blocked_by_call | |
 | status_opened | a host's circle in the Home status row | host_id, position, seen | |
-| promo_banner_viewed | a promo banner came on screen (once per banner per session) | banner_id, placement (`home`/`wallet`), position | |
-| promo_banner_tapped | a promo banner was tapped | banner_id, placement, action (`app`/`url`/`none`) | |
+| promo_banner_viewed | a promo banner came on screen (once per banner per session) | banner_id, placement (`home`/`wallet`), position, template (`spotlight`, `offer`, `full_image`, `glass`, `minimal`, `countdown`, `custom`) | |
+| promo_banner_tapped | a promo banner was tapped | banner_id, placement, action (`app`/`url`/`none`), template | |
 | promo_banner_dismissed | a closable promo banner was closed | banner_id, placement | |
+| promo_code_copied | a banner's coupon code was copied | banner_id, placement, template | |
+| promo_popup_shown | an app-open popup came on screen (screen `promo_popup_<template>`) | popup_id, template (`offer_card`, `poster`, `celebration`, `bottom_sheet`, `countdown`, `spotlight`, `announcement`, `fullscreen`), show_count (times on this phone), cause (`launch`/`resume`) | |
+| promo_popup_cta_tapped | the popup's main button (poster: the image) | popup_id, template, action (`app`/`url`/`none`) | |
+| promo_popup_closed | the popup closed without its button | popup_id, template, how (`close_button`/`secondary`/`backdrop`/`back`/`expired`), seconds_open | |
+| promo_popup_code_copied | the popup's coupon code was copied | popup_id, template | |
+| promo_popup_skipped | a popup was due this app open but did not show | popup_id, template, reason (`busy`: a sheet / other screen over Home; `call`; `update_notice`; `external_open`: a notification or link opened the app; `image_failed`) | |
 | status_visit_profile | Visit profile under a status | host_id | |
 | status_add_tapped | a host's own circle or its "+" (record a status) | has_live | |
 | host_card_tapped | feed card / Call Now on a card | host_id, action (open/call), position, tab, topic, is_online, featured, filtered, audio_rate, source=discover | |
