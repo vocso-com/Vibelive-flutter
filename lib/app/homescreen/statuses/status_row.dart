@@ -10,6 +10,8 @@ import '../../../core/theme/vibe_colors.dart';
 import '../../../core/utils/scale.dart';
 import '../../api/host_status/host_status_models.dart';
 import '../../api/host_status/host_status_queries.dart';
+import '../../api/host_status/vibe_previews.dart';
+import '../../api/host_status/vibe_video_cache.dart';
 import '../../api/hosthub/eligibility.dart';
 import '../../api/listingflow/listing_models.dart';
 import '../../api/listingflow/listing_queries.dart';
@@ -68,6 +70,30 @@ class StatusRow extends HookWidget {
               if (keep == null || keep(g.host)) g,
           ]
         : const <StatusGroup>[];
+    // Circles the server sent no still for: one made on this phone from the
+    // newest clip (the first dozen circles).
+    final made = useValueListenable(VibePreviews.files);
+    final missing = [
+      for (final g in groups.take(12))
+        if (g.previewUrl == null) g.statuses.last,
+    ];
+    useEffect(() {
+      for (final s in missing) {
+        VibePreviews.request(s.documentId, s.media);
+      }
+      return null;
+    }, [missing.map((s) => s.documentId).join('|')]);
+
+    // The first clip of the first few circles, fetched ahead, so a tap
+    // plays at once.
+    final ahead = [
+      for (final g in groups.take(3)) g.statuses[g.firstUnseen(seen)].media,
+    ];
+    useEffect(() {
+      VibeVideoCache.prefetch(ahead);
+      return null;
+    }, [ahead.join('|')]);
+
     if (groups.isEmpty && !canPost) return const SizedBox.shrink();
 
     Future<void> watch(int index) async {
@@ -110,6 +136,7 @@ class StatusRow extends HookWidget {
           ring: groups[i].seenWith(seen) ? StatusRing.seen : StatusRing.fresh,
           avatarUrl: groups[i].host.avatarUrl,
           previewUrl: groups[i].previewUrl,
+          previewFile: made[groups[i].statuses.last.documentId],
           name: groups[i].host.name,
           label: groups[i].host.name,
           semanticsLabel: groups[i].host.name,
@@ -175,10 +202,19 @@ class _MyStatusCircle extends HookWidget {
             views: s.views,
           ),
     ];
-    // Newest first: the circle shows the latest one that has a still.
+    // Newest first: the circle shows the latest one that has a still, else
+    // one made on this phone from the newest clip.
     final preview = live.reversed
         .map((s) => s.thumbnail)
         .firstWhere((t) => t != null, orElse: () => null);
+    final made = useValueListenable(VibePreviews.files);
+    final newest = live.isEmpty ? null : live.last;
+    useEffect(() {
+      if (preview == null && newest != null) {
+        VibePreviews.request(newest.documentId, newest.media);
+      }
+      return null;
+    }, [preview, newest?.documentId]);
     final allSeen = live.every((s) => seen.contains(s.documentId));
     final waiting = rows.any((s) => s.isPending);
     final name = '${session.user?['name'] ?? ''}';
@@ -198,6 +234,7 @@ class _MyStatusCircle extends HookWidget {
           : StatusRing.fresh,
       avatarUrl: avatar,
       previewUrl: preview,
+      previewFile: newest == null ? null : made[newest.documentId],
       name: name,
       label: live.isNotEmpty
           ? 'home:statuses.mine'

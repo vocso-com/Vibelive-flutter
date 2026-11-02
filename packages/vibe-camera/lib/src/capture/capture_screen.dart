@@ -232,6 +232,41 @@ class _VibeCaptureScreenState extends State<VibeCaptureScreen>
     }
   }
 
+  /// A video from the phone's gallery, through the same editor (trimmed to
+  /// the limit there). Only offered when the app passed a picker.
+  Future<void> _fromGallery() async {
+    final pick = widget.config.pickFromGallery;
+    if (pick == null || _recording || _busy) return;
+    _busy = true;
+    File? file;
+    try {
+      file = await pick();
+    } catch (_) {
+      file = null;
+    } finally {
+      _busy = false;
+    }
+    if (file == null || !mounted) return;
+    final picked = file;
+    final result = await Navigator.of(context).push<VibeCameraResult>(
+      PageRouteBuilder(
+        pageBuilder: (_, _, _) => VibeTheme.wrap(
+          widget.config.accent,
+          VibeEditScreen(
+            file: picked,
+            config: widget.config,
+            recordedAt: DateTime.now(),
+            initialFilter: _look,
+          ),
+        ),
+        transitionsBuilder: (_, a, _, child) =>
+            FadeTransition(opacity: a, child: child),
+      ),
+    );
+    if (!mounted || result == null) return;
+    Navigator.of(context).pop(result);
+  }
+
   @override
   Widget build(BuildContext context) {
     final strings = widget.config.strings;
@@ -406,17 +441,37 @@ class _VibeCaptureScreenState extends State<VibeCaptureScreen>
                       else
                         const SizedBox(height: 74),
                       const SizedBox(height: 10),
-                      RepaintBoundary(
-                        child: AnimatedBuilder(
-                          animation: _progress,
-                          builder: (_, _) => _RecordButton(
-                          recording: _recording,
-                          progress: _progress.value,
-                          accent: accent,
-                            enabled: _status == _Status.ready,
-                            onTap: _toggleRecord,
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          // Gallery on the left, a same-size gap on the right
+                          // so the record button stays centred.
+                          SizedBox(
+                            width: 64,
+                            child: widget.config.pickFromGallery != null &&
+                                    !_recording
+                                ? _GalleryButton(
+                                    label: strings.gallery,
+                                    onTap: _fromGallery,
+                                  )
+                                : null,
                           ),
-                        ),
+                          const SizedBox(width: 24),
+                          RepaintBoundary(
+                            child: AnimatedBuilder(
+                              animation: _progress,
+                              builder: (_, _) => _RecordButton(
+                                recording: _recording,
+                                progress: _progress.value,
+                                accent: accent,
+                                enabled: _status == _Status.ready,
+                                onTap: _toggleRecord,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 24),
+                          const SizedBox(width: 64),
+                        ],
                       ),
                     ],
                   ),
@@ -428,6 +483,55 @@ class _VibeCaptureScreenState extends State<VibeCaptureScreen>
       ),
     );
   }
+}
+
+/// "Gallery": pick a video from the phone instead of recording.
+class _GalleryButton extends StatelessWidget {
+  const _GalleryButton({required this.label, required this.onTap});
+
+  final String label;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) => Semantics(
+    button: true,
+    label: label,
+    child: GestureDetector(
+      key: const ValueKey('vibe-camera-gallery'),
+      behavior: HitTestBehavior.opaque,
+      onTap: onTap,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 44,
+            height: 44,
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.16),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.white70, width: 1.5),
+            ),
+            child: const Icon(
+              Icons.photo_library_rounded,
+              color: Colors.white,
+              size: 22,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      ),
+    ),
+  );
 }
 
 String _clock(Duration d) {

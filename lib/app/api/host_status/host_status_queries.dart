@@ -36,6 +36,16 @@ QueryResult<List<StatusGroup>, ApiException> useStatusFeed(
   return result;
 }
 
+/// The host deletes one of their own Vibes: their list and the Home row
+/// reload without it.
+Future<void> deleteMyStatus(String documentId) async {
+  await HostStatusApi.delete(documentId);
+  queryCache.invalidateAll(const [
+    ['host-statuses', 'mine'],
+    ['host-statuses', 'feed'],
+  ]);
+}
+
 /// Pull-to-refresh on Home: the row reloads with the feed.
 void invalidateStatusFeed() => queryCache.invalidateAll(const [
   ['host-statuses', 'feed'],

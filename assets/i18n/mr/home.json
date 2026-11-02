@@ -63,6 +63,11 @@
     "minutes_ago": "{{count}} मि. पूर्वी",
     "hours_ago": "{{count}} तास पूर्वी",
     "call": "कॉल करा",
-    "views": "{{count}} व्ह्यूज"
+    "views": "{{count}} व्ह्यूज",
+    "delete": "Vibe हटवा",
+    "delete_title": "ही Vibe हटवायची?",
+    "delete_message": "ती सगळ्यांसाठी लगेच नाहीशी होईल. हे परत आणता येणार नाही.",
+    "deleted": "Vibe हटवली",
+    "report": "रिपोर्ट करा"
   }
 }

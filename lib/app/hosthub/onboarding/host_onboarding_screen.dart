@@ -6,6 +6,7 @@ import '../../../core/network/api_exception.dart';
 import '../../../core/router/app_router.dart';
 import '../../../core/session/session_store.dart';
 import '../../../core/storage/app_prefs.dart';
+import '../../api/paymentscreen/runtime_config_queries.dart';
 import '../../api/authscreen/interests_queries.dart';
 import '../../api/client/client_models.dart';
 import '../../api/client/client_queries.dart';
@@ -41,6 +42,7 @@ import 'steps/preview_step.dart';
 import 'steps/rates_step.dart';
 import 'steps/submitted_step.dart';
 import 'steps/tagline_step.dart';
+import 'steps/video_step.dart';
 import 'steps/voice_step.dart';
 import 'widgets/continue_bar.dart';
 import 'widgets/progress_header.dart';
@@ -344,6 +346,11 @@ class _Flow extends HookWidget {
         saveAll: () => latest.value.saveAll(),
         existingHost: () => latest.value.existingHost,
         funnel: funnel,
+        // No video step while the admin has video intros off: a clip the
+        // server would drop must not be asked for.
+        skip: (s) =>
+            s == HostStep.video &&
+            !currentRuntimeConfig().hostMedia.canRecordIntro,
       ),
       [pages],
     );
@@ -376,7 +383,11 @@ class _Flow extends HookWidget {
           children: [
             SafeArea(
               bottom: false,
-              child: HostProgressHeader(step: draft.step, onBack: flow.back),
+              child: HostProgressHeader(
+                step: draft.step,
+                onBack: flow.back,
+                skip: flow.skip,
+              ),
             ),
             Expanded(
               child: PageView(
@@ -405,6 +416,7 @@ class _Flow extends HookWidget {
     HostStep.interests => InterestsStep(draft: draft),
     HostStep.photos => PhotosStep(draft: draft),
     HostStep.voice => VoiceStep(draft: draft),
+    HostStep.video => VideoStep(draft: draft),
     HostStep.tagline => TaglineStep(draft: draft),
     HostStep.bio => BioStep(draft: draft),
     HostStep.rates => RatesStep(draft: draft),

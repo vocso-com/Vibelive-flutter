@@ -208,6 +208,7 @@ void main() {
         'host-interests',
         'host-photos',
         'host-voice',
+        'host-video',
         'host-tagline',
         'host-bio',
         'host-rates',

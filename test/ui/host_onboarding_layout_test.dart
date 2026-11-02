@@ -171,7 +171,14 @@ void main() {
       await pumpFor(tester, 600);
       expect(tester.takeException(), isNull, reason: '$step');
       if (step != HostStep.intro) {
-        expect(find.text('${HostStep.total} में से ${step.number}'), findsOne);
+        // Video intros are off here: the Video step is skipped and left out
+        // of "N of M", like the header does.
+        final shown = [
+          for (final s in HostStep.values)
+            if (s != HostStep.submitted && s != HostStep.video) s,
+        ];
+        final current = shown.where((s) => s.index < step.index).length + 1;
+        expect(find.text('${shown.length + 1} में से $current'), findsOne);
         final scroll = find.byType(Scrollable).last;
         await tester.fling(scroll, const Offset(0, -2000), 2500);
         await pumpFor(tester, 600);

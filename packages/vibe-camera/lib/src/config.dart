@@ -30,6 +30,7 @@ class VibeCameraConfig {
     this.edit = true,
     this.onOpenSettings,
     this.exporter,
+    this.pickFromGallery,
   });
 
   /// Recording stops itself here; the trim never keeps more.
@@ -66,6 +67,11 @@ class VibeCameraConfig {
   /// Rendering, thumbnails and video info; pro_video_editor when null. Tests
   /// pass a fake.
   final VibeExporter? exporter;
+
+  /// Offers a video from the phone's gallery next to the record button (the
+  /// app brings its own picker). It goes through the same editor, trimmed to
+  /// [maxDuration]. Null: record only — a Vibe must be filmed in the app.
+  final Future<File?> Function()? pickFromGallery;
 
   List<VibeFilter> get looks => filters ?? VibeFilters.all;
   VibeExporter get exporterOrDefault => exporter ?? ProVideoExporter();

@@ -46,6 +46,8 @@ dependencies:
   flutter_secure_storage: ^11.2.0
   shared_preferences: ^2.5.6
   cached_network_image: ^3.4.1
+  # Vibe clips kept on the phone (same package cached_network_image uses).
+  flutter_cache_manager: ^3.4.1
   flutter_svg: ^2.3.0
   connectivity_plus: ">=7.0.0 <7.3.2" # 7.3.2+ needs dbus 0.8, wakelock_plus 1.7 (Flutter 3.41) needs 0.7
   json_annotation: ^4.12.0

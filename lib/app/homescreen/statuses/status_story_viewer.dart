@@ -7,12 +7,17 @@ import 'package:video_player/video_player.dart';
 
 import '../../../core/analytics/screen_tracker.dart';
 import '../../../core/i18n/i18n.dart';
+import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/vibe_colors.dart';
 import '../../../core/utils/log.dart';
 import '../../../core/utils/scale.dart';
 import '../../api/host_status/host_status_api.dart';
 import '../../api/host_status/host_status_models.dart';
 import '../../api/host_status/host_status_queries.dart';
+import '../../api/host_status/vibe_video_cache.dart';
+import '../../component/c_alert.dart';
+import '../../component/c_toast.dart';
+import '../../listingflow/profile/report_sheet.dart';
 import '../../component/c_image.dart';
 import '../../component/c_text.dart';
 import '../../component/pressable.dart';
@@ -84,10 +89,13 @@ class _StatusStoryViewerState extends State<StatusStoryViewer> {
   bool _closing = false; // popped once; nothing may pop again
   late final AppLifecycleListener _lifecycle;
 
-  StatusGroup get _current => widget.groups[_group];
+  /// The hosts being watched; a Vibe the host deletes here leaves its list.
+  late final List<StatusGroup> _groups = [...widget.groups];
+
+  StatusGroup get _current => _groups[_group];
 
   int _startOf(int group) =>
-      widget.groups[group].firstUnseen(StatusSeen.ids.value);
+      _groups[group].firstUnseen(StatusSeen.ids.value);
 
   @override
   void initState() {
@@ -127,7 +135,13 @@ class _StatusStoryViewerState extends State<StatusStoryViewer> {
     unawaited(previous?.dispose());
 
     final status = _current.statuses[_item];
-    final next = VideoPlayerController.networkUrl(Uri.parse(status.media));
+    // Watched before or fetched ahead: from the phone, at once. Otherwise it
+    // streams (and is not downloaded twice).
+    final file = await VibeVideoCache.cached(status.media);
+    if (!mounted || token != _token) return;
+    final next = file != null
+        ? VideoPlayerController.file(file)
+        : VideoPlayerController.networkUrl(Uri.parse(status.media));
     try {
       await next.initialize();
     } catch (e) {
@@ -149,7 +163,22 @@ class _StatusStoryViewerState extends State<StatusStoryViewer> {
     next.addListener(_tick);
     setState(() => _player = next);
     _watched(status);
-    if (!_held && !_away) await next.play();
+    _fetchAhead();
+    if (!_held && !_away && !_menuOpen) await next.play();
+  }
+
+  /// The clips likely next — the rest of this host's, then the next host's
+  /// first — fetched while this one plays, so they start at once.
+  void _fetchAhead() {
+    final group = _current;
+    VibeVideoCache.prefetch([
+      for (var k = _item + 1; k < group.statuses.length && k <= _item + 2; k++)
+        group.statuses[k].media,
+      if (_group + 1 < _groups.length)
+        _groups[_group + 1]
+            .statuses[_groups[_group + 1].firstUnseen(StatusSeen.ids.value)]
+            .media,
+    ]);
   }
 
   void _watched(HostStatus status) {
@@ -166,10 +195,21 @@ class _StatusStoryViewerState extends State<StatusStoryViewer> {
   void _tick() {
     final p = _player;
     if (p == null || !p.value.isInitialized || !mounted) return;
-    final duration = p.value.duration;
-    if (duration > Duration.zero &&
-        p.value.position >= duration &&
-        _finished != _token) {
+    final v = p.value;
+    final duration = v.duration;
+    // Finished: the player says so, or it stopped within a moment of the
+    // end (Android often reports a position a few ms short of the length,
+    // which used to leave the viewer stuck instead of moving on).
+    final ended =
+        v.isCompleted ||
+        (duration > Duration.zero &&
+            (v.position >= duration ||
+                (!v.isPlaying &&
+                    !_held &&
+                    !_menuOpen &&
+                    !_away &&
+                    v.position >= duration - const Duration(milliseconds: 300))));
+    if (ended && _finished != _token) {
       _finished = _token;
       // Not from inside the player's own notification: moving on disposes
       // that player, which a ChangeNotifier must never do mid-notify.
@@ -184,7 +224,82 @@ class _StatusStoryViewerState extends State<StatusStoryViewer> {
 
   void _resume() {
     final p = _player;
-    if (p != null && !_held && !_away && p.value.isInitialized) p.play();
+    if (p != null && !_held && !_away && !_menuOpen && p.value.isInitialized) {
+      p.play();
+    }
+  }
+
+  bool _menuOpen = false; // the ⋮ menu (or what it opened) is up: paused
+
+  /// ⋮: Delete for the host's own Vibe; Report for anyone else's.
+  Future<void> _openMenu() async {
+    if (_closing) return;
+    final status = _current.statuses[_item];
+    final host = _current.host;
+    _menuOpen = true;
+    unawaited(_player?.pause());
+    try {
+      final choice = await showModalBottomSheet<String>(
+        context: context,
+        backgroundColor: Colors.transparent,
+        routeSettings: ScreenTracker.sheet('status_menu_sheet'),
+        builder: (_) => _MenuSheet(own: widget.own),
+      );
+      if (!mounted || choice == null) return;
+      if (choice == 'delete') {
+        await _delete(status);
+      } else if (choice == 'report') {
+        await showVibeReportSheet(
+          context,
+          hostName: host.name,
+          reportedUserId: host.userDocumentId,
+          expertDocumentId: host.expertDocumentId,
+          statusDocumentId: status.documentId,
+        );
+      }
+    } finally {
+      _menuOpen = false;
+      if (mounted && !_closing) _resume();
+    }
+  }
+
+  /// Deletes the host's own Vibe (after a confirm), then shows the next one,
+  /// or closes when it was the last.
+  Future<void> _delete(HostStatus status) async {
+    final ok = await CAlert.confirm(
+      title: 'home:statuses.delete_title',
+      message: 'home:statuses.delete_message',
+      confirmLabel: 'home:statuses.delete',
+      variant: CAlertVariant.error,
+    );
+    if (!ok || !mounted) return;
+    try {
+      await deleteMyStatus(status.documentId);
+    } catch (e) {
+      CToast.error(e);
+      return;
+    }
+    CToast.show('home:statuses.deleted', variant: CToastVariant.success);
+    if (!mounted) return;
+    final group = _current;
+    final left = [
+      for (final s in group.statuses)
+        if (s.documentId != status.documentId) s,
+    ];
+    if (left.isEmpty) {
+      _close();
+      return;
+    }
+    setState(() {
+      _groups[_group] = StatusGroup(
+        host: group.host,
+        statuses: left,
+        seenIds: group.seenIds,
+        preview: group.preview,
+      );
+      if (_item >= left.length) _item = left.length - 1;
+    });
+    unawaited(_load());
   }
 
   void _hold(bool down) {
@@ -197,7 +312,7 @@ class _StatusStoryViewerState extends State<StatusStoryViewer> {
     if (_item < _current.statuses.length - 1) {
       setState(() => _item++);
       _load();
-    } else if (_group < widget.groups.length - 1) {
+    } else if (_group < _groups.length - 1) {
       _pages.nextPage(
         duration: const Duration(milliseconds: 260),
         curve: Curves.easeOut,
@@ -267,7 +382,7 @@ class _StatusStoryViewerState extends State<StatusStoryViewer> {
           child: PageView.builder(
             controller: _pages,
             reverse: rtl,
-            itemCount: widget.groups.length,
+            itemCount: _groups.length,
             onPageChanged: (i) {
               setState(() {
                 _group = i;
@@ -277,7 +392,7 @@ class _StatusStoryViewerState extends State<StatusStoryViewer> {
             },
             itemBuilder: (_, i) => i == _group
                 ? _page(context)
-                : _Placeholder(host: widget.groups[i].host),
+                : _Placeholder(host: _groups[i].host),
           ),
         ),
       ),
@@ -300,7 +415,17 @@ class _StatusStoryViewerState extends State<StatusStoryViewer> {
             ),
           )
         else if (player == null)
-          const Center(child: CircularProgressIndicator(color: Colors.white))
+          // The Vibe's own still while the clip loads, not a black screen.
+          Stack(
+            fit: StackFit.expand,
+            children: [
+              if (status.thumbnail != null)
+                CImage(url: status.thumbnail, fit: BoxFit.contain),
+              const Center(
+                child: CircularProgressIndicator(color: Colors.white),
+              ),
+            ],
+          )
         else
           Center(
             child: AspectRatio(
@@ -355,6 +480,7 @@ class _StatusStoryViewerState extends State<StatusStoryViewer> {
                   host: group.host,
                   at: status.recordedAt,
                   onClose: _close,
+                  onMore: _openMenu,
                 ),
               ],
             ),
@@ -400,11 +526,19 @@ class _StatusStoryViewerState extends State<StatusStoryViewer> {
 }
 
 class _Header extends StatelessWidget {
-  const _Header({required this.host, required this.at, required this.onClose});
+  const _Header({
+    required this.host,
+    required this.at,
+    required this.onClose,
+    required this.onMore,
+  });
 
   final StatusHost host;
   final DateTime? at;
   final VoidCallback onClose;
+
+  /// ⋮: Delete (the host's own) or Report (anyone else's).
+  final VoidCallback onMore;
 
   String _ago(BuildContext context) {
     final when = at;
@@ -459,6 +593,18 @@ class _Header extends StatelessWidget {
               if (ago.isNotEmpty)
                 CText.raw(ago, size: 11, color: Colors.white70, maxLines: 1),
             ],
+          ),
+        ),
+        Pressable(
+          key: const ValueKey('status-more'),
+          onPressed: onMore,
+          child: Padding(
+            padding: EdgeInsets.all(6.ms),
+            child: Icon(
+              LucideIcons.ellipsisVertical,
+              size: 22.ms,
+              color: Colors.white,
+            ),
           ),
         ),
         Pressable(
@@ -571,3 +717,54 @@ class _Views extends StatelessWidget {
     ),
   );
 }
+
+/// The ⋮ menu: Delete for the host's own Vibe, Report for anyone else's.
+/// Pops with `delete` / `report`, or null.
+class _MenuSheet extends StatelessWidget {
+  const _MenuSheet({required this.own});
+
+  final bool own;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    final (key, icon, label, color) = own
+        ? (
+            'delete',
+            LucideIcons.trash2,
+            'home:statuses.delete',
+            StatusColors.dangerRed,
+          )
+        : (
+            'report',
+            LucideIcons.flag,
+            'home:statuses.report',
+            StatusColors.dangerRed,
+          );
+    return SafeArea(
+      top: false,
+      child: Container(
+        margin: EdgeInsets.all(12.ms),
+        decoration: BoxDecoration(
+          color: c.surface,
+          borderRadius: BorderRadius.circular(18.ms),
+        ),
+        child: Pressable(
+          key: ValueKey('status-menu-$key'),
+          onPressed: () => Navigator.of(context).pop(key),
+          child: Padding(
+            padding: EdgeInsets.symmetric(horizontal: 18.ms, vertical: 16.ms),
+            child: Row(
+              children: [
+                Icon(icon, size: 20.ms, color: color),
+                SizedBox(width: 12.ms),
+                CText(label, size: 15, weight: FontWeight.w700, color: color),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+

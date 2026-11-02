@@ -63,6 +63,11 @@
     "minutes_ago": "{{count}}m ago",
     "hours_ago": "{{count}}h ago",
     "call": "Call",
-    "views": "{{count}} views"
+    "views": "{{count}} views",
+    "delete": "Delete Vibe",
+    "delete_title": "Delete this Vibe?",
+    "delete_message": "It disappears for everyone right away. This cannot be undone.",
+    "deleted": "Vibe deleted",
+    "report": "Report"
   }
 }

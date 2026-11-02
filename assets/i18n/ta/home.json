@@ -63,6 +63,11 @@
     "minutes_ago": "{{count}} நி. முன்",
     "hours_ago": "{{count}} மணி முன்",
     "call": "அழை",
-    "views": "{{count}} பார்வைகள்"
+    "views": "{{count}} பார்வைகள்",
+    "delete": "Vibe-ஐ நீக்கு",
+    "delete_title": "இந்த Vibe-ஐ நீக்கவா?",
+    "delete_message": "இது உடனே அனைவருக்கும் மறைந்துவிடும். இதைத் திரும்பப் பெற முடியாது.",
+    "deleted": "Vibe நீக்கப்பட்டது",
+    "report": "புகாரளி"
   }
 }

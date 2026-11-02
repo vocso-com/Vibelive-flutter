@@ -9,17 +9,36 @@ import '../../../component/pressable.dart';
 import '../helper/host_palette.dart';
 import '../helper/host_steps.dart';
 
-/// Back chevron, progress bar and "N of 11". Listens to [step] itself, so a
+/// Back chevron, progress bar and "N of 13". Listens to [step] itself, so a
 /// step change repaints only this row.
 class HostProgressHeader extends StatelessWidget {
   const HostProgressHeader({
     super.key,
     required this.step,
     required this.onBack,
+    this.skip,
   });
 
   final ValueListenable<HostStep> step;
   final VoidCallback onBack;
+
+  /// Steps the flow walks past (the Video step while video intros are off):
+  /// left out of "N of M", so the count never jumps.
+  final bool Function(HostStep step)? skip;
+
+  bool _skipped(HostStep s) => skip?.call(s) ?? false;
+
+  /// Where [s] stands among the steps shown, and how many are shown.
+  (int, int) _position(HostStep s) {
+    final shown = [
+      for (final x in HostStep.values)
+        if (x != HostStep.submitted && !_skipped(x)) x,
+    ];
+    // The success screen keeps the last number.
+    final total = shown.length + 1;
+    final before = shown.where((x) => x.index < s.index).length;
+    return (before + 1, total);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -48,7 +67,7 @@ class HostProgressHeader extends StatelessWidget {
             child: ValueListenableBuilder<HostStep>(
               valueListenable: step,
               builder: (_, s, _) => TweenAnimationBuilder<double>(
-                tween: Tween(end: s.number / HostStep.total),
+                tween: Tween(end: _position(s).$1 / _position(s).$2),
                 duration: const Duration(milliseconds: 320),
                 curve: Curves.easeOutCubic,
                 builder: (_, v, _) => _Bar(value: v, palette: p),
@@ -60,7 +79,7 @@ class HostProgressHeader extends StatelessWidget {
             valueListenable: step,
             builder: (_, s, _) => CText(
               'hostflow:progress',
-              variables: {'current': s.number, 'total': HostStep.total},
+              variables: {'current': _position(s).$1, 'total': _position(s).$2},
               size: 14.5,
               weight: FontWeight.w600,
               color: p.muted,

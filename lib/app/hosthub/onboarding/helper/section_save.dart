@@ -25,6 +25,7 @@ const hostSavableSteps = {
   HostStep.basic,
   HostStep.photos,
   HostStep.voice,
+  HostStep.video,
   HostStep.tagline,
   HostStep.bio,
   HostStep.interests,
@@ -57,6 +58,7 @@ HostSaver useHostSectionSave(
     HostStep.basic,
     HostStep.photos,
     HostStep.voice,
+    HostStep.video,
     HostStep.tagline,
     HostStep.bio,
   ];

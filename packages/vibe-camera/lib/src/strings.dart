@@ -39,9 +39,12 @@ class VibeCameraStrings {
     this.discardTitle = 'Discard this video?',
     this.discard = 'Discard',
     this.keepEditing = 'Keep editing',
+    this.gallery = 'Gallery',
     this.filterNames = const {},
   });
 
+  /// The button that picks a video from the phone instead of recording.
+  final String gallery;
   final String close;
   final String flip;
   final String flash;

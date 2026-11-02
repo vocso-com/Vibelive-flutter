@@ -171,4 +171,52 @@ void main() {
       await pumpFor(tester, 4500);
     });
   });
+
+  group('gallery', () {
+    testWidgets('no picker given: record only, no gallery button', (tester) async {
+      await open(tester, VibeCameraConfig(exporter: exporter));
+      expect(find.byKey(const ValueKey('vibe-camera-gallery')), findsNothing);
+      await pumpFor(tester, 600);
+    });
+
+    testWidgets('a picked video goes through the editor and comes back', (tester) async {
+      exporter = FakeExporter(info: const VibeVideoInfo(duration: Duration(seconds: 90), size: Size(720, 1280)));
+      final picked = File('${Directory.systemTemp.path}/vibe_gallery_${DateTime.now().microsecondsSinceEpoch}.mp4')
+        ..writeAsBytesSync([0, 0, 0]);
+      var asked = 0;
+      final launcher = await open(
+        tester,
+        VibeCameraConfig(
+          exporter: exporter,
+          maxDuration: const Duration(seconds: 30),
+          pickFromGallery: () async {
+            asked++;
+            return picked;
+          },
+        ),
+      );
+      expect(find.text('Gallery'), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('vibe-camera-gallery')));
+      await pumpFor(tester, 800);
+      expect(asked, 1);
+      expect(find.byKey(const ValueKey('vibe-done')), findsOneWidget, reason: 'the editor is open');
+      await tester.tap(find.byKey(const ValueKey('vibe-done')));
+      await pumpFor(tester, 800);
+      final result = launcher.result!;
+      expect(result.duration, lessThanOrEqualTo(const Duration(seconds: 30)),
+          reason: 'a long gallery video is trimmed to the limit');
+    });
+
+    testWidgets('closing the picker keeps the camera open', (tester) async {
+      final launcher = await open(
+        tester,
+        VibeCameraConfig(exporter: exporter, pickFromGallery: () async => null),
+      );
+      await tester.tap(find.byKey(const ValueKey('vibe-camera-gallery')));
+      await pumpFor(tester, 600);
+      expect(launcher.result, isNull);
+      expect(find.byKey(const ValueKey('vibe-camera-gallery')), findsOneWidget);
+      await pumpFor(tester, 600);
+    });
+  });
 }

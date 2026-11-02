@@ -11,11 +11,9 @@ import '../helper/draft_controller.dart';
 import '../helper/draft_models.dart';
 import '../helper/host_palette.dart';
 import '../widgets/step_body.dart';
-import '../../../api/paymentscreen/runtime_config_queries.dart';
-import '../widgets/video_intro_field.dart';
 import '../widgets/voice_intro_field.dart';
 
-/// 5 of 12: "Introduce yourself", a short recorded hello callers hear before
+/// 5 of 13: "Introduce yourself", a short recorded hello callers hear before
 /// they call (RN "Voice Intro"). Required: Continue needs a recording.
 /// Around the recorder: a ready-made opener built from the host's own name
 /// and topics, and what makes a good intro.
@@ -35,15 +33,7 @@ class VoiceStep extends StatelessWidget {
         HostVoiceIntroField(draft: draft),
         SizedBox(height: 14.ms),
         _Opener(draft: draft),
-        // Below the opener on purpose: the recording is what this step is for
-        // and what Continue checks, so the clip is offered after it rather than
-        // competing with it. Optional — nothing here gates the step.
-        //
-        // Hidden entirely while the server has video intros off. Offering the
-        // tile would let a host record and upload a clip the server then drops
-        // on the way in, with nothing to show for it.
-        if (currentRuntimeConfig().hostMedia.canRecordIntro)
-          HostVideoIntroField(draft: draft),
+        // The video intro has its own step next (VideoStep).
         SizedBox(height: 12.ms),
         HostCard(
           color: p.tint,

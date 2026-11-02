@@ -92,6 +92,9 @@ class ProfileWarning {
     if (n.title.startsWith('hostflow:moderation.audio_')) {
       return AppRoutes.hostStep(HostStep.voice.name);
     }
+    if (n.title.startsWith('hostflow:moderation.video_')) {
+      return AppRoutes.hostStep(HostStep.video.name);
+    }
     for (final field in host.pendingChangeFields) {
       final step = _fieldSteps[field];
       if (step != null) return AppRoutes.hostStep(step.name);

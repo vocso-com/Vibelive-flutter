@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:vibelive/app/api/host_status/vibe_video_cache.dart';
 import 'package:vibelive/app/api/host_status/host_status_models.dart';
 import 'package:vibelive/app/api/host_status/host_status_queries.dart';
 import 'package:vibelive/app/callscreen/helper/push/app_update_push.dart';
@@ -134,6 +135,8 @@ void main() {
   setUp(() async {
     video = _FakeVideo();
     VideoPlayerPlatform.instance = video;
+    // No file system or database in tests: clips always stream.
+    VibeVideoCache.enabled = false;
     // The saved app-config of the test before must not switch statuses on.
     await QueryPersist.clearAll();
   });
@@ -540,6 +543,68 @@ void main() {
     await open(tester);
     expect(find.text('Vibes'), findsNothing);
     expect(backend.sent('GET', '/host-statuses/feed'), isEmpty);
+    await finishHost(tester);
+  });
+
+  testWidgets('the host deletes their own Vibe from the ⋮ menu', (tester) async {
+    const expert = {'id': 9, 'documentId': 'e9', 'isApproved': true};
+    final backend = await resetHost(expert: expert);
+    statusesOn(backend);
+    backend.replies['GET /api/host-statuses/mine'] = (_) => {
+      'results': [
+        {
+          'documentId': 'v1',
+          'media': 'https://cdn.example/v1.mp4',
+          'status': 'approved',
+          'state': 'visible',
+          'views': 2,
+        },
+      ],
+    };
+    backend.replies['DELETE /api/host-statuses/mine/v1'] = (_) => {
+      'data': {'deleted': true, 'documentId': 'v1'},
+    };
+    await open(tester);
+    await tester.tap(find.text('Your Vibe'));
+    await pumpFor(tester, 300);
+    await tester.tap(find.byKey(const ValueKey('status-more')));
+    await pumpFor(tester, 400);
+    expect(find.text('Report'), findsNothing, reason: 'nothing to report on your own');
+    await tester.tap(find.byKey(const ValueKey('status-menu-delete')));
+    await pumpFor(tester, 400);
+    expect(find.text('Delete this Vibe?'), findsOneWidget);
+    await tester.tap(find.text('DELETE VIBE'));
+    await pumpFor(tester, 800);
+    expect(backend.sent('DELETE', '/host-statuses/mine/v1'), hasLength(1));
+    // It was the only one: the viewer closes.
+    expect(find.byKey(const ValueKey('status-more')), findsNothing);
+    await finishHost(tester);
+  });
+
+  testWidgets('a client gets Report in the ⋮ menu, never Delete', (tester) async {
+    final backend = await resetHost();
+    statusesOn(backend);
+    backend.replies['GET /api/host-statuses/feed'] = (_) => {
+      'results': [
+        _group('e1', 'Asha', [_status('s1')]),
+      ],
+    };
+    backend.replies['GET /api/report-categories'] = (_) => {
+      'data': [
+        {'id': 1, 'documentId': 'rc1', 'name': 'Inappropriate'},
+      ],
+    };
+    await open(tester);
+    await tester.tap(find.text('Asha'));
+    await pumpFor(tester, 300);
+    await tester.tap(find.byKey(const ValueKey('status-more')));
+    await pumpFor(tester, 400);
+    expect(find.byKey(const ValueKey('status-menu-delete')), findsNothing);
+    await tester.tap(find.byKey(const ValueKey('status-menu-report')));
+    await pumpFor(tester, 600);
+    // The usual report sheet, about this host.
+    expect(find.text('Reporting Asha'), findsOneWidget);
+    tester.takeException();
     await finishHost(tester);
   });
 }

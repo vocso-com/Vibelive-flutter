@@ -21,6 +21,7 @@ class HostFlowController {
     this.saveAll,
     this.existingHost,
     this.funnel,
+    this.skip,
   });
 
   final HostDraftController draft;
@@ -51,6 +52,28 @@ class HostFlowController {
   /// Analytics: step completions, back, refusals (null in tests).
   final HostFunnel? funnel;
 
+  /// Steps the flow walks past (the Video step while the admin has video
+  /// intros off). Null: none.
+  final bool Function(HostStep step)? skip;
+
+  /// The step after [step], past any skipped ones.
+  HostStep _after(HostStep step) {
+    var s = step.next!;
+    while (skip?.call(s) == true && s.next != null) {
+      s = s.next!;
+    }
+    return s;
+  }
+
+  /// The step before [step], past any skipped ones.
+  HostStep _before(HostStep step) {
+    var s = step.previous!;
+    while (skip?.call(s) == true && s.previous != null) {
+      s = s.previous!;
+    }
+    return s;
+  }
+
   bool get savesInstead => saveAll != null && (existingHost?.call() ?? false);
 
   /// Back returns to wherever the flow was opened from instead of walking
@@ -73,8 +96,12 @@ class HostFlowController {
     draft.step.value = step;
     draft.flush();
     if (step == HostStep.intro || !pages.hasClients) return;
-    if ((step.index - from.index).abs() > 1) {
-      // Jumps (preview edits) skip the steps in between.
+    final lo = step.index < from.index ? step.index : from.index;
+    final hi = step.index < from.index ? from.index : step.index;
+    final between = [for (var i = lo + 1; i < hi; i++) HostStep.values[i]];
+    // Next / Back past a skipped step still slide; real jumps (preview
+    // edits) don't walk through the steps in between.
+    if (between.isNotEmpty && !between.every((s) => skip?.call(s) == true)) {
       pages.jumpToPage(step.page);
       return;
     }
@@ -109,7 +136,7 @@ class HostFlowController {
       return;
     }
     funnel?.back(step);
-    goTo(_takeReturn() ?? step.previous!);
+    goTo(_takeReturn() ?? _before(step));
   }
 
   Future<void> next() async {
@@ -153,7 +180,7 @@ class HostFlowController {
       }
     }
     funnel?.completed(step);
-    await goTo(_takeReturn() ?? step.next!);
+    await goTo(_takeReturn() ?? _after(step));
   }
 
   Future<bool> _handleIsFree() async {

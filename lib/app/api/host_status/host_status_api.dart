@@ -1,16 +1,15 @@
 import 'dart:async';
 import 'dart:io';
-import 'dart:ui' show Size;
 
 import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
-import 'package:vibe_camera/vibe_camera.dart';
 
 import '../../../core/network/api_client.dart';
 import '../../../core/network/api_exception.dart';
 import '../../../core/utils/log.dart';
 import '../component/upload_api.dart';
 import 'host_status_models.dart';
+import 'vibe_frames.dart';
 
 /// Translated copy for the refusals a host can actually do something about.
 abstract final class HostStatusErrorKeys {
@@ -89,19 +88,9 @@ abstract final class HostStatusApi {
   static Future<Uint8List?> Function(String path) makeThumbnail =
       _middleFrame;
 
-  /// The frame halfway through: the first one is often black or blurred.
-  static Future<Uint8List?> _middleFrame(String path) async {
-    final exporter = ProVideoExporter();
-    final video = File(path);
-    final info = await exporter.probe(video);
-    final frames = await exporter.thumbnails(
-      video,
-      info.duration,
-      count: 1,
-      size: const Size(240, 400),
-    );
-    return frames.isEmpty ? null : frames.first;
-  }
+  /// The steadiest of three frames (not black, most detail).
+  static Future<Uint8List?> _middleFrame(String path) =>
+      VibeFrames.best(File(path));
 
   /// Uploads the still and returns its media id. Never throws: a Vibe
   /// without a thumbnail still posts (Home shows the host's photo instead).
@@ -159,6 +148,12 @@ abstract final class HostStatusApi {
       return HostStatusErrorKeys.disabled;
     }
     return null;
+  }
+
+  /// `DELETE /host-statuses/mine/:documentId`: the host deletes one of their
+  /// own. Gone for everyone at once; the server only accepts the owner's.
+  static Future<void> delete(String documentId) async {
+    await ApiClient.delete('/host-statuses/mine/$documentId');
   }
 
   /// `GET /host-statuses/mine`: the host's own, including what is still in

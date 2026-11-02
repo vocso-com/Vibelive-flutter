@@ -63,6 +63,11 @@
     "minutes_ago": "{{count}} ನಿ. ಹಿಂದೆ",
     "hours_ago": "{{count}} ಗಂ. ಹಿಂದೆ",
     "call": "ಕರೆ ಮಾಡಿ",
-    "views": "{{count}} ವೀಕ್ಷಣೆಗಳು"
+    "views": "{{count}} ವೀಕ್ಷಣೆಗಳು",
+    "delete": "Vibe ಅಳಿಸಿ",
+    "delete_title": "ಈ Vibe ಅಳಿಸಬೇಕೆ?",
+    "delete_message": "ಇದು ತಕ್ಷಣ ಎಲ್ಲರಿಗೂ ಕಾಣಿಸುವುದಿಲ್ಲ. ಇದನ್ನು ಹಿಂಪಡೆಯಲು ಸಾಧ್ಯವಿಲ್ಲ.",
+    "deleted": "Vibe ಅಳಿಸಲಾಗಿದೆ",
+    "report": "ವರದಿ ಮಾಡಿ"
   }
 }

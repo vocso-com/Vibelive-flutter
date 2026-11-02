@@ -28,13 +28,66 @@ import 'profile_sheets.dart';
 Future<void> showReportSheet(BuildContext context, {required HostCard host}) =>
     showProfileSheet<void>(
       context,
-      (_) => KeyboardInset(child: _ReportSheet(host: host)),
+      (_) => KeyboardInset(
+        child: _ReportSheet(
+          target: _ReportTarget(
+            name: host.name,
+            hostId: HostProfileRules.expertKey(host),
+            // The public user, not the expert profile (RN).
+            reportedUserId: host.userDocumentId ?? host.documentId,
+          ),
+        ),
+      ),
       name: 'host_report_sheet',
     );
 
+/// The same report, from a host's Vibe: same reasons, same `POST /reports`
+/// against the host; the note says which Vibe, so the team can find it.
+Future<void> showVibeReportSheet(
+  BuildContext context, {
+  required String hostName,
+  required String? reportedUserId,
+  required String expertDocumentId,
+  required String statusDocumentId,
+}) => showProfileSheet<void>(
+  context,
+  (_) => KeyboardInset(
+    child: _ReportSheet(
+      target: _ReportTarget(
+        name: hostName,
+        hostId: expertDocumentId,
+        reportedUserId: reportedUserId,
+        context: 'Reported from a Vibe ($statusDocumentId)',
+      ),
+    ),
+  ),
+  name: 'vibe_report_sheet',
+);
+
+/// Who is reported, and where from.
+class _ReportTarget {
+  const _ReportTarget({
+    required this.name,
+    required this.hostId,
+    required this.reportedUserId,
+    this.context,
+  });
+
+  final String name;
+
+  /// Expert-profile key, for analytics.
+  final String hostId;
+
+  /// The reported public user's documentId.
+  final String? reportedUserId;
+
+  /// Appended to the note (what was reported, e.g. which Vibe).
+  final String? context;
+}
+
 class _ReportSheet extends HookWidget {
-  const _ReportSheet({required this.host});
-  final HostCard host;
+  const _ReportSheet({required this.target});
+  final _ReportTarget target;
 
   @override
   Widget build(BuildContext context) {
@@ -42,7 +95,7 @@ class _ReportSheet extends HookWidget {
     final categories = useReportCategories(context);
     final selected = useState<Object?>(null);
     final note = useTextEditingController();
-    final hostId = HostProfileRules.expertKey(host);
+    final hostId = target.hostId;
     // The reason as sent, for the outcome events.
     final sentReason = useRef('');
     final submit = useSubmitReport(
@@ -74,8 +127,7 @@ class _ReportSheet extends HookWidget {
       if (submit.isPending) return;
       final session = SessionStore.instance.value;
       final reporter = session.userDocumentId ?? session.userId?.toString();
-      // The public user, not the expert profile (RN).
-      final reported = host.userDocumentId ?? host.documentId;
+      final reported = target.reportedUserId;
       final (title, message) = reporter == null
           ? ('host:report.login_title', 'host:report.login_message')
           : reported == null
@@ -105,16 +157,19 @@ class _ReportSheet extends HookWidget {
           reporterId: reporter!,
           reportedUserId: reported!,
           categoryId: selected.value,
-          note: note.text,
+          note: [
+            note.text.trim(),
+            ?target.context,
+          ].where((s) => s.isNotEmpty).join('\n\n'),
         ),
       );
     }
 
     final list = categories.data ?? const <JsonMap>[];
     final muted = c.isDark ? AppColors.whiteA(0.5) : AppColors.blackA(0.45);
-    final name = host.name.isEmpty
+    final name = target.name.isEmpty
         ? context.t(HostCard.unknownNameKey)
-        : host.name;
+        : target.name;
 
     return ConstrainedBox(
       constraints: BoxConstraints(

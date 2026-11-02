@@ -63,6 +63,11 @@
     "minutes_ago": "{{count}} ମି. ପୂର୍ବେ",
     "hours_ago": "{{count}} ଘ. ପୂର୍ବେ",
     "call": "କଲ୍ କରନ୍ତୁ",
-    "views": "{{count}} ଭ୍ୟୁ"
+    "views": "{{count}} ଭ୍ୟୁ",
+    "delete": "Vibe ଡିଲିଟ୍ କରନ୍ତୁ",
+    "delete_title": "ଏହି Vibe ଡିଲିଟ୍ କରିବେ?",
+    "delete_message": "ଏହା ସମସ୍ତଙ୍କ ପାଇଁ ତୁରନ୍ତ ଲୁଚିଯିବ। ଏହାକୁ ଫେରାଇ ଆଣିହେବ ନାହିଁ।",
+    "deleted": "Vibe ଡିଲିଟ୍ ହେଲା",
+    "report": "ରିପୋର୍ଟ କରନ୍ତୁ"
   }
 }

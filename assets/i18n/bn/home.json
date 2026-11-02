@@ -63,6 +63,11 @@
     "minutes_ago": "{{count}} মি. আগে",
     "hours_ago": "{{count}} ঘ. আগে",
     "call": "কল করুন",
-    "views": "{{count}} ভিউ"
+    "views": "{{count}} ভিউ",
+    "delete": "Vibe মুছুন",
+    "delete_title": "এই Vibe মুছবেন?",
+    "delete_message": "এটি সবার কাছ থেকে সঙ্গে সঙ্গে সরে যাবে। এটি আর ফেরানো যাবে না।",
+    "deleted": "Vibe মুছে ফেলা হয়েছে",
+    "report": "রিপোর্ট করুন"
   }
 }

@@ -15,6 +15,7 @@ class HostReview {
     this.note,
     this.photos = const {},
     this.audioRejected = false,
+    this.videoRejected = false,
   });
 
   /// From the saved profile and the team's messages (newest first).
@@ -42,6 +43,7 @@ class HostReview {
           if (img.imageId != null) '${img.imageId}': img.moderationStatus,
       },
       audioRejected: host.audioIntroStatus == 'rejected',
+      videoRejected: host.videoIntroStatus == 'rejected',
     );
   }
 
@@ -64,6 +66,9 @@ class HostReview {
   /// A saved photo's media id → pending / approved / rejected.
   final Map<String, String> photos;
   final bool audioRejected;
+
+  /// The video intro was turned down: the Video step asks for a new one.
+  final bool videoRejected;
 
   /// The rejection is about text, though no field was named.
   bool get textRejected => note != null;
@@ -92,6 +97,7 @@ class HostReview {
       other is HostReview &&
       other.note == note &&
       other.audioRejected == audioRejected &&
+      other.videoRejected == videoRejected &&
       setEquals(other.fields, fields) &&
       mapEquals(other.photos, photos);
 
@@ -99,6 +105,7 @@ class HostReview {
   int get hashCode => Object.hash(
     note,
     audioRejected,
+    videoRejected,
     Object.hashAllUnordered(fields),
     Object.hashAllUnordered(photos.entries.map((e) => '${e.key}=${e.value}')),
   );

@@ -459,7 +459,7 @@
   "video": {
     "title": "Video intro (optional)",
     "hint": "A few seconds of you saying hello. Callers see it on your profile before they call.",
-    "add": "Record a video intro",
+    "add": "Record or pick a video",
     "again": "Re-record",
     "discard": "Discard",
     "in_review": "Your video intro is with the review team.",
@@ -521,7 +521,9 @@
     "photos_title": "A photo wasn't approved",
     "photos_body": "Remove the photo marked \"Not approved\" (tap ✕), then add a clear photo of yourself.",
     "voice_title": "Your voice intro wasn't approved",
-    "voice_body": "Tap Re-record and record a new one. It only takes a few seconds."
+    "voice_body": "Tap Re-record and record a new one. It only takes a few seconds.",
+    "video_title": "Your video intro was not approved",
+    "video_body": "Record or pick a new one. It shows on your profile once approved."
   },
   "my_status": {
     "title": "Your Vibe",
@@ -572,6 +574,17 @@
     "cancel": "Cancel",
     "discard_title": "Discard this video?",
     "discard": "Discard",
-    "keep_editing": "Keep editing"
+    "keep_editing": "Keep editing",
+    "gallery": "Gallery"
+  },
+  "video_step": {
+    "title": "Show your face",
+    "subtitle": "Add a short video hello. Callers who can see you are far more likely to call. Optional: you can skip this.",
+    "tips_title": "Tips for a great video",
+    "tip1": "Face the light and hold the phone at eye level",
+    "tip2": "Smile and say who you are and what you love talking about",
+    "tip3": "Keep it short and natural, like a real hello",
+    "tip4": "A quiet room, no music or other people",
+    "note": "Your video shows on your profile only after our team approves it."
   }
 }

@@ -72,11 +72,11 @@
 		<string>whatsapp</string>
 	</array>
 	<key>NSPhotoLibraryUsageDescription</key>
-	<string>Vibe Live needs access to your photos so you can add pictures to your host profile.</string>
+	<string>Vibe Live needs access to your photos and videos so you can add pictures and a video intro to your host profile.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Vibe Live uses your location to fill in your state and district on your profile. It is not shared or tracked.</string>
 	<key>NSCameraUsageDescription</key>
-	<string>Vibe Live uses your camera for video calls, so the person you are talking to can see you, and to record the Vibes you post.</string>
+	<string>Vibe Live uses your camera for video calls, so the person you are talking to can see you, and to record your video intro and the Vibes you post.</string>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>Vibe Live uses your local network to keep voice and video calls connected with the best quality.</string>
 	<key>NSMicrophoneUsageDescription</key>

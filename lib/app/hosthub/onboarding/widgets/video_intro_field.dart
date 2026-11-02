@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
+import 'package:vibe_camera/vibe_camera.dart';
 import 'package:video_player/video_player.dart';
 
 import '../../../../core/theme/vibe_colors.dart';
@@ -12,29 +13,22 @@ import '../../../component/c_text.dart';
 import '../../../component/c_toast.dart';
 import '../../../component/pressable.dart';
 import '../../../api/paymentscreen/runtime_config_queries.dart';
+import '../../../callscreen/call/helper/call_permission_state.dart';
+import '../../approved/widgets/status_capture.dart' show vibeCameraStrings;
 import '../helper/draft_controller.dart';
 import '../helper/draft_models.dart';
 import '../helper/host_palette.dart';
 
-/// The Voice step's optional video intro: one tile that opens the camera, then
-/// plays back what was captured with Re-record and Discard under it.
+/// The video intro: one tile that opens the app's own camera (the one Vibes
+/// use: looks, light, trim, crop, text), then plays back the clip with
+/// Re-record and Discard under it.
 ///
-/// WHY THIS IS NOTHING LIKE THE VOICE RECORDER NEXT TO IT
-/// -----------------------------------------------------
-/// [HostVoiceIntroField] is six hundred lines because it draws its own
-/// recorder: a ring that fills, a waveform, playback state. None of that is
-/// needed here. `image_picker.pickVideo` hands the capture to the system camera
-/// app, which already has a record button, a timer and a retake — so this
-/// widget's whole job is to ask for a clip, show what came back, and put it on
-/// the draft.
-///
-/// Capture only, never the gallery: [ImageSource.camera] is what makes
-/// "recorded in-app" true, and it is also the only thing that keeps a reviewer
-/// from being handed something downloaded off the internet.
+/// Recorded in the app or picked from the phone's gallery: either way it goes
+/// through the same editor and is trimmed to the admin's limit there, and a
+/// reviewer approves it before any client sees it.
 ///
 /// Optional by construction. [HostValidation] does not ask for a video intro,
-/// so a host who ignores this tile is never blocked, and the step still passes
-/// on the voice recording alone.
+/// so a host who skips it is never blocked.
 class HostVideoIntroField extends StatefulWidget {
   const HostVideoIntroField({super.key, required this.draft});
   final HostDraftController draft;
@@ -104,18 +98,34 @@ class _HostVideoIntroFieldState extends State<HostVideoIntroField> {
 
   Future<void> _capture() async {
     try {
-      final file = await ImagePicker().pickVideo(
-        source: ImageSource.camera,
-        maxDuration: _max,
+      final clip = await VibeCamera.open(
+        context,
+        config: VibeCameraConfig(
+          maxDuration: _max,
+          // Small files load fast on the profile (see status_capture).
+          preferredFps: 30,
+          maxOutputFps: 30,
+          accent: context.colors.accent,
+          strings: vibeCameraStrings(context),
+          onOpenSettings: () => openCallSettings(),
+          // Unlike a Vibe, an intro may come from the gallery: it is
+          // reviewed before anyone sees it.
+          pickFromGallery: () async {
+            final picked = await ImagePicker().pickVideo(
+              source: ImageSource.gallery,
+            );
+            return picked == null ? null : File(picked.path);
+          },
+        ),
       );
-      // Null is a cancel or a refused camera permission. Both are the host's
-      // choice and neither is worth an error.
-      if (file == null) return;
+      // Null: closed without a clip — the host's choice, not an error.
+      if (clip == null || !mounted) return;
 
       final current = widget.draft.videoIntro.value ?? const HostVideoIntro();
-      // Length is read from the clip rather than trusted: maxDuration is a hint
-      // to the camera app, and not every one of them honours it.
-      widget.draft.videoIntro.value = current.withRecording(file.path, 0);
+      widget.draft.videoIntro.value = current.withRecording(
+        clip.file.path,
+        clip.duration.inSeconds,
+      );
     } catch (e) {
       Log.d('VideoIntro', 'capture failed: $e');
       CToast.show(

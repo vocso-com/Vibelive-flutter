@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
@@ -22,6 +24,7 @@ class StatusCircle extends StatelessWidget {
     required this.onTap,
     this.avatarUrl,
     this.previewUrl,
+    this.previewFile,
     this.translateLabel = false,
     this.badge,
     this.semanticsLabel,
@@ -33,6 +36,10 @@ class StatusCircle extends StatelessWidget {
   /// A still from the newest Vibe: shown in the circle instead of the photo.
   /// Null (older posts, the host's "Add Vibe"): the photo.
   final String? previewUrl;
+
+  /// The same, made on this phone from the clip when the server sent none
+  /// (VibePreviews). Used when [previewUrl] is null.
+  final File? previewFile;
 
   /// For the avatar's letter when there is no photo.
   final String name;
@@ -74,7 +81,19 @@ class StatusCircle extends StatelessWidget {
       child: Container(
         padding: EdgeInsets.all(2.ms),
         decoration: BoxDecoration(color: c.background, shape: BoxShape.circle),
-        child: previewUrl == null
+        child: previewUrl == null && previewFile != null
+            ? ClipOval(
+                child: Image.file(
+                  previewFile!,
+                  width: size - 9.ms,
+                  height: size - 9.ms,
+                  fit: BoxFit.cover,
+                  gaplessPlayback: true,
+                  errorBuilder: (_, _, _) =>
+                      CAvatar(url: avatarUrl, name: name, size: size - 9.ms),
+                ),
+              )
+            : previewUrl == null
             ? CAvatar(url: avatarUrl, name: name, size: size - 9.ms)
             : ClipOval(
                 child: SizedBox.square(

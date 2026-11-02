@@ -41,6 +41,10 @@ Future<void> captureStatus(
       context,
       config: VibeCameraConfig(
         maxDuration: media.statusLimit,
+        // 30 fps: a fraction of the size at 120 (an unedited clip uploads as
+        // recorded), so Vibes load fast for the people watching them.
+        preferredFps: 30,
+        maxOutputFps: 30,
         accent: context.colors.accent,
         strings: vibeCameraStrings(context),
         onOpenSettings: () => openCallSettings(),
@@ -117,5 +121,6 @@ VibeCameraStrings vibeCameraStrings(BuildContext context) {
     discardTitle: t('discard_title'),
     discard: t('discard'),
     keepEditing: t('keep_editing'),
+    gallery: t('gallery'),
   );
 }

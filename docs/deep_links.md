@@ -69,6 +69,7 @@ Each step has its own link. The same link works for everyone:
 | Interests | `vibecalling://host-interests` |
 | Photos | `vibecalling://host-photos` |
 | Voice intro | `vibecalling://host-voice` |
+| Video intro (optional; rejected video intros link here) | `vibecalling://host-video` |
 | Tagline | `vibecalling://host-tagline` |
 | Bio | `vibecalling://host-bio` |
 | Call rates | `vibecalling://host-rates` |
