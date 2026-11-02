@@ -78,5 +78,15 @@
     "end": "আর কোনো ফলাফল নেই",
     "load_error": "হোস্টদের লোড করা যায়নি। আপনার সংযোগ দেখে নিন।",
     "try_again": "আবার চেষ্টা করুন"
+  },
+  "statuses": {
+    "title": "Vibes",
+    "add": "Vibe দিন",
+    "mine": "আপনার Vibe",
+    "in_review": "রিভিউ চলছে",
+    "visit": "প্রোফাইল দেখুন",
+    "just_now": "এইমাত্র",
+    "minutes_ago": "{{count}} মি. আগে",
+    "hours_ago": "{{count}} ঘ. আগে"
   }
 }

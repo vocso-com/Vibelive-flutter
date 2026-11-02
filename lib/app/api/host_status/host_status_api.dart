@@ -63,7 +63,8 @@ abstract final class HostStatusApi {
         // When it was recorded, not when it finished uploading: both windows
         // are measured from this, so a slow upload must not cost the host part
         // of their day. The server clamps a time in the future.
-        if (recordedAt != null) 'recordedAt': recordedAt.toUtc().toIso8601String(),
+        if (recordedAt != null)
+          'recordedAt': recordedAt.toUtc().toIso8601String(),
       },
     );
     final data = body is Map ? body['data'] : null;
@@ -105,6 +106,28 @@ abstract final class HostStatusApi {
   /// review and what was turned down.
   static Future<List<HostOwnStatus>> mine() async =>
       HostOwnStatus.listFrom(await ApiClient.get('/host-statuses/mine'));
+
+  /// `GET /host-statuses/feed`: the home row, every host with a live status
+  /// (never the signed-in user's own, nor a blocked host).
+  static Future<List<StatusGroup>> feed() async =>
+      StatusGroup.listFrom(await ApiClient.get('/host-statuses/feed'));
+
+  /// `POST /host-media-views`: this status was watched. Drives the grey ring
+  /// for this viewer and the host's view count; the server ignores repeats.
+  static Future<void> recordView({
+    required String hostDocumentId,
+    required String statusDocumentId,
+  }) async {
+    await ApiClient.post(
+      '/host-media-views',
+      data: {
+        'kind': 'status',
+        'action': 'view',
+        'hostDocumentId': hostDocumentId,
+        'statusDocumentId': statusDocumentId,
+      },
+    );
+  }
 
   /// `GET /host-statuses/host/:documentId`: what a client may watch for this
   /// host — approved, inside its 24 hours, not purged.

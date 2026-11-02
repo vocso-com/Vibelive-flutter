@@ -78,5 +78,15 @@
     "end": "પરિણામો પૂરાં",
     "load_error": "હોસ્ટ લોડ થઈ શક્યા નહીં. તમારું કનેક્શન તપાસો.",
     "try_again": "ફરી પ્રયાસ કરો"
+  },
+  "statuses": {
+    "title": "Vibes",
+    "add": "Vibe ઉમેરો",
+    "mine": "તમારું Vibe",
+    "in_review": "રિવ્યૂમાં",
+    "visit": "પ્રોફાઇલ જુઓ",
+    "just_now": "હમણાં જ",
+    "minutes_ago": "{{count}} મિ. પહેલાં",
+    "hours_ago": "{{count}} ક. પહેલાં"
   }
 }

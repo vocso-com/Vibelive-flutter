@@ -524,20 +524,20 @@
     "voice_body": "Tap Re-record and record a new one. It only takes a few seconds."
   },
   "my_status": {
-    "title": "Your status",
+    "title": "Your Vibe",
     "hint": "A short clip your callers see for 24 hours.",
-    "add": "Add status",
+    "add": "Add Vibe",
     "live": "LIVE",
     "in_review": "IN REVIEW",
     "rejected": "NOT APPROVED",
     "finished": "FINISHED",
-    "posted": "Status posted. It shows once the team has checked it.",
+    "posted": "Vibe posted. It shows once the team has checked it.",
     "failed": "Could not post that. Please try again."
   },
   "status_errors": {
-    "disabled": "Statuses aren't switched on yet. We'll tell you when they are.",
-    "daily_limit": "You've posted all your statuses for today. Try again tomorrow.",
+    "disabled": "Vibes aren't switched on yet. We'll tell you when they are.",
+    "daily_limit": "You've posted all your Vibes for today. Try again tomorrow.",
     "too_long": "That clip is too long. Record a shorter one.",
-    "post_failed": "Couldn't post that status. Please try again."
+    "post_failed": "Couldn't post that Vibe. Please try again."
   }
 }

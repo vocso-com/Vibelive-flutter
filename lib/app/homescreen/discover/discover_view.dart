@@ -28,6 +28,10 @@ import '../helper/discover_layout.dart';
 import '../helper/home_controller.dart';
 import 'active_filters.dart';
 import 'discover_hero.dart';
+import '../../api/host_status/host_status_models.dart';
+import '../../api/host_status/host_status_queries.dart';
+import '../../api/listingflow/host_index.dart';
+import '../statuses/status_row.dart';
 import 'talk_now_button.dart';
 import 'topic_tabs.dart';
 
@@ -86,6 +90,23 @@ class DiscoverView extends HookWidget {
       topics: topics,
     );
     final plain = tab.value.isAll && !filter.isActive;
+    // The status row follows the tab and filters: everyone on plain "All";
+    // otherwise a host on the list below, or one the app already knows that
+    // the tab and filters would let through (the list loads in pages).
+    final listed = {for (final h in hosts) ?h.expertProfileDocumentId};
+    final selectedTab = tab.value;
+    bool statusInclude(StatusHost s) {
+      if (plain || listed.contains(s.expertDocumentId)) return true;
+      if (selectedTab.isPopular) return false;
+      final known = HostIndex.find(
+        expertDocumentId: s.expertDocumentId,
+        userDocumentId: s.userDocumentId,
+      )?.card;
+      return known != null &&
+          selectedTab.matches(known, topics) &&
+          filter.matches(known);
+    }
+
     // Rows already on screen stay the same objects when a page lands, and
     // so do their widgets (below): only new or changed rows build.
     final lastRows = useRef(const <DiscoverRow>[]);
@@ -214,6 +235,7 @@ class DiscoverView extends HookWidget {
     Future<void> refresh({String trigger = 'pull'}) async {
       DiscoverEvents.feedRefreshed(trigger: trigger, tab: tab.value.kind.name);
       invalidateWalletQueries();
+      invalidateStatusFeed();
       isPopular ? await popular.refetch() : await feed.refresh();
     }
 
@@ -289,6 +311,9 @@ class DiscoverView extends HookWidget {
             source: 'discover',
             onChanged: (f) => home.filter.value = f,
           ),
+        // Hosts' statuses as circles (a host's own "+" first), narrowed to
+        // the selected tab and filters like the list below them.
+        StatusRow(include: statusInclude),
       ],
     );
     return Column(

@@ -78,5 +78,15 @@
     "end": "आणखी निकाल नाहीत",
     "load_error": "होस्ट लोड होऊ शकले नाहीत. तुमचे कनेक्शन तपासा.",
     "try_again": "पुन्हा प्रयत्न करा"
+  },
+  "statuses": {
+    "title": "Vibes",
+    "add": "Vibe टाका",
+    "mine": "तुमचे Vibe",
+    "in_review": "तपासणीत",
+    "visit": "प्रोफाइल पहा",
+    "just_now": "आत्ताच",
+    "minutes_ago": "{{count}} मि. पूर्वी",
+    "hours_ago": "{{count}} तास पूर्वी"
   }
 }

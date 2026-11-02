@@ -78,5 +78,15 @@
     "end": "END OF RESULTS",
     "load_error": "Couldn't load hosts. Check your connection.",
     "try_again": "Try again"
+  },
+  "statuses": {
+    "title": "Vibes",
+    "add": "Add Vibe",
+    "mine": "Your Vibe",
+    "in_review": "In review",
+    "visit": "Visit profile",
+    "just_now": "Just now",
+    "minutes_ago": "{{count}}m ago",
+    "hours_ago": "{{count}}h ago"
   }
 }

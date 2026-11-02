@@ -10,6 +10,56 @@ import 'host_status_models.dart';
 /// a new clip changes and nothing else.
 RawQueryKey _mineKey(String? user) => ['host-statuses', 'mine', user ?? ''];
 RawQueryKey _hostKey(String id) => ['host-statuses', 'host', id];
+RawQueryKey _feedKey(String? user) => ['host-statuses', 'feed', user ?? ''];
+
+/// The home row: every host with a live status, unwatched first.
+///
+/// Short stale time and a refetch whenever the app comes back to the front:
+/// statuses last a day, and a row that still offers yesterday's clip would
+/// play nothing.
+QueryResult<List<StatusGroup>, ApiException> useStatusFeed(
+  BuildContext context, {
+  required bool enabled,
+}) {
+  final session = useValueListenable(SessionStore.instance);
+  final result = useApiQuery<List<StatusGroup>>(
+    _feedKey(session.userDocumentId),
+    HostStatusApi.feed,
+    context: context,
+    enabled: enabled && session.isAuthenticated,
+    staleDuration: StaleTime.short,
+  );
+  final refetch = useRef(result.refetch)..value = result.refetch;
+  useOnAppLifecycleStateChange((_, state) {
+    if (state == AppLifecycleState.resumed && enabled) refetch.value();
+  });
+  return result;
+}
+
+/// Pull-to-refresh on Home: the row reloads with the feed.
+void invalidateStatusFeed() => queryCache.invalidateAll(const [
+  ['host-statuses', 'feed'],
+]);
+
+/// Statuses watched since the feed was loaded, by documentId: the ring goes
+/// grey at once instead of on the next fetch. Per signed-in user.
+abstract final class StatusSeen {
+  static final ValueNotifier<Set<String>> ids = ValueNotifier(const {});
+  static String? _user;
+
+  static Set<String> forUser(String? user) {
+    if (user != _user) {
+      _user = user;
+      ids.value = const {};
+    }
+    return ids.value;
+  }
+
+  static void mark(String statusDocumentId) {
+    if (ids.value.contains(statusDocumentId)) return;
+    ids.value = {...ids.value, statusDocumentId};
+  }
+}
 
 /// The signed-in host's own statuses: live, in review and turned down.
 ///
@@ -55,10 +105,8 @@ QueryResult<List<HostStatus>, ApiException> useHostStatuses(
 MutationResult<HostOwnStatus?, ApiException, HostStatusDraft> usePostStatus() {
   final session = useValueListenable(SessionStore.instance);
   return useApiMutation<HostOwnStatus?, HostStatusDraft>(
-    (draft) => HostStatusApi.post(
-      path: draft.path,
-      recordedAt: draft.recordedAt,
-    ),
+    (draft) =>
+        HostStatusApi.post(path: draft.path, recordedAt: draft.recordedAt),
     invalidates: [_mineKey(session.userDocumentId)],
   );
 }

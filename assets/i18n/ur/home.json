@@ -78,5 +78,15 @@
     "end": "نتائج ختم",
     "load_error": "ہوسٹ لوڈ نہیں ہو سکے۔ اپنا کنکشن چیک کریں۔",
     "try_again": "دوبارہ کوشش کریں"
+  },
+  "statuses": {
+    "title": "Vibes",
+    "add": "Vibe لگائیں",
+    "mine": "آپ کا Vibe",
+    "in_review": "زیر جائزہ",
+    "visit": "پروفائل دیکھیں",
+    "just_now": "ابھی",
+    "minutes_ago": "{{count}} منٹ پہلے",
+    "hours_ago": "{{count}} گھنٹے پہلے"
   }
 }

@@ -1,5 +1,7 @@
 import 'package:flutter/foundation.dart';
 
+import '../../../core/network/strapi.dart';
+
 /// Host statuses as the app reads them.
 ///
 /// Two shapes on purpose, because a client and the host who posted it are
@@ -120,4 +122,100 @@ class HostOwnStatus {
 
   bool get isPending => status == 'pending';
   bool get isRejected => status == 'rejected';
+}
+
+/// Whose circle it is on the home row.
+@immutable
+class StatusHost {
+  const StatusHost({
+    required this.expertDocumentId,
+    this.userDocumentId,
+    this.name = '',
+    this.avatarUrl,
+    this.online = false,
+    this.verified = false,
+  });
+
+  static StatusHost? fromJson(Object? json) {
+    if (json is! Map) return null;
+    final id = _str(json['documentId']);
+    if (id == null) return null;
+    return StatusHost(
+      expertDocumentId: id,
+      userDocumentId: _str(json['userDocumentId']),
+      name: _str(json['name']) ?? '',
+      avatarUrl: Strapi.mediaUrl(_str(json['avatar'])),
+      online: json['online'] == true,
+      verified: json['verified'] == true,
+    );
+  }
+
+  final String expertDocumentId;
+  final String? userDocumentId;
+  final String name;
+  final String? avatarUrl;
+  final bool online;
+  final bool verified;
+}
+
+/// One circle on the home row (`GET /host-statuses/feed`): a host and their
+/// live statuses, oldest first (the order they play in), and which of them
+/// this viewer has watched.
+@immutable
+class StatusGroup {
+  const StatusGroup({
+    required this.host,
+    required this.statuses,
+    this.seenIds = const {},
+  });
+
+  /// Null for a row with no host or nothing playable.
+  static StatusGroup? fromJson(Object? json) {
+    if (json is! Map) return null;
+    final host = StatusHost.fromJson(json['host']);
+    final rows = json['statuses'];
+    if (host == null || rows is! List) return null;
+    final statuses = <HostStatus>[];
+    final seen = <String>{};
+    for (final row in rows) {
+      final s = HostStatus.fromJson(row);
+      if (s == null) continue;
+      statuses.add(
+        HostStatus(
+          documentId: s.documentId,
+          media: Strapi.mediaUrl(s.media) ?? s.media,
+          recordedAt: s.recordedAt,
+          visibleUntil: s.visibleUntil,
+        ),
+      );
+      if (row is Map && row['seen'] == true) seen.add(s.documentId);
+    }
+    if (statuses.isEmpty) return null;
+    return StatusGroup(host: host, statuses: statuses, seenIds: seen);
+  }
+
+  /// The server's order: hosts with something unwatched first.
+  static List<StatusGroup> listFrom(Object? body) => [
+    for (final row in _rows(body)) ?StatusGroup.fromJson(row),
+  ];
+
+  final StatusHost host;
+  final List<HostStatus> statuses;
+
+  /// Watched by this viewer, as the server knew it.
+  final Set<String> seenIds;
+
+  /// Every status watched, counting the ones watched since ([alsoSeen]).
+  bool seenWith(Set<String> alsoSeen) => statuses.every(
+    (s) => seenIds.contains(s.documentId) || alsoSeen.contains(s.documentId),
+  );
+
+  /// Where playback starts: the first one not yet watched, else the first.
+  int firstUnseen(Set<String> alsoSeen) {
+    final i = statuses.indexWhere(
+      (s) =>
+          !seenIds.contains(s.documentId) && !alsoSeen.contains(s.documentId),
+    );
+    return i < 0 ? 0 : i;
+  }
 }

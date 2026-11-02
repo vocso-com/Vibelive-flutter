@@ -37,6 +37,26 @@ abstract final class DiscoverEvents {
   static void talkNowTapped({required bool blockedByCall}) =>
       Analytics.log('talk_now_tapped', {'blocked_by_call': blockedByCall});
 
+  /// A host's circle in the Home status row: [position] in the row, [seen]
+  /// whether all of theirs were already watched.
+  static void statusOpened({
+    required String hostId,
+    required int position,
+    required bool seen,
+  }) => Analytics.log('status_opened', {
+    'host_id': hostId,
+    'position': position,
+    'seen': seen,
+  });
+
+  /// Visit profile, under a status.
+  static void statusVisitProfile({required String hostId}) =>
+      Analytics.log('status_visit_profile', {'host_id': hostId});
+
+  /// A host taps their own circle (or its "+") to record a status.
+  static void statusAddTapped({required bool hasLive}) =>
+      Analytics.log('status_add_tapped', {'has_live': hasLive});
+
   /// A host card in the feed: [action] `open` (card) or `call` (Call Now).
   static void hostCardTapped({
     required String hostId,
@@ -213,17 +233,13 @@ abstract final class DiscoverEvents {
       'is_own': isOwn,
     });
     if (isOwn) return;
-    Analytics.meta(
-      'fb_mobile_content_view',
-      {
-        'fb_content_type': 'host_profile',
-        'fb_content_id': expertId,
-        'fb_currency': 'INR',
-        'category': category,
-        'source': source,
-      },
-      valueToSum: price != null && price > 0 ? price : null,
-    );
+    Analytics.meta('fb_mobile_content_view', {
+      'fb_content_type': 'host_profile',
+      'fb_content_id': expertId,
+      'fb_currency': 'INR',
+      'category': category,
+      'source': source,
+    }, valueToSum: price != null && price > 0 ? price : null);
   }
 
   /// The sheet closed: how long it was open and how many photos were seen.
@@ -430,11 +446,13 @@ abstract final class DiscoverEvents {
 
   /// Submit pressed but held back: [problem] `signed_out`, `no_target`,
   /// `no_reason`.
-  static void reportBlocked({required String hostId, required String problem}) =>
-      Analytics.log('host_report_blocked', {
-        'host_id': hostId,
-        'problem': problem,
-      });
+  static void reportBlocked({
+    required String hostId,
+    required String problem,
+  }) => Analytics.log('host_report_blocked', {
+    'host_id': hostId,
+    'problem': problem,
+  });
 
   static void reportSubmitted({
     required String hostId,

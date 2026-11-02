@@ -142,6 +142,10 @@ class HostBackend implements HttpClientAdapter {
   /// `'POST /api/expert-profiles'`-style calls that answer 500.
   final failing = <String>{};
 
+  /// `'GET /api/host-statuses/feed'` → reply body: a test's own endpoints,
+  /// checked before the built-in ones.
+  final replies = <String, Object? Function(RequestOptions o)>{};
+
   List<Call> sent(String method, String path) => [
     for (final c in calls)
       if (c.method == method && c.path == '/api$path') c,
@@ -180,6 +184,8 @@ class HostBackend implements HttpClientAdapter {
   }
 
   Object _reply(RequestOptions o) {
+    final own = replies['${o.method} ${o.path}'];
+    if (own != null) return own(o) ?? const {};
     final q = o.queryParameters;
     final body = o.data is Map ? o.data as Map : const {};
     switch ('${o.method} ${o.path}') {

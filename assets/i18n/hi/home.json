@@ -78,5 +78,15 @@
     "end": "परिणाम समाप्त",
     "load_error": "होस्ट लोड नहीं हो सके। अपना कनेक्शन जाँचें।",
     "try_again": "फिर से कोशिश करें"
+  },
+  "statuses": {
+    "title": "Vibes",
+    "add": "Vibe जोड़ें",
+    "mine": "आपका Vibe",
+    "in_review": "रिव्यू में",
+    "visit": "प्रोफ़ाइल देखें",
+    "just_now": "अभी",
+    "minutes_ago": "{{count}} मि. पहले",
+    "hours_ago": "{{count}} घं. पहले"
   }
 }
