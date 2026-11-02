@@ -82,7 +82,18 @@ void main() {
         calls
           ..setAccepted()
           ..setConnected();
-        await settle(80);
+        // Waits for the outcome rather than for 80ms of wall clock. The fixed
+        // delay here was a bet that the hang-up round trip finishes in time,
+        // and on a loaded machine it did not — this test failed about one full
+        // suite run in five and passed every time it ran alone.
+        //
+        // The call-end POST is what to wait for, not the toast: the toast is
+        // shown first and the request lands after it, so waiting on the toast
+        // still raced the assertion below.
+        await settleUntil(
+          () => backend.to('POST', callEnd).isNotEmpty,
+          reason: 'the call was never ended against the backend',
+        );
         expect(alertLog(), contains('toast|callflow:low_balance.ended'));
         expect(calls.value.phase.isActive, isFalse);
         expect(backend.lastBody('POST', callEnd)['status'], 'completed');

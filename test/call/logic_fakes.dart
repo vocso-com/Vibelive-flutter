@@ -370,8 +370,38 @@ void resetCallState() {
 List<String> alertLog() => CallAlerts.debugLog ?? const [];
 
 /// Lets queued microtasks and short timers run.
+///
+/// This waits on the CLOCK, not on the thing you care about, so a value picked
+/// to be "comfortably enough" is a bet that loses on a loaded machine — which
+/// is how `logic_billing_test.dart` came to fail roughly one full-suite run in
+/// five while passing every time it was run alone. Fine for letting a microtask
+/// drain; use [settleUntil] whenever you are waiting for an OUTCOME.
 Future<void> settle([int ms = 20]) =>
     Future<void>.delayed(Duration(milliseconds: ms));
+
+/// Waits until [done] is true, then returns immediately.
+///
+/// Fast when the work is fast and patient when the machine is busy, which is
+/// the opposite of a fixed delay on both counts. The timeout is deliberately
+/// far longer than any of these paths need: it exists to fail a genuinely
+/// broken test, not to be the thing a passing test waits for.
+Future<void> settleUntil(
+  bool Function() done, {
+  int timeoutMs = 4000,
+  int pollMs = 5,
+  String? reason,
+}) async {
+  final deadline = DateTime.now().add(Duration(milliseconds: timeoutMs));
+  while (!done()) {
+    if (DateTime.now().isAfter(deadline)) {
+      throw StateError(
+        'settleUntil timed out after ${timeoutMs}ms'
+        '${reason == null ? '' : ': $reason'}',
+      );
+    }
+    await Future<void>.delayed(Duration(milliseconds: pollMs));
+  }
+}
 
 /// A backend ring payload (P1), every value a string.
 Map<String, dynamic> ringPush({
