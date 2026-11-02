@@ -4,6 +4,7 @@ import 'package:video_player/video_player.dart';
 
 import '../../../core/utils/log.dart';
 import '../../../core/utils/scale.dart';
+import '../../api/host_status/vibe_video_cache.dart';
 import '../../component/c_text.dart';
 import '../../component/pressable.dart';
 
@@ -91,7 +92,13 @@ class _StatusViewerState extends State<StatusViewer> {
     setState(() {});
 
     if (index < 0 || index >= widget.urls.length) return;
-    final next = VideoPlayerController.networkUrl(Uri.parse(widget.urls[index]));
+    final url = widget.urls[index];
+    // Watched before or fetched ahead: from the phone, at once.
+    final file = await VibeVideoCache.cached(url);
+    if (!mounted) return;
+    final next = file != null
+        ? VideoPlayerController.file(file)
+        : VideoPlayerController.networkUrl(Uri.parse(url));
     try {
       await next.initialize();
     } catch (e) {
@@ -109,13 +116,20 @@ class _StatusViewerState extends State<StatusViewer> {
     next.addListener(_onTick);
     await next.play();
     if (mounted) setState(() => _player = next);
+    // The next one, fetched while this plays.
+    if (index + 1 < widget.urls.length) {
+      VibeVideoCache.prefetch([widget.urls[index + 1]]);
+    }
   }
 
   void _onTick() {
     final p = _player;
     if (p == null || !p.value.isInitialized) return;
+    // The player says it finished, or the position reached the end.
     final done =
-        p.value.duration > Duration.zero && p.value.position >= p.value.duration;
+        p.value.isCompleted ||
+        (p.value.duration > Duration.zero &&
+            p.value.position >= p.value.duration);
     if (!done) return;
     // Straight on to the next, like every other status viewer; the last one
     // closes, because sitting on a finished clip is a dead end.

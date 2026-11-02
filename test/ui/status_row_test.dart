@@ -1,7 +1,11 @@
+import 'dart:typed_data';
+import 'dart:io';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:vibelive/app/api/host_status/vibe_frames.dart';
+import 'package:vibelive/app/api/host_status/vibe_previews.dart';
 import 'package:vibelive/app/api/host_status/vibe_video_cache.dart';
 import 'package:vibelive/app/api/host_status/host_status_models.dart';
 import 'package:vibelive/app/api/host_status/host_status_queries.dart';
@@ -21,6 +25,11 @@ import 'host_onboarding_support/harness.dart';
 /// further each time the controller polls the position (every 100 ms).
 class _FakeVideo extends VideoPlayerPlatform {
   static const clip = Duration(seconds: 2);
+
+  /// Like some phones: the position stops 100 ms short of the length and a
+  /// `completed` event says it finished.
+  bool stopShort = false;
+  final _completed = <int>{};
   final _events = <int, StreamController<VideoEvent>>{};
   final _playing = <int>{};
   final opened = <String>[];
@@ -74,6 +83,17 @@ class _FakeVideo extends VideoPlayerPlatform {
     final now = _positions[playerId] ?? Duration.zero;
     if (!_playing.contains(playerId)) return now;
     final next = now + const Duration(milliseconds: 500);
+    if (stopShort) {
+      final end = clip - const Duration(milliseconds: 100);
+      if (next >= end && _completed.add(playerId)) {
+        scheduleMicrotask(
+          () => _events[playerId]?.add(
+            VideoEvent(eventType: VideoEventType.completed),
+          ),
+        );
+      }
+      return _positions[playerId] = next > end ? end : next;
+    }
     return _positions[playerId] = next > clip ? clip : next;
   }
 
@@ -137,6 +157,8 @@ void main() {
     VideoPlayerPlatform.instance = video;
     // No file system or database in tests: clips always stream.
     VibeVideoCache.enabled = false;
+    VibePreviews.enabled = false;
+    VibePreviews.files.value = const {};
     // The saved app-config of the test before must not switch statuses on.
     await QueryPersist.clearAll();
   });
@@ -606,5 +628,75 @@ void main() {
     expect(find.text('Reporting Asha'), findsOneWidget);
     tester.takeException();
     await finishHost(tester);
+  });
+
+  testWidgets('a clip that stops just short of its end still moves on', (
+    tester,
+  ) async {
+    video.stopShort = true;
+    final backend = await resetHost();
+    statusesOn(backend);
+    backend.replies['GET /api/host-statuses/feed'] = (_) => {
+      'results': [
+        _group('e1', 'Asha', [_status('s1')]),
+        _group('e2', 'Meera', [_status('m1')]),
+      ],
+    };
+    await open(tester);
+    await tester.tap(find.text('Asha'));
+    await pumpFor(tester, 3000);
+    // Asha's only clip finished: Meera's plays next, like WhatsApp.
+    expect(video.opened, [
+      'https://cdn.example/s1.mp4',
+      'https://cdn.example/m1.mp4',
+    ]);
+    // Meera's was the last: the viewer closed by itself.
+    await pumpFor(tester, 2500);
+    expect(find.byKey(const ValueKey('status-close')), findsNothing);
+    await finishHost(tester);
+  });
+
+  testWidgets('no still from the server: a frame made on the phone shows', (
+    tester,
+  ) async {
+    final backend = await resetHost();
+    statusesOn(backend);
+    backend.replies['GET /api/host-statuses/feed'] = (_) => {
+      'results': [
+        _group('e1', 'Asha', [_status('s1'), _status('s2')]),
+      ],
+    };
+    // What VibePreviews publishes once it took a frame from the newest clip.
+    VibePreviews.files.value = {'s2': File('/tmp/s2.jpg')};
+    await open(tester);
+    expect(circle(tester, 'e1').previewUrl, isNull);
+    expect(circle(tester, 'e1').previewFile?.path, '/tmp/s2.jpg');
+    await finishHost(tester);
+  });
+
+  group('the steadiest frame', () {
+    Uint8List frame(int Function(int i) luma) {
+      final px = Uint8List(48 * 48 * 4);
+      for (var i = 0; i < 48 * 48; i++) {
+        final v = luma(i).clamp(0, 255);
+        px[i * 4] = v;
+        px[i * 4 + 1] = v;
+        px[i * 4 + 2] = v;
+        px[i * 4 + 3] = 255;
+      }
+      return px;
+    }
+
+    test('detail beats a flat frame; black and white frames lose', () {
+      final detailed = VibeFrames.scorePixels(
+        frame((i) => (i % 48) * 5 + 20),
+      );
+      final flat = VibeFrames.scorePixels(frame((_) => 128));
+      final black = VibeFrames.scorePixels(frame((i) => i % 2 * 20));
+      final white = VibeFrames.scorePixels(frame((i) => 240 + i % 2 * 15));
+      expect(detailed, greaterThan(flat));
+      expect(flat, greaterThan(black));
+      expect(flat, greaterThan(white));
+    });
   });
 }
