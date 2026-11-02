@@ -29,10 +29,6 @@ abstract final class DiscoverEvents {
     'position': position,
   });
 
-  /// The hero banner's "Explore now".
-  static void heroExploreTapped() =>
-      Analytics.log('discover_hero_explore_tapped');
-
   /// "Talk now" (instant call to any available host).
   static void talkNowTapped({required bool blockedByCall}) =>
       Analytics.log('talk_now_tapped', {'blocked_by_call': blockedByCall});

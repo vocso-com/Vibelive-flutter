@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
@@ -27,7 +26,6 @@ import '../../navbar/bottombar/navbar_collapse.dart';
 import '../helper/discover_layout.dart';
 import '../helper/home_controller.dart';
 import 'active_filters.dart';
-import 'discover_hero.dart';
 import '../../api/host_status/host_status_models.dart';
 import '../../api/host_status/host_status_queries.dart';
 import '../../api/listingflow/host_index.dart';
@@ -243,20 +241,6 @@ class DiscoverView extends HookWidget {
       isPopular ? await popular.refetch() : await feed.refresh();
     }
 
-    // Explore Now: past the hero, to the topics and the grid.
-    void explore() {
-      DiscoverEvents.heroExploreTapped();
-      if (!scroll.hasClients) return;
-      final p = scroll.position;
-      unawaited(
-        scroll.animateTo(
-          math.min(p.maxScrollExtent, DiscoverHero.height + 10.ms),
-          duration: const Duration(milliseconds: 350),
-          curve: Curves.easeOutCubic,
-        ),
-      );
-    }
-
     // Analytics: an empty tab / a load error, once per state change.
     final emptyShown = !loading && error == null && rows.isEmpty;
     useEffect(() {
@@ -286,17 +270,18 @@ class DiscoverView extends HookWidget {
       10.ms,
       140.ms + MediaQuery.viewPaddingOf(context).bottom,
     );
-    // Hero, topics and active filters scroll with the feed (mockup); while
-    // the first page loads they sit above its skeleton.
+    // Banners, topics and active filters scroll with the feed (mockup);
+    // while the first page loads they sit above its skeleton.
     final header = Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        DiscoverHero(onExplore: explore),
-        // The admin's promo banners (Settings → App banners), if any are live.
+        // The admin's promo banners (admin → Banners & popups), if any are
+        // live. They replace the old built-in hero (its look is the
+        // `spotlight` template).
         PromoBannerCarousel(
           placement: PromoPlacement.home,
-          padding: EdgeInsets.fromLTRB(6.ms, 8.ms, 6.ms, 2.ms),
+          padding: EdgeInsets.fromLTRB(6.ms, 4.ms, 6.ms, 6.ms),
         ),
         const TalkNowButton(),
         TopicTabs(

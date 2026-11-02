@@ -87,6 +87,9 @@ dependencies:
   # alternative here was an HTML5 <video> inside webview_flutter, which costs a
   # webview per clip and gives up aspect-ratio and playback control.
   video_player: ^2.11.1
+  # In-app camera + editor for Vibes (self-contained, reusable): packages/vibe-camera.
+  vibe_camera:
+    path: packages/vibe-camera
 
 dev_dependencies:
   flutter_test:

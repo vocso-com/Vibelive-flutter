@@ -7,10 +7,13 @@ import '../component/c_image.dart';
 import '../component/c_text.dart';
 import '../component/pressable.dart';
 import 'promo_effects.dart';
+import 'templates/banner_templates.dart';
 
-/// One promo banner, drawn from the admin's design: layout, height, colours
-/// (or a gradient), image, darkening, text alignment, button. The admin's
-/// preview (BannerPreview.jsx) draws the same thing.
+/// One promo banner: the admin's template (spotlight, offer ticket, full
+/// image, glass, compact, countdown) filled with their text, image and
+/// colours; or, for `custom` (and template keys this build does not know),
+/// the classic look: layout, height, colours, darkening, button. The admin's
+/// preview draws the same thing.
 class PromoBannerCard extends StatelessWidget {
   const PromoBannerCard({
     super.key,
@@ -18,6 +21,8 @@ class PromoBannerCard extends StatelessWidget {
     required this.width,
     this.onTap,
     this.onDismiss,
+    this.onCopied,
+    this.onEnded,
   });
 
   final PromoBanner banner;
@@ -27,13 +32,55 @@ class PromoBannerCard extends StatelessWidget {
   final VoidCallback? onTap;
   final VoidCallback? onDismiss;
 
-  static double heightFor(PromoBanner b, double width) =>
-      b.height.dp * (width / 340);
+  /// Its coupon code was copied (analytics).
+  final VoidCallback? onCopied;
+
+  /// Its countdown reached zero: the carousel drops it.
+  final VoidCallback? onEnded;
+
+  static double heightFor(PromoBanner b, double width) {
+    final t = b.template;
+    if (t != null) return PromoBannerTemplateView.heightFor(t, width);
+    return b.height.dp * (width / 340);
+  }
 
   @override
   Widget build(BuildContext context) {
     final b = banner;
     final height = heightFor(b, width);
+    final template = b.template;
+    if (template != null) {
+      return _frame(
+        Semantics(
+          button: !b.action.isNone,
+          label: promoSemantics(b.content),
+          child: SizedBox(
+            width: width,
+            height: height,
+            child: ClipPath(
+              clipper: PromoBannerTemplateView.clipperFor(template, width),
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  PromoBannerTemplateView(
+                    template: template,
+                    content: b.content,
+                    width: width,
+                    onCopied: onCopied,
+                    onEnded: onEnded,
+                  ),
+                  if (b.content.effect != PromoEffect.none)
+                    PromoEffectLayer(
+                      effect: b.content.effect,
+                      color: b.content.effectColor,
+                    ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+    }
     final radius = BorderRadius.circular(b.cornerRadius);
     final image = b.imageUrl == null
         ? const SizedBox.shrink()
@@ -105,6 +152,12 @@ class PromoBannerCard extends StatelessWidget {
       ),
     );
 
+    return _frame(card);
+  }
+
+  /// The tap and the close button around a drawn card.
+  Widget _frame(Widget card) {
+    final b = banner;
     return Stack(
       children: [
         if (b.action.isNone || onTap == null)

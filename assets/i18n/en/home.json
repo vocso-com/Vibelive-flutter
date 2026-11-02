@@ -25,32 +25,6 @@
   "history": {
     "title": "Call History"
   },
-  "hero": {
-    "client": {
-      "title_a": "Feel Heard, ",
-      "title_b": "Feel Better.",
-      "subtitle": "Friendly, verified people ready to listen. Talk freely and privately.",
-      "action": "Start Talking"
-    },
-    "host_online": {
-      "title_a": "You're Live! ",
-      "title_b": "Someone May Call Soon.",
-      "subtitle": "Be the friendly voice someone needs today, and earn while you talk.",
-      "action": "Manage Status"
-    },
-    "host_scheduled": {
-      "title_a": "Your Hours Are Set. ",
-      "title_b": "Calls Come on Your Time.",
-      "subtitle": "Want to help more people? Go online now and earn more.",
-      "action": "Go Online"
-    },
-    "host_offline": {
-      "title_a": "Ready to Earn? ",
-      "title_b": "Go Online Now.",
-      "subtitle": "People are waiting for a kind voice. Go online and earn from home.",
-      "action": "Go Online"
-    }
-  },
   "status": {
     "online": "Online",
     "scheduled": "Scheduled",

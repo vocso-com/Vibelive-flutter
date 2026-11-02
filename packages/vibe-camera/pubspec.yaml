@@ -1,0 +1,28 @@
+name: vibe_camera
+description: >-
+  An in-app camera for short vertical clips: live colour filters and lighting,
+  up to 120 fps where the device allows, then trim, crop, text, filters and
+  light adjustments baked into the exported video. Self-contained: no app code,
+  strings passed in, so any Flutter app can use it.
+version: 0.1.0
+publish_to: none
+
+environment:
+  sdk: ^3.11.0
+  flutter: ">=3.35.0"
+
+dependencies:
+  camera: ^0.12.0+2
+  flutter:
+    sdk: flutter
+  path_provider: ^2.1.5
+  pro_video_editor: ^2.2.4
+  video_player: ^2.11.1
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+  video_player_platform_interface: ^6.9.0
+
+flutter:

@@ -158,7 +158,7 @@ class _MyStatusCircle extends HookWidget {
 
     Future<void> record() {
       DiscoverEvents.statusAddTapped(hasLive: live.isNotEmpty);
-      return captureStatus(post, media: media, mine: rows);
+      return captureStatus(context, post, media: media, mine: rows);
     }
 
     return StatusCircle(

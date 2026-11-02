@@ -8,6 +8,7 @@ import 'package:vibelive/app/callscreen/helper/push/app_update_push.dart';
 import 'package:vibelive/app/homescreen/statuses/status_circle.dart';
 import 'package:vibelive/app/hosthub/approved/widgets/status_capture.dart';
 import 'package:vibelive/app/homescreen/statuses/status_row.dart';
+import 'package:vibe_camera/src/capture/capture_screen.dart';
 import 'package:vibelive/core/network/strapi.dart';
 import 'package:vibelive/core/query/query_persist.dart';
 // ignore: depend_on_referenced_packages
@@ -405,6 +406,26 @@ void main() {
     await pumpFor(tester, 800);
     expect(find.text('Vibes'), findsOneWidget);
     expect(find.text('Asha'), findsOneWidget);
+    await finishHost(tester);
+  });
+
+  testWidgets("the + opens the app's own camera, in the app's language", (
+    tester,
+  ) async {
+    const expert = {'id': 9, 'documentId': 'e9'};
+    final backend = await resetHost(expert: expert);
+    statusesOn(backend);
+    backend.replies['GET /api/host-statuses/mine'] = (_) => {'results': []};
+    await open(tester);
+    await tester.tap(find.byType(StatusAddBadge));
+    await pumpFor(tester, 800);
+    // Our camera (a test has no real one, so it stays on its spinner), with
+    // the app's own words.
+    expect(find.byType(VibeCaptureScreen), findsOneWidget);
+    expect(find.text('Tap to record'), findsOneWidget);
+    await tester.tap(find.bySemanticsLabel('Close'));
+    await pumpFor(tester, 600);
+    expect(find.byType(VibeCaptureScreen), findsNothing);
     await finishHost(tester);
   });
 }

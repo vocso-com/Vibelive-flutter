@@ -1,15 +1,20 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 
 import '../../core/analytics/screen_tracker.dart';
 import '../../core/network/api_exception.dart';
+import '../../core/session/session_store.dart';
 import '../../core/theme/vibe_colors.dart';
 import '../api/listingflow/listing_queries.dart';
 import '../authscreen/helper/deep_links.dart';
 import '../banner/top_warn_bar.dart';
 import '../callscreen/call/return_to_call_bar.dart';
 import '../callscreen/history/history_view.dart';
+import '../client/me/helper/me_data.dart';
 import '../client/me/me_view.dart';
+import '../client/me/widgets/host_availability_sheet.dart';
 import '../component/c_toast.dart';
 import '../component/exit_on_double_back.dart';
 import '../component/status_bar_style.dart';
@@ -17,6 +22,7 @@ import '../component/vibe_background.dart';
 import '../listingflow/profile/host_profile_sheet.dart';
 import '../navbar/bottombar/bottom_navbar.dart';
 import '../navbar/topbar/home_top_bar.dart';
+import '../promo/popup/promo_popup_controller.dart';
 import 'discover/discover_view.dart';
 import 'helper/home_controller.dart';
 import 'helper/own_host_refresh.dart';
@@ -25,12 +31,21 @@ import 'helper/own_host_refresh.dart';
 /// Tabs are built on first visit and kept alive (no refetch, no rebuild on
 /// switch); hidden tabs stop their animations.
 class HomeScreen extends HookWidget {
-  const HomeScreen({super.key, this.initialTab = HomeTab.discover, this.topic});
+  const HomeScreen({
+    super.key,
+    this.initialTab = HomeTab.discover,
+    this.topic,
+    this.sheet,
+  });
 
   final HomeTab initialTab;
 
   /// `?topic=` for Discover.
   final String? topic;
+
+  /// `?sheet=availability` (the `online-status` link): a host gets the
+  /// online / offline sheet over Home.
+  final String? sheet;
 
   @override
   Widget build(BuildContext context) {
@@ -53,6 +68,18 @@ class HomeScreen extends HookWidget {
     }, [home]);
     // Hosts: fresh review state for the top bar.
     useOwnHostRefresh(home);
+    // The admin's app-open popup (first Home, and back after a while).
+    usePromoPopups(context);
+    // The `online-status` link: the host's availability sheet.
+    useEffect(() {
+      if (sheet != 'availability') return null;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!context.mounted) return;
+        if (!MeData.of(SessionStore.instance.value).isExpert) return;
+        unawaited(showHostAvailabilitySheet(context, source: 'deeplink'));
+      });
+      return null;
+    }, [sheet]);
 
     // Parked links open now; hosts to open (links, referrer, campaigns)
     // arrive on DeepLinks.openUser.

@@ -109,5 +109,13 @@
     "rejected_body": "You're still signed in. Tap Retry. If this keeps happening, log in again.",
     "retry": "Retry",
     "log_in_again": "Log in again"
+  },
+  "promo": {
+    "code_copied": "Code copied",
+    "days": "Days",
+    "hrs": "Hrs",
+    "min": "Min",
+    "sec": "Sec",
+    "close": "Close"
   }
 }

@@ -553,9 +553,8 @@ void main() {
     final pill = find.bySemanticsLabel(RegExp('Change availability'));
     expect(pill, findsOneWidget);
     expect(find.text('Online'), findsOneWidget);
-    // Discover's banner speaks to the host about their status.
-    expect(find.text("You're Live! Someone May Call Soon."), findsOneWidget);
-    expect(find.text('Feel Heard, Feel Better.'), findsNothing);
+    // Discover has no built-in banner any more (admin banners replace it).
+    expect(find.text("You're Live! Someone May Call Soon."), findsNothing);
 
     await tester.tap(pill);
     await _pump(tester, 400);
@@ -574,14 +573,14 @@ void main() {
     expect(find.text('Host Availability'), findsNothing);
     expect(backend.requests, contains('PUT /api/expert-profiles/exp1'));
     expect(backend.vacation, isTrue);
-    expect(find.text('Ready to Earn? Go Online Now.'), findsOneWidget);
 
-    // The banner's Go Online saves in one tap.
-    await tester.tap(find.text('Go Online'));
+    // Back online from the sheet.
+    await tester.tap(pill);
+    await _pump(tester, 400);
+    await tester.tap(find.text('Online & Ready for Calls'));
     await _pump(tester, 600);
     expect(backend.vacation, isFalse);
     expect(find.text('Online'), findsOneWidget);
-    expect(find.text("You're Live! Someone May Call Soon."), findsOneWidget);
 
     // Offline for 30 min: the pill counts down.
     await tester.tap(pill);
@@ -678,8 +677,7 @@ void main() {
     appRouter.go(AppRoutes.home);
     await _pump(tester, 800);
     expect(find.bySemanticsLabel(RegExp('Change availability')), findsNothing);
-    expect(find.text('Feel Heard, Feel Better.'), findsOneWidget);
-    expect(find.text('Start Talking'), findsOneWidget);
+    expect(find.text('Start Talking'), findsNothing, reason: 'no built-in hero');
     await finish(tester);
   });
 

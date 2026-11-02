@@ -17,7 +17,6 @@ import '../api/splashscreen/splash_keys.dart';
 import '../api/splashscreen/startup_queries.dart';
 import '../component/app_logo.dart';
 import '../component/exit_on_double_back.dart';
-import '../homescreen/discover/discover_hero.dart';
 import 'launch_logo.dart';
 import 'onboarding_view.dart';
 import 'splash_motion.dart';
@@ -69,7 +68,6 @@ class SplashScreen extends HookWidget {
           context,
         ).whenComplete(_releaseFirstFrame);
         precacheImage(AppLogo.provider(context, 120.ms), context);
-        if (signedIn) DiscoverHero.precache(context);
         // The login wordmark: decoded before its fade-in, not during it.
         if (!signedIn) {
           precacheImage(

@@ -133,6 +133,7 @@ final GoRouter appRouter = GoRouter(
         child: HomeScreen(
           initialTab: HomeTab.fromParam(state.uri.queryParameters['tab']),
           topic: state.uri.queryParameters['topic'],
+          sheet: state.uri.queryParameters['sheet'],
         ),
       ),
     ),

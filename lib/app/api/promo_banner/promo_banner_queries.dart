@@ -8,6 +8,7 @@ import '../../../core/session/session_store.dart';
 import '../../../core/storage/app_prefs.dart';
 import 'promo_banner_api.dart';
 import 'promo_banner_models.dart';
+import 'promo_popup_models.dart';
 
 RawQueryKey _key(PromoPlacement placement, String? user) => [
   'promo-banners',
@@ -42,10 +43,31 @@ QueryResult<PromoBannerFeed, ApiException> usePromoBanners(
   return result;
 }
 
-/// Every placement reloads (an admin change, pull-to-refresh).
+/// Every placement reloads, and the app-open popups too (an admin change,
+/// pull-to-refresh): both live under the `promo-banners` key.
 void invalidatePromoBanners() => queryCache.invalidateAll(const [
   ['promo-banners'],
 ]);
+
+RawQueryKey _popupKey(String? user) => ['promo-banners', 'popups', user ?? ''];
+
+/// The live app-open popups (for the popup controller, outside widgets).
+/// [fresh]: skip the cache (an app open asks the server again).
+Future<PromoPopupFeed> ensurePromoPopups({bool fresh = false}) {
+  final user = SessionStore.instance.value.userDocumentId;
+  return queryCache.fetchQuery<PromoPopupFeed>(
+    _popupKey(user),
+    PromoBannerApi.popups,
+    staleDuration: fresh ? StaleTime.none : StaleTime.short,
+  );
+}
+
+/// The last popup feed in memory, if any (a failed refetch falls back to it).
+PromoPopupFeed? peekPromoPopups() => queryCache
+    .entry<PromoPopupFeed>(
+      _popupKey(SessionStore.instance.value.userDocumentId),
+    )
+    ?.data;
 
 /// Banners a user closed, kept on this phone (by banner id).
 abstract final class PromoDismissed {

@@ -1,8 +1,10 @@
 import 'dart:math' as math;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 
-import '../api/promo_banner/promo_banner_models.dart';
+import '../api/promo_banner/promo_content.dart';
 
 /// The admin's effect, animated over a banner on a loop: sparkle, rising
 /// stars or hearts, falling confetti, a gift whose lid pops open with a
@@ -28,26 +30,31 @@ class PromoEffectLayer extends StatefulWidget {
 
 class _PromoEffectLayerState extends State<PromoEffectLayer>
     with SingleTickerProviderStateMixin {
-  late final AnimationController _clock = AnimationController(
-    vsync: this,
-    duration: const Duration(milliseconds: 3200),
+  /// Seconds since the layer appeared: one ever-growing clock, so no
+  /// particle jumps when a loop starts over.
+  final _time = ValueNotifier<double>(_stillAt);
+  late final Ticker _ticker = createTicker(
+    (elapsed) => _time.value = elapsed.inMicroseconds / 1e6,
   );
+
+  /// The frame shown when the phone asks for less motion.
+  static const _stillAt = 1.76;
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     if (MediaQuery.disableAnimationsOf(context)) {
-      _clock
-        ..stop()
-        ..value = 0.55;
-    } else if (!_clock.isAnimating) {
-      _clock.repeat();
+      if (_ticker.isActive) _ticker.stop();
+      _time.value = _stillAt;
+    } else if (!_ticker.isActive) {
+      _ticker.start();
     }
   }
 
   @override
   void dispose() {
-    _clock.dispose();
+    _ticker.dispose();
+    _time.dispose();
     super.dispose();
   }
 
@@ -61,7 +68,7 @@ class _PromoEffectLayerState extends State<PromoEffectLayer>
           painter: PromoEffectPainter(
             effect: widget.effect,
             color: widget.color,
-            clock: _clock,
+            time: _time,
           ),
         ),
       ),
@@ -69,17 +76,22 @@ class _PromoEffectLayerState extends State<PromoEffectLayer>
   }
 }
 
-/// Paints one frame of an effect at [clock]'s value (0–1, looping).
+/// Paints one frame of an effect at [time] (seconds). Particles fade in and
+/// out on sine ramps and towards the banner's edges, so nothing is chopped
+/// off at the border.
 class PromoEffectPainter extends CustomPainter {
   PromoEffectPainter({
     required this.effect,
     required this.color,
-    required this.clock,
-  }) : super(repaint: clock);
+    required this.time,
+  }) : super(repaint: time);
 
   final PromoEffect effect;
   final Color color;
-  final Animation<double> clock;
+  final ValueListenable<double> time;
+
+  /// One loop of the slow effects (shine, gift), in seconds.
+  static const period = 3.2;
 
   static const _confetti = [
     Color(0xFFFF4D6D),
@@ -95,21 +107,39 @@ class PromoEffectPainter extends CustomPainter {
     (((i * 53 + 17) % 80) + 8) / 100,
   );
 
+  /// 0 at the banner's edge, 1 a little inside it (smooth).
+  static double edge(Offset at, Size size) {
+    double ramp(double d, double m) {
+      if (m <= 0) return 1;
+      final x = (d / m).clamp(0.0, 1.0);
+      return x * x * (3 - 2 * x);
+    }
+
+    final mx = size.width * 0.08;
+    final my = size.height * 0.14;
+    return ramp(at.dx, mx) *
+        ramp(size.width - at.dx, mx) *
+        ramp(at.dy, my) *
+        ramp(size.height - at.dy, my);
+  }
+
   @override
   void paint(Canvas canvas, Size size) {
     if (size.isEmpty) return;
-    final t = clock.value;
+    // Loop phase for the slow effects; the particle effects use the
+    // seconds directly (each at its own pace, never reset).
+    final t = (time.value / period) % 1;
     switch (effect) {
       case PromoEffect.none:
         return;
       case PromoEffect.sparkle:
-        _sparkle(canvas, size, t);
+        _sparkle(canvas, size, time.value);
       case PromoEffect.stars:
-        _rising(canvas, size, t, _starPath);
+        _rising(canvas, size, time.value, _starPath);
       case PromoEffect.hearts:
-        _rising(canvas, size, t, _heartPath);
+        _rising(canvas, size, time.value, _heartPath);
       case PromoEffect.confetti:
-        _confettiFall(canvas, size, t);
+        _confettiFall(canvas, size, time.value);
       case PromoEffect.shine:
         _shine(canvas, size, t);
       case PromoEffect.gift:
@@ -120,12 +150,13 @@ class PromoEffectPainter extends CustomPainter {
   Paint _fill(Color c, double opacity) =>
       Paint()..color = c.withValues(alpha: opacity.clamp(0.0, 1.0));
 
-  void _sparkle(Canvas canvas, Size size, double t) {
+  void _sparkle(Canvas canvas, Size size, double seconds) {
     for (var i = 0; i < 12; i++) {
-      final p = (t * 2 + i * 0.137) % 1;
-      final alpha = math.sin(p * math.pi);
-      final r = (3.5 + (i % 3) * 2.5) * (0.4 + 0.6 * alpha);
+      final p = (seconds / 1.6 + i * 0.137) % 1;
       final at = Offset(_spot(i).dx * size.width, _spot(i).dy * size.height);
+      final s = math.sin(p * math.pi);
+      final alpha = s * s * edge(at, size);
+      final r = (3.5 + (i % 3) * 2.5) * (0.4 + 0.6 * s);
       final glow = _fill(color, alpha * 0.5)
         ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 3);
       canvas.drawCircle(at, r * 0.8, glow);
@@ -137,28 +168,32 @@ class PromoEffectPainter extends CustomPainter {
   void _rising(
     Canvas canvas,
     Size size,
-    double t,
+    double seconds,
     Path Function(Offset c, double r) shape,
   ) {
     for (var i = 0; i < 10; i++) {
-      final p = (t + i * 0.1) % 1;
-      final alpha = p < 0.2 ? p / 0.2 : (1 - p) / 0.8;
+      final speed = 1 + (i % 3) * 0.18;
+      final p = (seconds / period * speed + i * 0.1) % 1;
       final r = 4.0 + (i % 3) * 2;
       final x = _spot(i).dx * size.width + math.sin(p * math.pi * 2 + i) * 8;
-      final y = size.height * (0.95 - p * 0.9);
-      canvas.drawPath(shape(Offset(x, y), r), _fill(color, alpha * 0.95));
+      final y = size.height * (0.98 - p * 0.96);
+      final at = Offset(x, y);
+      final alpha = math.sin(p * math.pi) * edge(at, size);
+      canvas.drawPath(shape(at, r), _fill(color, alpha * 0.95));
     }
   }
 
-  void _confettiFall(Canvas canvas, Size size, double t) {
+  void _confettiFall(Canvas canvas, Size size, double seconds) {
     for (var i = 0; i < 18; i++) {
       final speed = 1 + (i % 3) * 0.35;
-      final p = (t * speed + i * 0.071) % 1;
+      final p = (seconds / period * speed + i * 0.071) % 1;
       final x =
           (((i * 29 + 5) % 96) / 100) * size.width +
           math.sin(p * math.pi * 4 + i) * 6;
-      final y = -10 + p * (size.height + 20);
+      final y = p * size.height;
       final c = i % 3 == 0 ? color : _confetti[i % _confetti.length];
+      final alpha = 0.95 * edge(Offset(x, y), size);
+      if (alpha <= 0.01) continue;
       canvas
         ..save()
         ..translate(x, y)
@@ -168,17 +203,18 @@ class PromoEffectPainter extends CustomPainter {
             const Rect.fromLTWH(-2.5, -4.5, 5, 9),
             const Radius.circular(1),
           ),
-          _fill(c, 0.95),
+          _fill(c, alpha),
         )
         ..restore();
     }
   }
 
-  /// A light band sweeping across, then a pause.
+  /// A soft, wide light band gliding across, then a rest.
   void _shine(Canvas canvas, Size size, double t) {
-    final phase = t < 0.6 ? Curves.easeInOut.transform(t / 0.6) : 1.0;
-    if (phase >= 1) return;
-    final band = size.width * 0.28;
+    const sweep = 0.45;
+    if (t >= sweep) return;
+    final phase = Curves.easeInOutCubic.transform(t / sweep);
+    final band = size.width * 0.4;
     final x = -band + phase * (size.width + band * 2);
     final rect = Rect.fromLTWH(
       x - band / 2,
@@ -186,13 +222,18 @@ class PromoEffectPainter extends CustomPainter {
       band,
       size.height * 3,
     );
+    // Brightest mid-sweep: it comes in and leaves softly.
+    final peak = 0.35 * math.sin(phase * math.pi);
     final paint = Paint()
       ..shader = LinearGradient(
         colors: [
           Colors.white.withValues(alpha: 0),
-          Colors.white.withValues(alpha: 0.5),
+          Colors.white.withValues(alpha: peak * 0.45),
+          Colors.white.withValues(alpha: peak),
+          Colors.white.withValues(alpha: peak * 0.45),
           Colors.white.withValues(alpha: 0),
         ],
+        stops: const [0, 0.3, 0.5, 0.7, 1],
       ).createShader(rect);
     canvas
       ..save()
@@ -304,5 +345,5 @@ class PromoEffectPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(PromoEffectPainter old) =>
-      old.effect != effect || old.color != color || old.clock != clock;
+      old.effect != effect || old.color != color || old.time != time;
 }

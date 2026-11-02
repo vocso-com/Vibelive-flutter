@@ -134,6 +134,15 @@ abstract final class CampaignLinks {
       hostOnly: true,
     ),
     CampaignRoute('profile-qr', AppRoutes.profileQr, hostOnly: true),
+    // A host's online / offline sheet over Home (the old Discover banner's
+    // "Manage status" / "Go online"); a client just lands on Home.
+    // `host-availability` is the onboarding step, not this.
+    CampaignRoute(
+      'online-status',
+      AppRoutes.home,
+      aliases: ['go-online', 'availability-sheet'],
+      fixed: {'tab': 'DISCOVER', 'sheet': 'availability'},
+    ),
     CampaignRoute('gst-details', AppRoutes.gstDetails),
     CampaignRoute('blocked-users', AppRoutes.blockedUsers),
     CampaignRoute('about', AppRoutes.aboutApp),

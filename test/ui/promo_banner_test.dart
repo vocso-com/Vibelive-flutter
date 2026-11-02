@@ -340,9 +340,9 @@ void main() {
                   )
                   .painter!
               as PromoEffectPainter;
-      final before = painter.clock.value;
+      final before = painter.time.value;
       await tester.pump(const Duration(seconds: 2));
-      expect(painter.clock.value, before);
+      expect(painter.time.value, before);
       expect(tester.hasRunningAnimations, isFalse);
     });
   });

@@ -32,8 +32,15 @@ abstract final class PromoBannerActions {
   static Future<bool> _openBrowser(Uri uri) =>
       launchUrl(uri, mode: LaunchMode.externalApplication);
 
-  static Future<void> open(BuildContext context, PromoBanner banner) async {
-    final action = banner.action;
+  static Future<void> open(BuildContext context, PromoBanner banner) =>
+      openAction(context, banner.action, title: banner.title);
+
+  /// [action] of a banner or a popup. [title]: the in-app browser's title.
+  static Future<void> openAction(
+    BuildContext context,
+    PromoAction action, {
+    String? title,
+  }) async {
     try {
       if (action.isApp) {
         final link = action.appLink(AuthCredentials.campaignScheme);
@@ -48,7 +55,7 @@ abstract final class PromoBannerActions {
               path: AppRoutes.webview,
               queryParameters: {
                 'url': url,
-                if (banner.title.isNotEmpty) 'title': banner.title,
+                if (title != null && title.isNotEmpty) 'title': title,
               },
             ).toString(),
           );

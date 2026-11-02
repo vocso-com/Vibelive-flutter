@@ -5,6 +5,7 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import '../../../../core/analytics/events/app_events.dart';
 import '../../../../core/analytics/screen_tracker.dart';
 import '../../../../core/router/app_router.dart';
+import '../../../../core/router/external_open.dart';
 import '../../../../core/utils/log.dart';
 import '../../../api/authscreen/push_api.dart';
 import '../../../api/authscreen/push_queries.dart';
@@ -175,6 +176,7 @@ abstract final class NotificationTapRouter {
 
   /// Analytics: every tap (calls included: a missed-call tap opens History).
   static void _logOpened(TapTarget target, PushEnvelope m) {
+    ExternalOpen.mark('push');
     final location = target.location;
     final destination = switch (target.destination) {
       TapDestination.ongoingCall => 'ongoing_call',

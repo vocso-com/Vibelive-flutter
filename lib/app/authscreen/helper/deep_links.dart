@@ -9,6 +9,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../../core/analytics/events/app_events.dart';
 import '../../../core/analytics/screen_tracker.dart';
 import '../../../core/router/app_router.dart';
+import '../../../core/router/external_open.dart';
 import '../../api/authscreen/push_api.dart';
 import '../../api/authscreen/push_queries.dart';
 import '../../../core/session/session_store.dart';
@@ -60,6 +61,7 @@ class DeepLinks {
   /// [fromPush]: a notification's link (its tap is logged as `push_opened`
   /// already; analytics only).
   Future<void> handle(String url, {bool fromPush = false}) async {
+    ExternalOpen.mark(fromPush ? 'push' : 'link');
     // Call links belong to the call layer.
     if (url.startsWith('${AuthCredentials.shareScheme}://call/')) return;
     final signedIn = SessionStore.instance.value.isAuthenticated;

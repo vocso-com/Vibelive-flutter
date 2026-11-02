@@ -31,6 +31,11 @@ class UpdateNoticeHost extends StatefulWidget {
 
   final Widget child;
 
+  static _UpdateNoticeHostState? _live;
+
+  /// The notice is on screen now (the app-open popup waits for it).
+  static bool get isShowing => _live?._showing ?? false;
+
   @override
   State<UpdateNoticeHost> createState() => _UpdateNoticeHostState();
 }
@@ -43,6 +48,7 @@ class _UpdateNoticeHostState extends State<UpdateNoticeHost> {
   @override
   void initState() {
     super.initState();
+    UpdateNoticeHost._live = this;
     _wait = Timer(SplashScreen.minDuration, _check);
     appRouter.routerDelegate.addListener(_sync);
     CallController.instance.onCall.addListener(_sync);
@@ -50,6 +56,7 @@ class _UpdateNoticeHostState extends State<UpdateNoticeHost> {
 
   @override
   void dispose() {
+    if (identical(UpdateNoticeHost._live, this)) UpdateNoticeHost._live = null;
     _wait?.cancel();
     appRouter.routerDelegate.removeListener(_sync);
     CallController.instance.onCall.removeListener(_sync);

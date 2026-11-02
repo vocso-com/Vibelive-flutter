@@ -196,6 +196,7 @@ void main() {
         'call-rates',
         'verification-badge',
         'profile-qr',
+        'online-status',
         'gst-details',
         'blocked-users',
         'about',

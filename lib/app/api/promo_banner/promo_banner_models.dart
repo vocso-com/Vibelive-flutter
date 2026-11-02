@@ -2,6 +2,9 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/painting.dart';
 
 import '../../../core/network/strapi.dart';
+import 'promo_content.dart';
+
+export 'promo_content.dart';
 
 /// Promo banners as the app reads them (`GET /app-banners?placement=`).
 ///
@@ -43,73 +46,46 @@ enum PromoHeight {
       values.firstWhere((h) => h.name == v, orElse: () => PromoHeight.medium);
 }
 
-/// An animation over a banner (admin: Effect). The admin preview plays the
-/// same six (BannerPreview.jsx).
-enum PromoEffect {
-  none,
-  sparkle,
-  stars,
-  confetti,
-  gift,
-  shine,
-  hearts;
+/// The admin's banner templates (backend `src/utils/promo-templates.js`).
+/// `custom` and keys this build does not know draw with the legacy look
+/// fields ([PromoLayout], height, corners…): forward compatible.
+enum PromoBannerTemplate {
+  spotlight('spotlight'),
+  offer('offer'),
+  fullImage('full_image'),
+  glass('glass'),
+  minimal('minimal'),
+  countdown('countdown');
 
-  static PromoEffect parse(Object? v) =>
-      values.firstWhere((e) => e.name == v, orElse: () => PromoEffect.none);
-}
+  const PromoBannerTemplate(this.wire);
+  final String wire;
 
-/// What a tap does. [path] / [link]: an app screen (the app puts its own link
-/// scheme in front of a path); [url]: a web page, in the app or the browser.
-@immutable
-class PromoAction {
-  const PromoAction._(
-    this.type, {
-    this.path,
-    this.link,
-    this.url,
-    this.inApp = false,
-  });
-
-  static const none = PromoAction._('none');
-
-  factory PromoAction.fromJson(Object? json) {
-    if (json is! Map) return none;
-    final type = J.str(json['type']);
-    if (type == 'app') {
-      final path = J.str(json['path']);
-      final link = J.str(json['link']);
-      if (path == null && link == null) return none;
-      return PromoAction._('app', path: path, link: link);
+  /// Null: `custom`, or a template this build does not know.
+  static PromoBannerTemplate? parse(Object? v) {
+    for (final t in values) {
+      if (t.wire == v) return t;
     }
-    if (type == 'url') {
-      final url = J.str(json['url']);
-      final uri = url == null ? null : Uri.tryParse(url);
-      if (uri == null || !uri.hasScheme || !uri.scheme.startsWith('http')) {
-        return none;
-      }
-      return PromoAction._('url', url: url, inApp: json['openIn'] == 'app');
-    }
-    return none;
+    return null;
   }
 
-  final String type;
-  final String? path;
-  final String? link;
-  final String? url;
+  /// Height at a 340-wide card (spec section 3).
+  double get baseHeight => switch (this) {
+    spotlight => 160,
+    offer => 150,
+    fullImage => 170,
+    glass => 160,
+    minimal => 92,
+    countdown => 150,
+  };
 
-  /// A web page opens inside the app rather than in the browser.
-  final bool inApp;
-
-  bool get isNone => type == 'none';
-  bool get isApp => type == 'app';
-  bool get isUrl => type == 'url';
-
-  /// The app link to open: the full link as given, else [scheme]`://`[path].
-  String? appLink(String scheme) {
-    if (link != null) return link;
-    final p = path?.replaceFirst(RegExp(r'^/+'), '');
-    return p == null || p.isEmpty ? null : '$scheme://$p';
-  }
+  /// Whether [c] has what this template needs to draw.
+  bool canShow(PromoContent c, DateTime now) => switch (this) {
+    spotlight || glass => c.hasImage && c.title.isNotEmpty,
+    fullImage => c.hasImage,
+    offer => c.title.isNotEmpty && c.offerValue.isNotEmpty,
+    minimal => c.title.isNotEmpty,
+    countdown => c.title.isNotEmpty && !c.endedAt(now),
+  };
 }
 
 @immutable
@@ -134,11 +110,14 @@ class PromoBanner {
     this.dismissible = false,
     this.effect = PromoEffect.none,
     this.effectColor = const Color(0xFFFFD54F),
+    this.template,
+    this.content = const PromoContent(),
   });
 
-  /// Null for a row with no id, or one that cannot draw (an image layout
-  /// with no image, a text layout with no title).
-  static PromoBanner? fromJson(Object? json) {
+  /// Null for a row with no id, or one that cannot draw (a template missing
+  /// what it needs, an ended countdown; legacy: an image layout with no
+  /// image, a text layout with no title).
+  static PromoBanner? fromJson(Object? json, {DateTime? now}) {
     if (json is! Map) return null;
     final id = J.str(json['id']);
     if (id == null) return null;
@@ -147,8 +126,14 @@ class PromoBanner {
     final layout = PromoLayout.parse(json['layout']);
     final image = Strapi.mediaUrl(J.str(json['image']));
     final title = J.str(json['title']) ?? '';
-    if (layout.hasImage && image == null) return null;
-    if (!layout.hasImage && title.isEmpty) return null;
+    final template = PromoBannerTemplate.parse(json['template']);
+    final content = PromoContent.fromJson(json);
+    if (template != null) {
+      if (!template.canShow(content, now ?? DateTime.now())) return null;
+    } else {
+      if (layout.hasImage && image == null) return null;
+      if (!layout.hasImage && title.isEmpty) return null;
+    }
     return PromoBanner(
       id: id,
       title: title,
@@ -174,21 +159,13 @@ class PromoBanner {
       dismissible: json['dismissible'] == true,
       effect: PromoEffect.parse(effect['type']),
       effectColor: parseHex(effect['color']) ?? const Color(0xFFFFD54F),
+      template: template,
+      content: content,
     );
   }
 
   /// `#RGB`, `#RRGGBB` or `#AARRGGBB` (the admin's colour fields).
-  static Color? parseHex(Object? v) {
-    final s = J.str(v)?.replaceFirst('#', '');
-    if (s == null || !RegExp(r'^[0-9a-fA-F]+$').hasMatch(s)) return null;
-    final full = switch (s.length) {
-      3 => 'FF${s.split('').map((c) => '$c$c').join()}',
-      6 => 'FF$s',
-      8 => s,
-      _ => null,
-    };
-    return full == null ? null : Color(int.parse(full, radix: 16));
-  }
+  static Color? parseHex(Object? v) => parsePromoHex(v);
 
   final String id;
   final String title;
@@ -216,6 +193,12 @@ class PromoBanner {
 
   bool get hasText =>
       title.isNotEmpty || subtitle.isNotEmpty || ctaLabel.isNotEmpty;
+
+  /// The admin's template; null = the legacy look ([layout] and friends).
+  final PromoBannerTemplate? template;
+
+  /// Everything a template draws (rich title, badge, offer, icons, colours).
+  final PromoContent content;
 }
 
 /// One placement's banners, and how fast they rotate.
@@ -229,13 +212,13 @@ class PromoBannerFeed {
 
   static const empty = PromoBannerFeed();
 
-  factory PromoBannerFeed.fromJson(Object? body) {
+  factory PromoBannerFeed.fromJson(Object? body, {DateTime? now}) {
     if (body is! Map || body['enabled'] != true) return empty;
     final rows = body['banners'];
     return PromoBannerFeed(
       banners: [
         if (rows is List)
-          for (final row in rows) ?PromoBanner.fromJson(row),
+          for (final row in rows) ?PromoBanner.fromJson(row, now: now),
       ],
       rotateSeconds: (J.integer(body['rotateSeconds']) ?? 5).clamp(0, 30),
       raw: Map<String, dynamic>.from(body),

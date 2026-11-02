@@ -50,6 +50,7 @@ Put the link in the push's `data`. Pushes from the orchestrator already do this.
 | `schedule` | Schedule | | hosts |
 | `call-rates` | Call rates | | hosts |
 | `profile-qr` | Profile QR | | hosts |
+| `online-status` (`go-online`, `availability-sheet`) | Home with the host's online / offline sheet open (a client just gets Home). Not the same as `host-availability`, which opens the onboarding Availability step | | all |
 | `verification-badge` | Verification badge: the fee | | hosts |
 | `verification-badge-info` (`badge`) | Verification badge: about it | | hosts |
 | `verification-badge-form` (`badge-form`) | Verification badge: the form | | hosts |
