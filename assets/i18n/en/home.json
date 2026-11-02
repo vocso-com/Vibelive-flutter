@@ -61,6 +61,8 @@
     "visit": "Visit profile",
     "just_now": "Just now",
     "minutes_ago": "{{count}}m ago",
-    "hours_ago": "{{count}}h ago"
+    "hours_ago": "{{count}}h ago",
+    "call": "Call",
+    "views": "{{count}} views"
   }
 }

@@ -61,6 +61,8 @@
     "visit": "પ્રોફાઇલ જુઓ",
     "just_now": "હમણાં જ",
     "minutes_ago": "{{count}} મિ. પહેલાં",
-    "hours_ago": "{{count}} ક. પહેલાં"
+    "hours_ago": "{{count}} ક. પહેલાં",
+    "call": "કૉલ કરો",
+    "views": "{{count}} વ્યૂઝ"
   }
 }

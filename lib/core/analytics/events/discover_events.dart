@@ -49,6 +49,10 @@ abstract final class DiscoverEvents {
   static void statusVisitProfile({required String hostId}) =>
       Analytics.log('status_visit_profile', {'host_id': hostId});
 
+  /// Call, under a status (then the profile's usual call checks).
+  static void statusCallTapped({required String hostId}) =>
+      Analytics.log('status_call_tapped', {'host_id': hostId});
+
   /// A host taps their own circle (or its "+") to record a status.
   static void statusAddTapped({required bool hasLive}) =>
       Analytics.log('status_add_tapped', {'has_live': hasLive});

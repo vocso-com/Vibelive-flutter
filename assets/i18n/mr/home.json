@@ -61,6 +61,8 @@
     "visit": "प्रोफाइल पहा",
     "just_now": "आत्ताच",
     "minutes_ago": "{{count}} मि. पूर्वी",
-    "hours_ago": "{{count}} तास पूर्वी"
+    "hours_ago": "{{count}} तास पूर्वी",
+    "call": "कॉल करा",
+    "views": "{{count}} व्ह्यूज"
   }
 }

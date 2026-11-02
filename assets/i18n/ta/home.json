@@ -61,6 +61,8 @@
     "visit": "ப்ரொஃபைல் பார்",
     "just_now": "இப்போது",
     "minutes_ago": "{{count}} நி. முன்",
-    "hours_ago": "{{count}} மணி முன்"
+    "hours_ago": "{{count}} மணி முன்",
+    "call": "அழை",
+    "views": "{{count}} பார்வைகள்"
   }
 }

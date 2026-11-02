@@ -61,6 +61,8 @@
     "visit": "ಪ್ರೊಫೈಲ್ ನೋಡಿ",
     "just_now": "ಈಗಷ್ಟೇ",
     "minutes_ago": "{{count}} ನಿ. ಹಿಂದೆ",
-    "hours_ago": "{{count}} ಗಂ. ಹಿಂದೆ"
+    "hours_ago": "{{count}} ಗಂ. ಹಿಂದೆ",
+    "call": "ಕರೆ ಮಾಡಿ",
+    "views": "{{count}} ವೀಕ್ಷಣೆಗಳು"
   }
 }

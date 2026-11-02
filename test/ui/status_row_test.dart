@@ -290,7 +290,7 @@ void main() {
   });
 
   testWidgets('a host gets their own circle first, with a "+"', (tester) async {
-    const expert = {'id': 9, 'documentId': 'e9'};
+    const expert = {'id': 9, 'documentId': 'e9', 'isApproved': true};
     var backend = await resetHost(expert: expert);
     statusesOn(backend);
     backend.replies['GET /api/host-statuses/mine'] = (_) => {'results': []};
@@ -320,18 +320,24 @@ void main() {
         {
           'documentId': 'v1',
           'media': 'https://cdn.example/v1.mp4',
+          'thumbnail': 'https://cdn.example/v1.jpg',
           'status': 'approved',
           'state': 'visible',
+          'views': 7,
         },
       ],
     };
     await open(tester);
     expect(find.text('Your Vibe'), findsOneWidget);
     expect(circle(tester, 'mine').ring, StatusRing.fresh);
+    expect(circle(tester, 'mine').previewUrl, 'https://cdn.example/v1.jpg');
     await tester.tap(find.text('Your Vibe'));
     await pumpFor(tester, 300);
     expect(video.opened, ['https://cdn.example/v1.mp4']);
+    // Their own: only how many watched it.
+    expect(find.text('7 views'), findsOneWidget);
     expect(find.text('Visit profile'), findsNothing);
+    expect(find.byKey(const ValueKey('status-call')), findsNothing);
     expect(backend.sent('POST', '/host-media-views'), isEmpty);
     await tester.tap(find.byKey(const ValueKey('status-close')));
     await pumpFor(tester, 400);
@@ -339,7 +345,7 @@ void main() {
   });
 
   testWidgets('switched off: no row, no request', (tester) async {
-    const expert = {'id': 9, 'documentId': 'e9'};
+    const expert = {'id': 9, 'documentId': 'e9', 'isApproved': true};
     final backend = await resetHost(expert: expert);
     statusesOn(backend, on: false);
     await open(tester);
@@ -356,7 +362,7 @@ void main() {
   });
 
   testWidgets("today's allowance used: told before recording", (tester) async {
-    const expert = {'id': 9, 'documentId': 'e9'};
+    const expert = {'id': 9, 'documentId': 'e9', 'isApproved': true};
     final backend = await resetHost(expert: expert);
     statusesOn(backend, perDay: 2);
     final now = DateTime.now().toUtc();
@@ -412,7 +418,7 @@ void main() {
   testWidgets("the + opens the app's own camera, in the app's language", (
     tester,
   ) async {
-    const expert = {'id': 9, 'documentId': 'e9'};
+    const expert = {'id': 9, 'documentId': 'e9', 'isApproved': true};
     final backend = await resetHost(expert: expert);
     statusesOn(backend);
     backend.replies['GET /api/host-statuses/mine'] = (_) => {'results': []};
@@ -426,6 +432,114 @@ void main() {
     await tester.tap(find.bySemanticsLabel('Close'));
     await pumpFor(tester, 600);
     expect(find.byType(VibeCaptureScreen), findsNothing);
+    await finishHost(tester);
+  });
+
+  testWidgets('a host still in review gets no "+"', (tester) async {
+    const expert = {'id': 9, 'documentId': 'e9', 'isApproved': false};
+    final backend = await resetHost(expert: expert);
+    statusesOn(backend);
+    backend.replies['GET /api/host-statuses/mine'] = (_) => {'results': []};
+    backend.replies['GET /api/host-statuses/feed'] = (_) => {
+      'results': [
+        _group('e1', 'Asha', [_status('s1')]),
+      ],
+    };
+    await open(tester);
+    expect(find.text('Asha'), findsOneWidget);
+    expect(find.text('Add Vibe'), findsNothing);
+    expect(find.byType(StatusAddBadge), findsNothing);
+    await finishHost(tester);
+  });
+
+  testWidgets("a circle shows the newest Vibe's still, else the photo", (
+    tester,
+  ) async {
+    final backend = await resetHost();
+    statusesOn(backend);
+    backend.replies['GET /api/host-statuses/feed'] = (_) => {
+      'results': [
+        {
+          ..._group('e1', 'Asha', [_status('s1')]),
+          'preview': 'https://cdn.example/s1.jpg',
+        },
+        _group('e2', 'Meera', [_status('m1')]),
+      ],
+    };
+    await open(tester);
+    expect(circle(tester, 'e1').previewUrl, 'https://cdn.example/s1.jpg');
+    expect(circle(tester, 'e2').previewUrl, isNull);
+    await finishHost(tester);
+  });
+
+  testWidgets('a client gets Call and Visit profile under a Vibe', (
+    tester,
+  ) async {
+    final backend = await resetHost();
+    statusesOn(backend);
+    backend.replies['GET /api/host-statuses/feed'] = (_) => {
+      'results': [
+        _group('e1', 'Asha', [_status('s1')]),
+      ],
+    };
+    await open(tester);
+    await tester.tap(find.text('Asha'));
+    await pumpFor(tester, 300);
+    expect(find.byKey(const ValueKey('status-call')), findsOneWidget);
+    expect(find.text('Call'), findsOneWidget);
+    expect(find.text('Visit profile'), findsOneWidget);
+    expect(find.byKey(const ValueKey('status-views')), findsNothing);
+    await tester.tap(find.byKey(const ValueKey('status-call')));
+    await pumpFor(tester, 600);
+    // The viewer closed and the host is looked up for the call checks.
+    expect(find.byKey(const ValueKey('status-call')), findsNothing);
+    expect(
+      backend.calls.where((c) => c.path == '/api/expert-profiles'),
+      isNotEmpty,
+    );
+    tester.takeException(); // the call checks' own reads are not faked
+    await finishHost(tester);
+  });
+
+  testWidgets('master switch: posting off still shows Vibes; hidden shows none', (
+    tester,
+  ) async {
+    const expert = {'id': 9, 'documentId': 'e9', 'isApproved': true};
+    var backend = await resetHost(expert: expert);
+    backend.replies['GET /api/app-config'] = (_) => {
+      'data': {
+        'hostMedia': {
+          'statusVisible': true,
+          'statusEnabled': false,
+          'statusMaxPerDay': 3,
+        },
+      },
+    };
+    backend.replies['GET /api/host-statuses/mine'] = (_) => {'results': []};
+    backend.replies['GET /api/host-statuses/feed'] = (_) => {
+      'results': [
+        _group('e1', 'Asha', [_status('s1')]),
+      ],
+    };
+    await open(tester);
+    expect(find.text('Asha'), findsOneWidget, reason: 'approved ones keep showing');
+    expect(find.byType(StatusAddBadge), findsNothing, reason: 'no posting');
+    await finishHost(tester);
+    await QueryPersist.clearAll(); // a fresh app: no saved config from above
+
+    backend = await resetHost(expert: expert);
+    backend.replies['GET /api/app-config'] = (_) => {
+      'data': {
+        'hostMedia': {
+          'statusVisible': false,
+          'statusEnabled': false,
+          'statusMaxPerDay': 3,
+        },
+      },
+    };
+    await open(tester);
+    expect(find.text('Vibes'), findsNothing);
+    expect(backend.sent('GET', '/host-statuses/feed'), isEmpty);
     await finishHost(tester);
   });
 }

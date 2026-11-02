@@ -7,6 +7,7 @@ import 'package:video_player/video_player.dart';
 
 import '../../../core/analytics/screen_tracker.dart';
 import '../../../core/i18n/i18n.dart';
+import '../../../core/theme/vibe_colors.dart';
 import '../../../core/utils/log.dart';
 import '../../../core/utils/scale.dart';
 import '../../api/host_status/host_status_api.dart';
@@ -19,9 +20,10 @@ import '../../component/pressable.dart';
 /// Plays statuses the way people already know from WhatsApp: a bar fills as
 /// each clip plays; tap the right side for the next, the left for the one
 /// before; hold to pause; swipe sideways between hosts; swipe down to close.
-/// Under someone else's: Visit profile (the viewer closes and returns that
-/// host). Each clip is reported as watched once it starts, which greys the
-/// ring on Home and counts towards the host's views.
+/// Under someone else's: Call and Visit profile (the viewer closes and
+/// returns which, see [StatusViewerExit]). Under the host's own: how many
+/// people watched it, nothing else. Each clip is reported as watched once it
+/// starts, which greys the ring on Home and counts towards the host's views.
 ///
 /// One video player at a time, as in the profile's viewer: several open
 /// decoders on a cheap Android phone (most of this audience) is a stutter.
@@ -36,20 +38,21 @@ class StatusStoryViewer extends StatefulWidget {
   final List<StatusGroup> groups;
   final int initialGroup;
 
-  /// The host's own statuses: no Visit profile, nothing reported as watched.
+  /// The host's own statuses: their view counts, no Call / Visit profile,
+  /// nothing reported as watched.
   final bool own;
 
-  /// Opens the viewer. Resolves with the host whose profile to open (Visit
-  /// profile), or null when it was just closed.
-  static Future<StatusHost?> open(
+  /// Opens the viewer. Resolves with what to do next (call the host or open
+  /// their profile), or null when it was just closed.
+  static Future<StatusViewerExit?> open(
     BuildContext context, {
     required List<StatusGroup> groups,
     int initialGroup = 0,
     bool own = false,
   }) {
     if (groups.isEmpty) return Future.value();
-    return Navigator.of(context, rootNavigator: true).push<StatusHost>(
-      PageRouteBuilder<StatusHost>(
+    return Navigator.of(context, rootNavigator: true).push<StatusViewerExit>(
+      PageRouteBuilder<StatusViewerExit>(
         settings: ScreenTracker.sheet('status_viewer'),
         pageBuilder: (_, _, _) => StatusStoryViewer(
           groups: groups,
@@ -221,12 +224,12 @@ class _StatusStoryViewerState extends State<StatusStoryViewer> {
 
   /// Once only. A clip that ends during the closing fade (or a tap racing
   /// it) must not pop again: that would close the screen under the viewer.
-  void _close([StatusHost? visit]) {
+  void _close([StatusViewerExit? exit]) {
     if (!mounted || _closing) return;
     _closing = true;
     _token++; // stale loads and ticks stop here
     _player?.pause();
-    Navigator.of(context).pop(visit);
+    Navigator.of(context).pop(exit);
   }
 
   double _progress(int index) {
@@ -357,51 +360,40 @@ class _StatusStoryViewerState extends State<StatusStoryViewer> {
             ),
           ),
         ),
-        if (!widget.own)
-          Positioned(
-            left: 0,
-            right: 0,
-            bottom: 0,
-            child: SafeArea(
-              top: false,
-              child: Padding(
-                padding: EdgeInsets.only(bottom: 18.ms),
-                child: Center(
-                  child: Pressable(
-                    key: const ValueKey('status-visit-profile'),
-                    onPressed: () => _close(group.host),
-                    child: Container(
-                      padding: EdgeInsets.symmetric(
-                        horizontal: 18.ms,
-                        vertical: 11.ms,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(24.ms),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            LucideIcons.user,
-                            size: 16.ms,
-                            color: Colors.black87,
+        Positioned(
+          left: 0,
+          right: 0,
+          bottom: 0,
+          child: SafeArea(
+            top: false,
+            child: Padding(
+              padding: EdgeInsets.only(bottom: 18.ms),
+              child: widget.own
+                  ? Center(child: _Views(count: status.views ?? 0))
+                  : Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        _ViewerButton(
+                          key: const ValueKey('status-call'),
+                          icon: LucideIcons.phone,
+                          label: 'home:statuses.call',
+                          filled: true,
+                          onTap: () => _close(
+                            StatusViewerExit(group.host, call: true),
                           ),
-                          SizedBox(width: 6.ms),
-                          const CText(
-                            'home:statuses.visit',
-                            size: 13,
-                            weight: FontWeight.w700,
-                            color: Colors.black87,
-                          ),
-                        ],
-                      ),
+                        ),
+                        SizedBox(width: 10.ms),
+                        _ViewerButton(
+                          key: const ValueKey('status-visit-profile'),
+                          icon: LucideIcons.user,
+                          label: 'home:statuses.visit',
+                          onTap: () => _close(StatusViewerExit(group.host)),
+                        ),
+                      ],
                     ),
-                  ),
-                ),
-              ),
             ),
           ),
+        ),
       ],
     );
   }
@@ -492,6 +484,90 @@ class _Placeholder extends StatelessWidget {
     color: Colors.black,
     child: Center(
       child: CAvatar(url: host.avatarUrl, name: host.name, size: 72.ms),
+    ),
+  );
+}
+
+/// Why the viewer closed: call [host], or open their profile.
+@immutable
+class StatusViewerExit {
+  const StatusViewerExit(this.host, {this.call = false});
+
+  final StatusHost host;
+
+  /// Call the host straight away (else: Visit profile).
+  final bool call;
+}
+
+/// Call / Visit profile under someone else's Vibe.
+class _ViewerButton extends StatelessWidget {
+  const _ViewerButton({
+    super.key,
+    required this.icon,
+    required this.label,
+    required this.onTap,
+    this.filled = false,
+  });
+
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+
+  /// The main action (Call): the accent colour; else white.
+  final bool filled;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    final fg = filled ? c.onAccent : Colors.black87;
+    return Pressable(
+      onPressed: onTap,
+      child: Container(
+        padding: EdgeInsets.symmetric(horizontal: 18.ms, vertical: 11.ms),
+        decoration: BoxDecoration(
+          color: filled ? c.accent : Colors.white,
+          borderRadius: BorderRadius.circular(24.ms),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 16.ms, color: fg),
+            SizedBox(width: 6.ms),
+            CText(label, size: 13, weight: FontWeight.w700, color: fg),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Under the host's own Vibe: how many people watched it. Views only.
+class _Views extends StatelessWidget {
+  const _Views({required this.count});
+
+  final int count;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    key: const ValueKey('status-views'),
+    padding: EdgeInsets.symmetric(horizontal: 14.ms, vertical: 8.ms),
+    decoration: BoxDecoration(
+      color: Colors.black45,
+      borderRadius: BorderRadius.circular(20.ms),
+    ),
+    child: Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(LucideIcons.eye, size: 16.ms, color: Colors.white),
+        SizedBox(width: 6.ms),
+        CText(
+          'home:statuses.views',
+          variables: {'count': '$count'},
+          size: 13,
+          weight: FontWeight.w700,
+          color: Colors.white,
+        ),
+      ],
     ),
   );
 }

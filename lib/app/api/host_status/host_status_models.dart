@@ -38,8 +38,10 @@ class HostStatus {
   const HostStatus({
     required this.documentId,
     required this.media,
+    this.thumbnail,
     this.recordedAt,
     this.visibleUntil,
+    this.views,
   });
 
   /// Null when there is nothing to show: no id, or no file. A row whose file
@@ -53,6 +55,7 @@ class HostStatus {
     return HostStatus(
       documentId: id,
       media: media,
+      thumbnail: Strapi.mediaUrl(_str(json['thumbnail'])),
       recordedAt: _date(json['recordedAt']),
       visibleUntil: _date(json['visibleUntil']),
     );
@@ -65,8 +68,15 @@ class HostStatus {
 
   final String documentId;
   final String media;
+
+  /// A still from the clip (absolute URL); null for posts made before
+  /// thumbnails existed.
+  final String? thumbnail;
   final DateTime? recordedAt;
   final DateTime? visibleUntil;
+
+  /// People who watched it: only on the host's own clips.
+  final int? views;
 }
 
 /// One of the host's own clips, with the review state they are entitled to see.
@@ -75,10 +85,12 @@ class HostOwnStatus {
   const HostOwnStatus({
     required this.documentId,
     this.media,
+    this.thumbnail,
     this.status,
     this.state,
     this.recordedAt,
     this.visibleUntil,
+    this.views = 0,
   });
 
   /// Kept even with no file. A rejected or purged clip has nothing to play and
@@ -91,6 +103,8 @@ class HostOwnStatus {
     return HostOwnStatus(
       documentId: id,
       media: _str(json['media']),
+      thumbnail: Strapi.mediaUrl(_str(json['thumbnail'])),
+      views: json['views'] is num ? (json['views'] as num).toInt() : 0,
       status: _str(json['status']),
       state: _str(json['state']),
       recordedAt: _date(json['recordedAt']),
@@ -104,6 +118,10 @@ class HostOwnStatus {
 
   final String documentId;
   final String? media;
+  final String? thumbnail;
+
+  /// Distinct people who watched it (the server counts each person once).
+  final int views;
 
   /// `pending` / `approved` / `rejected`: the reviewer's verdict.
   final String? status;
@@ -167,6 +185,7 @@ class StatusGroup {
     required this.host,
     required this.statuses,
     this.seenIds = const {},
+    this.preview,
   });
 
   /// Null for a row with no host or nothing playable.
@@ -184,6 +203,7 @@ class StatusGroup {
         HostStatus(
           documentId: s.documentId,
           media: Strapi.mediaUrl(s.media) ?? s.media,
+          thumbnail: s.thumbnail,
           recordedAt: s.recordedAt,
           visibleUntil: s.visibleUntil,
         ),
@@ -191,7 +211,12 @@ class StatusGroup {
       if (row is Map && row['seen'] == true) seen.add(s.documentId);
     }
     if (statuses.isEmpty) return null;
-    return StatusGroup(host: host, statuses: statuses, seenIds: seen);
+    return StatusGroup(
+      host: host,
+      statuses: statuses,
+      seenIds: seen,
+      preview: Strapi.mediaUrl(_str(json['preview'])),
+    );
   }
 
   /// The server's order: hosts with something unwatched first.
@@ -201,6 +226,15 @@ class StatusGroup {
 
   final StatusHost host;
   final List<HostStatus> statuses;
+
+  /// The newest clip's still, for the circle on Home: the server's pick,
+  /// else the newest status that has one. Null: the host's photo instead.
+  final String? preview;
+  String? get previewUrl =>
+      preview ??
+      statuses.reversed
+          .map((s) => s.thumbnail)
+          .firstWhere((t) => t != null, orElse: () => null);
 
   /// Watched by this viewer, as the server knew it.
   final Set<String> seenIds;

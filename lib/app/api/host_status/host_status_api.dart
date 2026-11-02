@@ -1,5 +1,14 @@
+import 'dart:async';
+import 'dart:io';
+import 'dart:ui' show Size;
+
+import 'package:flutter/foundation.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:vibe_camera/vibe_camera.dart';
+
 import '../../../core/network/api_client.dart';
 import '../../../core/network/api_exception.dart';
+import '../../../core/utils/log.dart';
 import '../component/upload_api.dart';
 import 'host_status_models.dart';
 
@@ -56,10 +65,13 @@ abstract final class HostStatusApi {
       fileName: 'status-${DateTime.now().millisecondsSinceEpoch}.mp4',
       mimeType: 'video/mp4',
     );
+    final thumbnail = await _uploadThumbnail(path);
     final body = await ApiClient.post(
       '/host-statuses/mine',
       data: {
         'media': file['id'],
+        // The still the Home row shows in this host's circle.
+        'thumbnail': ?thumbnail,
         // When it was recorded, not when it finished uploading: both windows
         // are measured from this, so a slow upload must not cost the host part
         // of their day. The server clamps a time in the future.
@@ -69,6 +81,53 @@ abstract final class HostStatusApi {
     );
     final data = body is Map ? body['data'] : null;
     return HostOwnStatus.fromJson(data);
+  }
+
+  /// A JPEG still from the clip (swapped in tests). Null when none could be
+  /// made.
+  @visibleForTesting
+  static Future<Uint8List?> Function(String path) makeThumbnail =
+      _middleFrame;
+
+  /// The frame halfway through: the first one is often black or blurred.
+  static Future<Uint8List?> _middleFrame(String path) async {
+    final exporter = ProVideoExporter();
+    final video = File(path);
+    final info = await exporter.probe(video);
+    final frames = await exporter.thumbnails(
+      video,
+      info.duration,
+      count: 1,
+      size: const Size(240, 400),
+    );
+    return frames.isEmpty ? null : frames.first;
+  }
+
+  /// Uploads the still and returns its media id. Never throws: a Vibe
+  /// without a thumbnail still posts (Home shows the host's photo instead).
+  static Future<Object?> _uploadThumbnail(String path) async {
+    File? temp;
+    try {
+      final bytes = await makeThumbnail(path);
+      if (bytes == null || bytes.isEmpty) return null;
+      final dir = await getTemporaryDirectory();
+      temp = File(
+        '${dir.path}/vibe-thumb-${DateTime.now().millisecondsSinceEpoch}.jpg',
+      );
+      await temp.writeAsBytes(bytes);
+      final up = await UploadApi.uploadFile(
+        temp.path,
+        fileName: 'status-thumb.jpg',
+        mimeType: 'image/jpeg',
+      );
+      return up['id'];
+    } catch (e) {
+      Log.w('HostStatus', 'no thumbnail for this Vibe: $e');
+      return null;
+    } finally {
+      final t = temp;
+      if (t != null) unawaited(t.delete().then((_) {}, onError: (_) {}));
+    }
   }
 
   /// Our own translated key for a refusal the host can act on, or null when

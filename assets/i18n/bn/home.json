@@ -61,6 +61,8 @@
     "visit": "প্রোফাইল দেখুন",
     "just_now": "এইমাত্র",
     "minutes_ago": "{{count}} মি. আগে",
-    "hours_ago": "{{count}} ঘ. আগে"
+    "hours_ago": "{{count}} ঘ. আগে",
+    "call": "কল করুন",
+    "views": "{{count}} ভিউ"
   }
 }

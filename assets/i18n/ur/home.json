@@ -61,6 +61,8 @@
     "visit": "پروفائل دیکھیں",
     "just_now": "ابھی",
     "minutes_ago": "{{count}} منٹ پہلے",
-    "hours_ago": "{{count}} گھنٹے پہلے"
+    "hours_ago": "{{count}} گھنٹے پہلے",
+    "call": "کال کریں",
+    "views": "{{count}} ویوز"
   }
 }

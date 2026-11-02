@@ -21,6 +21,7 @@ class StatusCircle extends StatelessWidget {
     required this.label,
     required this.onTap,
     this.avatarUrl,
+    this.previewUrl,
     this.translateLabel = false,
     this.badge,
     this.semanticsLabel,
@@ -28,6 +29,10 @@ class StatusCircle extends StatelessWidget {
 
   final StatusRing ring;
   final String? avatarUrl;
+
+  /// A still from the newest Vibe: shown in the circle instead of the photo.
+  /// Null (older posts, the host's "Add Vibe"): the photo.
+  final String? previewUrl;
 
   /// For the avatar's letter when there is no photo.
   final String name;
@@ -61,12 +66,32 @@ class StatusCircle extends StatelessWidget {
                 colors: [c.accent, c.darkRose],
               )
             : null,
-        color: ring == StatusRing.seen ? c.border : null,
+        // Watched: a plain grey ring, clearly not the coloured one.
+        color: ring == StatusRing.seen
+            ? c.textMuted.withValues(alpha: 0.45)
+            : null,
       ),
       child: Container(
         padding: EdgeInsets.all(2.ms),
         decoration: BoxDecoration(color: c.background, shape: BoxShape.circle),
-        child: CAvatar(url: avatarUrl, name: name, size: size - 9.ms),
+        child: previewUrl == null
+            ? CAvatar(url: avatarUrl, name: name, size: size - 9.ms)
+            : ClipOval(
+                child: SizedBox.square(
+                  dimension: size - 9.ms,
+                  child: CImage(
+                    url: previewUrl,
+                    width: size - 9.ms,
+                    height: size - 9.ms,
+                    // The photo while the still loads or if it fails.
+                    errorWidget: CAvatar(
+                      url: avatarUrl,
+                      name: name,
+                      size: size - 9.ms,
+                    ),
+                  ),
+                ),
+              ),
       ),
     );
     final text = translateLabel

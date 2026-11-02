@@ -5,6 +5,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../../core/theme/vibe_colors.dart';
 import '../../../core/utils/scale.dart';
 import '../../api/host_status/host_status_queries.dart';
+import '../../api/paymentscreen/runtime_config_queries.dart';
 import '../../component/c_text.dart';
 import '../../component/pressable.dart';
 import 'status_viewer.dart';
@@ -36,9 +37,15 @@ class HostStatusesStrip extends HookWidget {
   @override
   Widget build(BuildContext context) {
     final c = context.colors;
-    final statuses = useHostStatuses(context, expertDocumentId);
+    // The admin's master switch hides Vibes on profiles too, at once (the
+    // silent push refreshes the config; the server also stops sending them).
+    final visible = useRuntimeConfig(context).hostMedia.statusVisible;
+    final statuses = useHostStatuses(
+      context,
+      visible ? expertDocumentId : null,
+    );
     final rows = statuses.data ?? const [];
-    if (rows.isEmpty) return const SizedBox.shrink();
+    if (!visible || rows.isEmpty) return const SizedBox.shrink();
 
     final urls = [for (final s in rows) s.media];
 

@@ -76,6 +76,7 @@ class RuntimeHostMedia {
   const RuntimeHostMedia({
     this.videoIntroEnabled = false,
     this.videoIntroMaxSeconds = 60,
+    this.statusVisible = false,
     this.statusEnabled = false,
     this.statusMaxPerDay = 10,
     this.statusVisibleHours = 24,
@@ -85,6 +86,12 @@ class RuntimeHostMedia {
 
   final bool videoIntroEnabled;
   final double videoIntroMaxSeconds;
+
+  /// Vibes in the app at all (admin master switch): the Home row and the
+  /// Vibes on profiles. Off hides them for everyone.
+  final bool statusVisible;
+
+  /// Hosts may post (only ever on while [statusVisible] is).
   final bool statusEnabled;
   final double statusMaxPerDay;
   final double statusVisibleHours;
@@ -281,6 +288,10 @@ class RuntimeConfig {
       videoIntroEnabled: J.boolean(m['videoIntroEnabled']),
       videoIntroMaxSeconds:
           _positive(m['videoIntroMaxSeconds']) ?? d.videoIntroMaxSeconds,
+      // A server that predates the master switch: posting on meant shown.
+      statusVisible: m.containsKey('statusVisible')
+          ? J.boolean(m['statusVisible'])
+          : J.boolean(m['statusEnabled']),
       statusEnabled: J.boolean(m['statusEnabled']),
       statusMaxPerDay: _count(m['statusMaxPerDay']) ?? d.statusMaxPerDay,
       statusVisibleHours:

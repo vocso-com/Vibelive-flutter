@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../../core/analytics/events/discover_events.dart';
 import '../../../core/network/api_exception.dart';
@@ -9,12 +10,18 @@ import '../../../core/theme/vibe_colors.dart';
 import '../../../core/utils/scale.dart';
 import '../../api/host_status/host_status_models.dart';
 import '../../api/host_status/host_status_queries.dart';
+import '../../api/hosthub/eligibility.dart';
+import '../../api/listingflow/listing_models.dart';
 import '../../api/listingflow/listing_queries.dart';
 import '../../api/paymentscreen/runtime_config_queries.dart';
 import '../../component/c_text.dart';
 import '../../component/c_toast.dart';
 import '../../hosthub/approved/widgets/status_capture.dart';
+import '../../listingflow/profile/helper/call_start.dart';
+import '../../listingflow/profile/helper/host_profile_controller.dart';
+import '../../listingflow/profile/helper/host_profile_rules.dart';
 import '../../listingflow/profile/host_profile_sheet.dart';
+import '../../listingflow/profile/safety_prompt.dart';
 import 'status_circle.dart';
 import 'status_story_viewer.dart';
 
@@ -38,7 +45,8 @@ class StatusRow extends HookWidget {
     final c = context.colors;
     final session = useValueListenable(SessionStore.instance);
     final media = useRuntimeConfig(context).hostMedia;
-    final on = media.statusEnabled;
+    // The admin's master switch (Host media → Vibes in the app).
+    final on = media.statusVisible;
     final feed = useStatusFeed(context, enabled: on);
     final seen = useValueListenable(StatusSeen.ids);
     final user = session.userDocumentId;
@@ -47,7 +55,12 @@ class StatusRow extends HookWidget {
       return null;
     }, [user]);
 
-    final canPost = session.isExpert && media.canPostStatus;
+    // Only an approved host may post: a client, or a host still in review,
+    // never sees the "+".
+    final canPost =
+        session.isExpert &&
+        HostEligibility.isHostApproved(session.expert) &&
+        media.canPostStatus;
     final keep = include;
     final groups = on
         ? [
@@ -64,18 +77,24 @@ class StatusRow extends HookWidget {
         position: index,
         seen: group.seenWith(seen),
       );
-      final visit = await StatusStoryViewer.open(
+      final exit = await StatusStoryViewer.open(
         context,
         groups: groups,
         initialGroup: index,
       );
-      if (visit == null || !context.mounted) return;
-      DiscoverEvents.statusVisitProfile(hostId: visit.expertDocumentId);
+      if (exit == null || !context.mounted) return;
+      final hostId = exit.host.expertDocumentId;
+      if (exit.call) {
+        DiscoverEvents.statusCallTapped(hostId: hostId);
+      } else {
+        DiscoverEvents.statusVisitProfile(hostId: hostId);
+      }
       try {
-        final host = await ensureHostDetail(
-          expertDocumentId: visit.expertDocumentId,
-        );
-        if (context.mounted) {
+        final host = await ensureHostDetail(expertDocumentId: hostId);
+        if (!context.mounted) return;
+        if (exit.call) {
+          await _call(context, host);
+        } else {
           await showHostProfile(context, host, source: 'status');
         }
       } on ApiException catch (e) {
@@ -90,6 +109,7 @@ class StatusRow extends HookWidget {
           key: ValueKey('status-${groups[i].host.expertDocumentId}'),
           ring: groups[i].seenWith(seen) ? StatusRing.seen : StatusRing.fresh,
           avatarUrl: groups[i].host.avatarUrl,
+          previewUrl: groups[i].previewUrl,
           name: groups[i].host.name,
           label: groups[i].host.name,
           semanticsLabel: groups[i].host.name,
@@ -139,6 +159,7 @@ class _MyStatusCircle extends HookWidget {
     final session = useValueListenable(SessionStore.instance);
     final mine = useMyStatuses(context);
     final post = usePostStatus();
+    final seen = useValueListenable(StatusSeen.ids);
     final media = useRuntimeConfig(context).hostMedia;
     final rows = mine.data ?? const <HostOwnStatus>[];
     // Newest first from the server; played oldest first.
@@ -148,10 +169,17 @@ class _MyStatusCircle extends HookWidget {
           HostStatus(
             documentId: s.documentId,
             media: Strapi.mediaUrl(s.media) ?? s.media!,
+            thumbnail: s.thumbnail,
             recordedAt: s.recordedAt,
             visibleUntil: s.visibleUntil,
+            views: s.views,
           ),
     ];
+    // Newest first: the circle shows the latest one that has a still.
+    final preview = live.reversed
+        .map((s) => s.thumbnail)
+        .firstWhere((t) => t != null, orElse: () => null);
+    final allSeen = live.every((s) => seen.contains(s.documentId));
     final waiting = rows.any((s) => s.isPending);
     final name = '${session.user?['name'] ?? ''}';
     final avatar = Strapi.mediaFromAsset(session.user?['profilePic']);
@@ -163,8 +191,13 @@ class _MyStatusCircle extends HookWidget {
 
     return StatusCircle(
       key: const ValueKey('status-mine'),
-      ring: live.isNotEmpty ? StatusRing.fresh : StatusRing.none,
+      ring: live.isEmpty
+          ? StatusRing.none
+          : allSeen
+          ? StatusRing.seen
+          : StatusRing.fresh,
       avatarUrl: avatar,
+      previewUrl: preview,
       name: name,
       label: live.isNotEmpty
           ? 'home:statuses.mine'
@@ -195,5 +228,34 @@ class _MyStatusCircle extends HookWidget {
         );
       },
     );
+  }
+}
+
+/// Call from a Vibe: the same checks as the profile's call button (signed
+/// in, profile complete, balance, the safety notice), then the call. Voice
+/// when the host takes voice calls, else video.
+Future<void> _call(BuildContext context, HostCard host) async {
+  final session = SessionStore.instance.value;
+  final router = GoRouter.maybeOf(context);
+  final controller = HostProfileController(
+    source: 'status',
+    close: () {},
+    navigate: (path) {
+      if (router != null) router.push(path);
+    },
+    confirmStart: (video) => showSafetyPrompt(context, video: video),
+    handOff: (target, video) => context.mounted
+        ? startOutgoingCall(context, host: target, video: video)
+        : Future.value(),
+  );
+  try {
+    await controller.placeCall(
+      host,
+      video: host.aPrice <= 0 && host.vPrice > 0,
+      isMe: HostProfileRules.isMe(host, session),
+      isCompany: HostProfileRules.isCompanyUser(session.user),
+    );
+  } finally {
+    controller.dispose();
   }
 }
