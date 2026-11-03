@@ -68,6 +68,8 @@ abstract final class ScreenTracker {
     final known = _names[path];
     if (known != null) return known;
     if (path == '/home') return 'home_${_homeTab(q['tab'])}';
+    // One chat, whoever it is with (no ids in screen names).
+    if (path.startsWith('/chat/')) return 'chat';
     final slug = path
         .replaceAll(RegExp(r'[^a-zA-Z0-9]+'), '_')
         .replaceAll(RegExp(r'^_+|_+$'), '');
@@ -75,6 +77,7 @@ abstract final class ScreenTracker {
   }
 
   static String _homeTab(String? tab) => switch (tab?.toLowerCase()) {
+    'chats' || 'chat' || 'messages' => 'chats',
     'history' || 'logs' || 'explore' => 'history',
     'me' || 'profile' => 'me',
     _ => 'discover',

@@ -10,13 +10,15 @@ import '../../../core/theme/vibe_colors.dart';
 import '../../../core/utils/scale.dart';
 import '../../component/c_image.dart';
 import '../../component/pressable.dart';
+import '../../chatscreen/list/chat_tab.dart';
 import '../../homescreen/helper/home_controller.dart';
 import '../../../core/session/session_store.dart';
 import '../../client/me/helper/me_data.dart';
 import 'host_status_pill.dart';
 import 'navbar_collapse.dart';
 
-/// Floating dock: an icon-only nav island (Discover · History · Me) and, for
+/// Floating dock: an icon-only nav island (Discover · Chats · History · Me;
+/// Chats only while chat is on) and, for
 /// hosts, their availability pill ([HostStatusPill]). Solid, not blurred: a
 /// live blur re-renders on every scroll frame. Shrinks while the feed
 /// scrolls down.
@@ -58,8 +60,15 @@ class BottomNavbar extends StatelessWidget {
                 builder: (_, session, _) {
                   final me = MeData.of(session);
                   final host = me.isExpert;
-                  return LayoutBuilder(
+                  return ChatTabGate(
+                    builder: (_, chats) => LayoutBuilder(
                     builder: (_, box) {
+                      final tabs = [
+                        (HomeTab.discover, LucideIcons.house),
+                        if (chats) (HomeTab.chats, LucideIcons.messageCircle),
+                        (HomeTab.history, LucideIcons.activity),
+                        (HomeTab.me, LucideIcons.user),
+                      ];
                       final pill = host ? HostStatusPill.width + _gap : 0;
                       final full = box.maxWidth - pill;
                       return Row(
@@ -69,7 +78,7 @@ class BottomNavbar extends StatelessWidget {
                             duration: _anim,
                             curve: Curves.easeOutCubic,
                             width: collapsed
-                                ? math.min(_compactWidth, full)
+                                ? math.min(_compactWidth(tabs.length), full)
                                 : full,
                             height: barHeight,
                             padding: EdgeInsets.symmetric(horizontal: 10.ms),
@@ -89,15 +98,16 @@ class BottomNavbar extends StatelessWidget {
                               valueListenable: home.tab,
                               builder: (_, active, _) => Row(
                                 children: [
-                                  for (final (tab, icon) in const [
-                                    (HomeTab.discover, LucideIcons.house),
-                                    (HomeTab.history, LucideIcons.activity),
-                                    (HomeTab.me, LucideIcons.user),
-                                  ])
+                                  for (final (tab, icon) in tabs)
                                     Expanded(
                                       child: _Item(
                                         icon: icon,
-                                        label: 'home:nav.${tab.name}',
+                                        label: tab == HomeTab.chats
+                                            ? ChatTabGate.label
+                                            : 'home:nav.${tab.name}',
+                                        badge: tab == HomeTab.chats
+                                            ? const ChatUnreadBadge()
+                                            : null,
                                         active: active == tab,
                                         onPressed: () {
                                           DiscoverEvents.navTabTapped(
@@ -129,6 +139,7 @@ class BottomNavbar extends StatelessWidget {
                         ],
                       );
                     },
+                    ),
                   );
                 },
               ),
@@ -143,8 +154,8 @@ class BottomNavbar extends StatelessWidget {
 
   static double get _gap => 10.ms;
 
-  /// Collapsed island: three 44 pt icons and the side padding.
-  static double get _compactWidth => 3 * 44.ms + 20.ms;
+  /// Collapsed island: one 44 pt icon per tab and the side padding.
+  static double _compactWidth(int tabs) => tabs * 44.ms + 20.ms;
 }
 
 /// Icon only; the active tab is the accent colour with a dot under it.
@@ -155,7 +166,11 @@ class _Item extends StatelessWidget {
     required this.active,
     required this.onPressed,
     this.avatar,
+    this.badge,
   });
+
+  /// Over the icon's top end corner (the Chats unread count).
+  final Widget? badge;
 
   final IconData icon;
   final String label;
@@ -200,12 +215,29 @@ class _Item extends StatelessWidget {
                   child: CAvatar(url: a.url, name: a.name, size: 27.ms),
                 ),
               )
-            else
+            else if (badge == null)
               Icon(
                 icon,
                 size: 21.ms,
                 color: active ? c.accent : AppColors.gray,
                 weight: active ? 700 : 500,
+              )
+            else
+              Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  Icon(
+                    icon,
+                    size: 21.ms,
+                    color: active ? c.accent : AppColors.gray,
+                    weight: active ? 700 : 500,
+                  ),
+                  PositionedDirectional(
+                    top: -6.ms,
+                    end: -10.ms,
+                    child: badge!,
+                  ),
+                ],
               ),
             SizedBox(height: 3.ms),
             AnimatedOpacity(

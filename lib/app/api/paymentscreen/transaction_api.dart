@@ -47,6 +47,8 @@ abstract final class TransactionApi {
     'fields[3]': 'paymentStatus',
     'fields[4]': 'transactionType',
     'fields[5]': 'method',
+    // Chat rows: who and how many ("Chat with Priya · 12 messages").
+    'fields[6]': 'Note',
     'populate[call][fields][0]': 'type',
     'populate[call][populate][caller][fields][0]': 'name',
     'populate[call][populate][receiver][fields][0]': 'name',

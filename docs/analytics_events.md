@@ -48,9 +48,10 @@ Every page, Home tab, onboarding step, sheet, and dialog sends a screen view. It
 | splash | splash / intro |
 | login | sign-in options (sub-views: login_mobile, login_email, login_otp_mobile, login_otp_email, login_phone_required) |
 | onboarding_age_gate, onboarding_language | 18+ gate, language pick |
-| home_discover, home_history, home_me | the three Home tabs |
+| home_discover, home_chats, home_history, home_me | the Home tabs (Chats only while chat is on) |
 | search | search |
 | call, incoming_call | call screen, incoming ring |
+| chat | one chat (`/chat/:userId`; never the id) |
 | wallet | wallet |
 | personal_info, gst_details, favourites, blocked_users, referral | Me sub-pages |
 | categories, category_menu, dynamic_page (slug), about_app, support, webview (url) | resources / CMS |
@@ -637,3 +638,38 @@ Helpers: `lib/core/analytics/events/me_events.dart` (`MeEvents`, `PersonalInfoEv
 ### Not present in the app (nothing to track)
 - Settings language switch (language only on the onboarding screen — fork A), notification toggles, rate-app row.
 - Referral: no copy button and no tap on referred users on the referral screen (copy lives on the ME invite card).
+
+## Chat (paid user ↔ host)
+
+File: `lib/core/analytics/events/chat_events.dart` (ChatEvents). Ids, counts and booleans only: never message text. `type` ∈ `text | image | audio | private_image`. Contract: backend `docs/chat_api.md`.
+
+| funnel | events in order |
+|---|---|
+| Chat (payer) | `chat_entry_tapped` → `chat_opened` → `chat_message_sent` → `chat_message_saved` (or `chat_message_failed` reason `CHAT_LOW_BALANCE` → `chat_add_money` source `send` → the wallet's own `wallet_opened` → `add_money_opened` …) |
+| Private photo (buyer) | `chat_private_photo_unlock` step `asked` → `confirmed` → `paid` (or `failed`) → `chat_private_photo_viewed` |
+
+| event | when | params |
+|---|---|---|
+| chat_entry_tapped | a way into a chat (a push tap is `push_opened` destination `chat`) | source (`profile` / `history`), peer_id |
+| chat_opened | a chat screen knows who it is with (once per opening) | peer_id, paying, peer_is_host, has_conversation, chat_enabled |
+| chat_list_filter | Chats tab filter | filter (`all` / `unread` / `online`) |
+| chat_conversation_tapped | a row of the Chats tab | peer_id, unread |
+| chat_message_sent | a message was written and queued (it goes now, or once online) | type, paying, price (₹ this side pays; empty when unknown), seconds (voice) |
+| chat_message_saved | the server saved it | type, charged (₹ taken now; 0 when a retry was already saved), attempts |
+| chat_message_failed | the server refused it (402 low balance, host off, blocked, validation…) | type, reason (server code or error type) |
+| chat_failed_action | a failed bubble: sent again with the same clientId, or removed | type, action (`retry` / `remove`) |
+| chat_photo_picked | a photo picked for chat | source (`gallery` / `camera`) |
+| chat_voice_recorded | a voice note finished | outcome (`sent`), seconds |
+| chat_low_balance_shown | the "Only N messages left" bar (once per N per session) | messages_left |
+| chat_add_money | the app's wallet opened from a chat (a 402 pre-fills the missing amount) | source (`send` = a 402, the text back in the box / `bar` / `prices` / `unlock`) |
+| chat_private_photo_sent | a host sent a private photo | price |
+| chat_private_photo_unlock | the unlock flow | step (`asked` / `confirmed` / `paid` / `failed`), price, error? |
+| chat_private_photo_viewed | the viewer closed | view_seconds |
+| chat_menu_action | the chat ⋮ menu | action (`prices` / `report` / `block` / `dismissed`) |
+| chat_reported / chat_report_failed | `POST /chats/report` | category / error |
+| chat_block | block from the chat menu | step (`confirmed` / `cancelled` / `success` / `failed`) |
+| chat_call_tapped | a call button in the chat header | call_type (`audio` / `video`); then the usual call funnel (`call_button_tapped` source `chat`) |
+| chat_push | a chat push reached the app | event (`chat_message` / `chat_sync`), action (`drawn` / `suppressed_on_screen` / `suppressed_silent` / `suppressed_call`), background |
+| chat_setting_changed | Me → Settings chat switches | setting (`notify` / `accept_chats`), on |
+
+Sheets named (screen views): `chat_menu_sheet`, `chat_attach_sheet`, `chat_photo_confirm_sheet`, `chat_unlock_sheet`, `chat_failed_sheet`, `chat_prices_sheet`, `chat_private_price_sheet`, `chat_report_sheet`; viewers `private_photo_viewer`, `chat_photo_viewer`.

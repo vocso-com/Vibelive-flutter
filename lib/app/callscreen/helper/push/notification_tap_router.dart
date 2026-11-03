@@ -13,6 +13,7 @@ import '../../../authscreen/helper/deep_links.dart';
 import '../call_signals.dart';
 import 'call_push_classifier.dart';
 import 'campaign_push.dart';
+import 'chat_push.dart';
 import 'push_classifier.dart';
 import 'push_envelope.dart';
 import 'verification_notifications.dart';
@@ -21,6 +22,9 @@ import 'wallet_notifications.dart';
 /// Where a notification tap goes.
 enum TapDestination {
   campaign,
+
+  /// A chat message: `/chat/:senderId`.
+  chat,
   ongoingCall,
   incomingCall,
   callHistory,
@@ -88,6 +92,13 @@ abstract final class NotificationTapRouter {
 
   /// Where [m] goes (pure).
   static TapTarget route(PushEnvelope m) {
+    // First: a chat line may mention a wallet or a call.
+    if (ChatPush.matches(m)) {
+      final chat = ChatPush.tapRoute(m);
+      return chat == null
+          ? const TapTarget(TapDestination.none)
+          : TapTarget(TapDestination.chat, chat);
+    }
     if (PushClassifier.isCampaign(m)) {
       return const TapTarget(TapDestination.campaign);
     }
@@ -242,6 +253,7 @@ abstract final class NotificationTapRouter {
         await WalletNotifications.requestRefresh(background: false);
         DeepLinks.instance.queueRoute(target.location!);
         return true;
+      case TapDestination.chat:
       case TapDestination.callHistory:
       case TapDestination.verification:
       case TapDestination.referral:

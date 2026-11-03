@@ -5,11 +5,13 @@ import '../../navbar/bottombar/navbar_collapse.dart';
 
 enum HomeTab {
   discover,
+  chats,
   history,
   me;
 
   /// `?tab=` of `/home` (RN used DISCOVER / LOGS / ME).
   static HomeTab fromParam(String? value) => switch (value?.toLowerCase()) {
+    'chats' || 'chat' || 'messages' => HomeTab.chats,
     'history' || 'logs' || 'explore' => HomeTab.history,
     'me' || 'profile' => HomeTab.me,
     _ => HomeTab.discover,

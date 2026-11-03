@@ -7,6 +7,8 @@ import '../../app/authscreen/language_screen.dart';
 import '../../app/authscreen/login_screen.dart';
 import '../../app/callscreen/call/call_screen.dart';
 import '../../app/callscreen/call/incoming_call_screen.dart';
+import '../../app/chatscreen/conversation/chat_screen.dart';
+import '../../app/chatscreen/helper/chat_screen_guard.dart';
 import '../../app/client/blocked_users/blocked_users_screen.dart';
 import '../../app/client/favourites/favourites_screen.dart';
 import '../../app/client/gst_details/gst_details_screen.dart';
@@ -55,6 +57,13 @@ abstract final class AppRoutes {
   static const wallet = '/wallet';
   static const webview = '/webview';
 
+  /// The Chats tab (`/home?tab=chats`), and one chat keyed by the other
+  /// person's public-user id (`/chat?userId=` is the link form).
+  static const chats = '/chats';
+  static const chat = '/chat';
+  static String chatWith(String userId) =>
+      '$chat/${Uri.encodeComponent(userId)}';
+
   static const profile = '/me/profile';
   static const personalInfo = '/me/personal-info';
   static const professionalDetails = '/me/professional-details';
@@ -95,7 +104,8 @@ final GoRouter appRouter = GoRouter(
   navigatorKey: rootNavigatorKey,
   initialLocation: AppRoutes.splash,
   // Named sheets / dialogs as analytics screens (pages: ScreenTracker).
-  observers: [ScreenTracker.observer],
+  // The chat guard: screenshot protection only while a chat is on top.
+  observers: [ScreenTracker.observer, ChatScreenGuard.instance.observer],
   // Logout, a failed token refresh, or "Not you?" → login, from any screen.
   refreshListenable: SessionStore.instance.signedIn,
   redirect: (context, state) {
@@ -145,6 +155,26 @@ final GoRouter appRouter = GoRouter(
     GoRoute(
       path: AppRoutes.profileTab,
       redirect: (_, _) => '${AppRoutes.home}?tab=me',
+    ),
+    GoRoute(
+      path: AppRoutes.chats,
+      redirect: (_, _) => '${AppRoutes.home}?tab=chats',
+    ),
+    GoRoute(
+      path: AppRoutes.chat,
+      // `/chat?userId=` (a link) → `/chat/:userId`; none → the Chats tab.
+      redirect: (_, state) {
+        final q = state.uri.queryParameters;
+        final id = (q['userId'] ?? q['userid'] ?? '').trim();
+        return id.isEmpty
+            ? '${AppRoutes.home}?tab=chats'
+            : AppRoutes.chatWith(id);
+      },
+    ),
+    GoRoute(
+      path: '${AppRoutes.chat}/:userId',
+      builder: (context, state) =>
+          ChatScreen(userId: state.pathParameters['userId']!),
     ),
     GoRoute(
       path: AppRoutes.search,

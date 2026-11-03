@@ -221,6 +221,8 @@ void main() {
         'verification-badge-status',
         'categories',
         'resources?id=1',
+        'chats',
+        'chat?userid=1',
       ];
       for (final path in presets) {
         final t = CampaignLinks.resolve('vibecalling://$path');
@@ -236,6 +238,16 @@ void main() {
         'tab': 'DISCOVER',
         'topic': 'Self-love',
       });
+    });
+
+    test('chat links open the Chats tab and one chat', () {
+      final tab = CampaignLinks.resolve('vibecalling://chats');
+      expect(tab.route!.route, AppRoutes.home);
+      expect(tab.params, {'tab': 'CHATS'});
+      final chat = CampaignLinks.resolve('vibecalling://chat?userid=42');
+      expect(chat.route!.route, AppRoutes.chat);
+      expect(chat.params, {'userId': '42'});
+      expect(CampaignLinks.resolve('vibecalling://chat').missing, ['userid']);
     });
 
     test('each onboarding step has a link', () {

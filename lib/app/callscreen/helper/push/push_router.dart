@@ -10,6 +10,7 @@ import '../call_signals.dart';
 import 'app_update_push.dart';
 import 'call_push_handler.dart';
 import 'campaign_push.dart';
+import 'chat_push.dart';
 import 'heartbeat_handler.dart';
 import 'local_notifier.dart';
 import 'milestone_queue.dart';
@@ -67,7 +68,10 @@ abstract final class PushRouter {
         await HeartbeatHandler.send(via: 'foreground_push');
         return;
       case PushKind.appUpdate:
-        AppUpdatePush.onUpdate(m.type);
+        AppUpdatePush.onUpdate(m.type, scope: m.data['scope']);
+        return;
+      case PushKind.chat:
+        if (PushSession.isSignedIn) await ChatPush.onForeground(m);
         return;
       case PushKind.call:
         await CallPushHandler.handle(
@@ -111,6 +115,9 @@ abstract final class PushRouter {
         return;
       // Silent: the app reloads all of it when it comes back to the front.
       case PushKind.appUpdate:
+        return;
+      case PushKind.chat:
+        await ChatPush.onBackground(m, alreadyShownByOs: alreadyShownByOs);
         return;
       case PushKind.call:
         // iOS: data-only FCM rarely reaches here, and never rings (VoIP owns
@@ -157,7 +164,7 @@ abstract final class PushRouter {
     required bool background,
   }) async {
     final drawn = switch (kind) {
-      PushKind.heartbeat || PushKind.call => false,
+      PushKind.heartbeat || PushKind.call || PushKind.chat => false,
       PushKind.general ||
       PushKind.milestone => m.title != null || m.body != null,
       _ => true,
@@ -192,6 +199,7 @@ abstract final class PushRouter {
       case PushKind.heartbeat:
       case PushKind.call:
       case PushKind.appUpdate:
+      case PushKind.chat:
         return;
     }
   }

@@ -28,6 +28,8 @@ Put the link in the push's `data`. Pushes from the orchestrator already do this.
 | `home` (`discover`) | Discover | `topic` (`cat`): a topic tab; `q` opens Search instead | all |
 | `search` | Search | `q` | all |
 | `history` | Call history tab | | all |
+| `chats` (`messages`) | Chats tab (only while chat is on) | | all |
+| `chat` | One chat (`/chat/:userId`) | `userid` **required**: the other person's public-user id | all |
 | `profile` (`me`) | Profile tab | | all |
 | `wallet` | Wallet | `amount` (`prefillAmount`): a pre-filled top-up | all |
 | `expert-profile.php` (`expert-profile`, `expert`) | A host's profile, over Discover | `userid` **required** (`documentId`, `handler`) | all |
@@ -85,6 +87,7 @@ You can also write the step as a parameter: `vibecalling://host-step?step=voice`
 vibecalling://wallet?amount=199                          Wallet, ₹199 top-up ready
 vibecalling://expert-profile?userid=a0wrx21u87k5nbhbf73my94k
 vibecalling://home?topic=dating-advice                   Discover on a topic
+vibecalling://chat?userid=2143                           the chat with user 2143
 vibecalling://host-voice                                 "Add your voice intro"
 https://vibelive.angrymamba.com/app/host-voice           the same, as a website link
 https://vibelive.angrymamba.com/app/wallet?amount=199

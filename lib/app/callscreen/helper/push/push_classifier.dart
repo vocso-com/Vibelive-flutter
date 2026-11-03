@@ -1,4 +1,5 @@
 import 'app_update_push.dart';
+import 'chat_push.dart';
 import '../../../api/authscreen/push_queries.dart';
 import 'call_push_classifier.dart';
 import 'push_envelope.dart';
@@ -16,6 +17,9 @@ enum PushKind {
 
   /// A silent "banners / settings changed" (admin): reload, never shown.
   appUpdate,
+
+  /// `CHAT_MESSAGE` / `CHAT_SYNC`: a hint to re-read, maybe drawn.
+  chat,
   general,
 }
 
@@ -24,6 +28,9 @@ enum PushKind {
 abstract final class PushClassifier {
   static PushKind classify(PushEnvelope m) {
     if (isHeartbeat(m)) return PushKind.heartbeat;
+    // Before the keyword matchers: a chat line mentioning "wallet" or
+    // "call" is still a chat.
+    if (ChatPush.matches(m)) return PushKind.chat;
     if (isCall(m)) return PushKind.call;
     if (AppUpdatePush.matches(m.type)) return PushKind.appUpdate;
     if (isCampaign(m)) return PushKind.campaign;

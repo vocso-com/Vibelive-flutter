@@ -3,6 +3,7 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 
 import '../../../../core/query/query_hooks.dart';
 import '../../../../core/utils/log.dart';
+import '../../../api/chat/chat_queries.dart';
 import '../../../api/host_status/host_status_queries.dart';
 import '../../../api/promo_banner/promo_banner_queries.dart';
 import '../../../api/splashscreen/splash_keys.dart';
@@ -37,11 +38,16 @@ abstract final class AppUpdatePush {
     }
   }
 
-  /// UI isolate: reload what changed.
-  static void onUpdate(String? type) {
+  /// UI isolate: reload what changed. [scope]: `chat` = the chat settings
+  /// (`GET /chats/config`) only.
+  static void onUpdate(String? type, {String? scope}) {
     try {
       if (type?.toLowerCase() == banners) {
         invalidatePromoBanners();
+        return;
+      }
+      if (scope?.toLowerCase() == 'chat') {
+        invalidateChatConfig();
         return;
       }
       // The admin's settings: the config itself, then what reads it (the

@@ -98,11 +98,15 @@ class TransactionTile extends StatelessWidget {
                       SizedBox(height: 3.ms),
                       CText(
                         detail,
+                        // Chat rows also carry `count`, and no `type`.
                         variables: vars == null
                             ? null
                             : {
-                                'type': context.t(vars['type']!),
-                                'name': vars['name']!.isEmpty
+                                ...vars,
+                                'type': ?(vars['type'] == null
+                                    ? null
+                                    : context.t(vars['type']!)),
+                                'name': (vars['name'] ?? '').isEmpty
                                     ? context.t('payment:tx.unknown')
                                     : vars['name'],
                               },

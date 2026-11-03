@@ -1,0 +1,253 @@
+{
+  "nav": {
+    "chats": "Chats",
+    "unread": "{{count}} unread message",
+    "unread_plural": "{{count}} unread messages"
+  },
+  "list": {
+    "title": "Chats",
+    "filter": {
+      "all": "All",
+      "unread": "Unread",
+      "online": "Online"
+    },
+    "empty_title": "No chats yet",
+    "empty_message": "Say hi to someone from Discover.",
+    "empty_unread": "All caught up",
+    "empty_online": "No one you chat with is online right now",
+    "discover": "Find someone",
+    "line": "{{text}}",
+    "you": "You: {{text}}",
+    "photo": "Photo",
+    "voice": "Voice message",
+    "private_photo": "Private photo",
+    "unsupported": "New message",
+    "deleted_user": "Deleted user",
+    "someone": "Someone"
+  },
+  "header": {
+    "online": "Online",
+    "offline": "Offline",
+    "on_call": "On a call",
+    "menu": "More options",
+    "voice_call": "Voice call",
+    "video_call": "Video call"
+  },
+  "menu": {
+    "prices": "Prices",
+    "report": "Report",
+    "block": "Block"
+  },
+  "prices": {
+    "title": "Prices",
+    "with": "Chat with {{name}}",
+    "message": "Message",
+    "photo": "Photo",
+    "voice": "Voice note",
+    "voice_ladder": "Up to {{short}} sec {{shortPrice}} · up to {{long}} sec {{longPrice}} · then {{stepPrice}} for every {{step}} sec",
+    "voice_call": "Voice call",
+    "video_call": "Video call",
+    "each": "each",
+    "from": "from",
+    "per_min": "per min",
+    "balance": "Your balance: {{balance}}",
+    "note": "A message is charged when you send it; a call per minute while you talk."
+  },
+  "composer": {
+    "hint": "Type a message…",
+    "send": "Send",
+    "attach": "Send a photo",
+    "mic": "Hold to record a voice note",
+    "hold_hint": "Hold the mic to record a voice note",
+    "slide_cancel": "Slide to cancel",
+    "too_short": "Hold a little longer to record",
+    "mic_denied": "Allow the microphone to send voice notes",
+    "too_big": "This photo is too large to send (up to {{mb}} MB)",
+    "pick_failed": "Couldn't open your photos. Please try again.",
+    "gallery": "Choose from gallery",
+    "camera": "Take a photo",
+    "private": "Private photo (they pay to see it)",
+    "send_photo": "Send photo"
+  },
+  "price": {
+    "line": "Message {{text}} · Photo {{photo}} · Voice from {{voice}}",
+    "free_line": "Messages here are free",
+    "host_line": "Replies are free · Photo {{photo}} · Voice from {{voice}}, from your earnings",
+    "host_line_unknown": "Replies are free · Photos and voice notes are paid from your earnings",
+    "send_text": "{{price}} to send this message",
+    "send_free": "Free to send",
+    "voice": "Voice note · {{price}}",
+    "voice_from_earnings": "Voice note · {{price}} from your earnings",
+    "voice_free": "Voice note · free",
+    "voice_earnings": "Voice note · paid from your earnings",
+    "photo": "This photo costs {{price}}",
+    "photo_from_earnings": "This photo costs {{price}} from your earnings",
+    "photo_earnings": "This photo is paid from your earnings",
+    "photo_free": "This photo is free to send"
+  },
+  "notice": {
+    "host_off": "Not taking chats right now",
+    "reply_only": "You can reply once they message you",
+    "disabled": "Chat is turned off right now",
+    "deleted": "This account is no longer available",
+    "blocked": "You can't message this person",
+    "hosts_only": "You can only chat with hosts",
+    "not_available": "Chat isn't available with this person yet"
+  },
+  "low_balance": {
+    "left": "Only {{count}} message left",
+    "left_plural": "Only {{count}} messages left",
+    "empty": "Add money to send messages",
+    "add": "Add money"
+  },
+  "recharge": {
+    "title": "Add money to keep chatting",
+    "ready": "Your message is ready to send."
+  },
+  "bubble": {
+    "failed": "Not sent · tap to retry",
+    "retry": "Send again",
+    "delete": "Remove",
+    "copied": "Message copied",
+    "photo": "Photo",
+    "play": "Play voice message",
+    "pause": "Pause voice message",
+    "unsupported": "Update the app to see this message",
+    "tick_queued": "Sending",
+    "tick_sent": "Sent",
+    "tick_delivered": "Delivered",
+    "tick_read": "Read"
+  },
+  "private": {
+    "title": "Private photo",
+    "unlock": "Unlock · {{price}}",
+    "tap_view": "Tap to view",
+    "left": "{{time}} left",
+    "expired": "Photo expired",
+    "expired_note": "Bought photos open for a short time",
+    "cannot_open": "This photo can't be opened any more",
+    "mine_note": "Only the buyer can open it",
+    "mine_toast": "Private photos open only for the person who buys them",
+    "sold": "Sold · {{price}}",
+    "on_sale": "Private · {{price}}",
+    "confirm_title": "Unlock this photo?",
+    "confirm_body": "{{name}} sent you a private photo. Unlock it for {{price}}, paid from your wallet.",
+    "confirm_minutes": "You can open it for {{count}} minute.",
+    "confirm_minutes_plural": "You can open it for {{count}} minutes.",
+    "confirm_balance": "Your balance: {{balance}}",
+    "confirm_button": "Unlock for {{price}}",
+    "viewer_failed": "Couldn't load the photo",
+    "try_again": "Try again",
+    "close": "Close",
+    "price_title": "Private photo",
+    "price_body": "It shows blurred, to you too. They pay your price to open it for a short time.",
+    "price_custom": "Your own price",
+    "price_range": "From {{min}} to {{max}}",
+    "price_earn": "You earn {{earn}} when they unlock it ({{percent}}%)",
+    "price_send": "Send for {{price}}",
+    "price_set": "Set a price",
+    "a11y_locked": "Private photo, locked. Unlock for {{price}}",
+    "a11y_bought": "Private photo you bought",
+    "a11y_mine": "Your private photo, {{price}}"
+  },
+  "say_hi": {
+    "title": "Say hi 👋",
+    "message": "Start the conversation."
+  },
+  "report": {
+    "title": "Report this chat",
+    "reporting": "Reporting {{name}}",
+    "note_placeholder": "Tell us what happened (optional)",
+    "submit": "SUBMIT REPORT",
+    "missing_title": "Pick a reason",
+    "missing_category": "Choose what this report is about.",
+    "category_fallback": "Other",
+    "no_conversation": "There is nothing to report yet: you haven't chatted.",
+    "success_title": "Thanks for telling us",
+    "success": "Our team will look into this chat.",
+    "failed_title": "Couldn't send the report"
+  },
+  "block": {
+    "title": "Block {{name}}?",
+    "message": "You won't be able to message or call each other, and you won't see each other in the app.",
+    "confirm": "Block",
+    "success_title": "Blocked",
+    "success": "You won't hear from them again.",
+    "failed_title": "Couldn't block"
+  },
+  "settings": {
+    "notify": "Chat notifications",
+    "notify_hint": "A notification for every new message",
+    "accept": "Accept chats",
+    "accept_hint": "Let people message you. You can always reply.",
+    "save_failed": "Couldn't save. Please try again."
+  },
+  "wallet": {
+    "chat": "Chat",
+    "earnings": "Chat earnings",
+    "media": "Chat photos and voice notes",
+    "photo": "Private photo",
+    "photo_earnings": "Private photo sold",
+    "with": "Chat with {{name}} · {{count}} messages",
+    "with_one": "Chat with {{name}} · 1 message",
+    "with_noname": "Chat · {{count}} messages",
+    "with_one_noname": "Chat · 1 message",
+    "from": "{{count}} messages from {{name}}",
+    "from_one": "1 message from {{name}}",
+    "from_noname": "{{count}} messages answered",
+    "from_one_noname": "1 message answered",
+    "reply": "Your reply to {{name}}",
+    "reply_noname": "Your reply in a chat",
+    "media_to": "{{count}} photos or voice notes to {{name}}",
+    "media_to_one": "1 photo or voice note to {{name}}",
+    "media_to_noname": "{{count}} photos or voice notes",
+    "media_to_one_noname": "1 photo or voice note",
+    "photo_from": "From {{name}}",
+    "photo_from_noname": "Unlocked in a chat",
+    "photo_to": "Bought by {{name}}",
+    "photo_to_noname": "Bought in a chat",
+    "note": "{{note}}"
+  },
+  "day": {
+    "today": "Today",
+    "yesterday": "Yesterday"
+  },
+  "history": {
+    "message": "Message"
+  },
+  "profile": {
+    "chat": "Chat",
+    "chat_price": "{{price}}/msg"
+  },
+  "secure": {
+    "shield": "This chat is hidden while your screen is recorded"
+  },
+  "errors": {
+    "INVALID_TARGET": "You can't message this person.",
+    "CHAT_VALIDATION": "This message can't be sent. Check it and try again.",
+    "PRICE_OUT_OF_RANGE": "Choose a price inside the allowed range.",
+    "CHAT_LOW_BALANCE": "Add money to your wallet to send this message.",
+    "CHAT_LOW_EARNINGS": "Your earnings are too low to send photos and voice notes yet.",
+    "CHAT_HOSTS_ONLY": "You can only chat with hosts.",
+    "CHAT_BLOCKED": "You can't message this person.",
+    "CHAT_REPLY_ONLY": "You can reply once they message you.",
+    "PHOTO_PRIVATE": "Private photos open only for the person who buys them.",
+    "PHOTO_LOCKED": "Unlock this photo to see it.",
+    "NOT_FOUND": "This chat isn't available any more.",
+    "CHAT_HOST_OFF": "They aren't taking chats right now.",
+    "PHOTO_EXPIRED": "This photo can't be opened any more.",
+    "CHAT_RATE_LIMITED": "You're sending messages too fast. Wait a moment.",
+    "CHAT_DISABLED": "Chat is turned off right now.",
+    "PRIVATE_PHOTOS_DISABLED": "Private photos are turned off right now.",
+    "blocked_text": "This message can't be sent: it breaks our community guidelines.",
+    "CHAT_NOT_AVAILABLE": "Chat isn't available with this person yet."
+  },
+  "push": {
+    "photo": "Photo",
+    "voice": "Voice message",
+    "private_photo": "🔒 Private photo",
+    "new_message": "New message",
+    "channel": "Chat messages",
+    "you": "You"
+  }
+}

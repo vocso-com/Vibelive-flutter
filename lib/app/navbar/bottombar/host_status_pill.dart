@@ -19,13 +19,14 @@ import '../../hosthub/onboarding/helper/host_funnel.dart';
 /// navbar; a tap opens [showHostAvailabilitySheet]. A mode being saved shows
 /// at once. Fixed [width] so the dock can size the island beside it; long
 /// labels (Hindi) scale down. The dock decides who sees it (hosts only).
+/// Compact (108 pt) so the island keeps room for four tabs once Chats shows.
 /// Static (no pulse or glow): it sits over a scrolling feed.
 class HostStatusPill extends StatefulWidget {
   const HostStatusPill({super.key, required this.mode, required this.height});
   final HostAvailability mode;
   final double height;
 
-  static double get width => 132.ms;
+  static double get width => 108.ms;
 
   @override
   State<HostStatusPill> createState() => _HostStatusPillState();
@@ -77,10 +78,10 @@ class _Pill extends StatelessWidget {
         'home:status.offline',
       ),
     };
-    final lead = Icon(HostStatusIcons.of(mode), size: 15.ms, color: fg);
+    final lead = Icon(HostStatusIcons.of(mode), size: 14.ms, color: fg);
     final text = CText(
       label,
-      size: 13.5,
+      size: 12.5,
       weight: FontWeight.w900,
       color: fg,
       maxLines: 1,
@@ -95,7 +96,7 @@ class _Pill extends StatelessWidget {
       child: Container(
         height: height,
         width: HostStatusPill.width,
-        padding: EdgeInsets.symmetric(horizontal: 14.ms),
+        padding: EdgeInsets.symmetric(horizontal: 11.ms),
         decoration: BoxDecoration(
           color: bg,
           borderRadius: BorderRadius.circular(999),
@@ -114,7 +115,7 @@ class _Pill extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             children: [
               lead,
-              SizedBox(width: 8.ms),
+              SizedBox(width: 6.ms),
               if (mode == HostAvailability.vacation)
                 ValueListenableBuilder<Duration?>(
                   valueListenable: HostAvailabilityController.remaining,
@@ -128,7 +129,7 @@ class _Pill extends StatelessWidget {
                             CText(
                               'home:status.left',
                               variables: {'time': formatOfflineLeft(left)},
-                              size: 10,
+                              size: 9,
                               weight: FontWeight.w700,
                               color: fg.withValues(alpha: 0.75),
                               maxLines: 1,
@@ -138,8 +139,8 @@ class _Pill extends StatelessWidget {
                 )
               else
                 text,
-              SizedBox(width: 4.ms),
-              Icon(LucideIcons.chevronDown, size: 15.ms, color: fg),
+              SizedBox(width: 2.ms),
+              Icon(LucideIcons.chevronDown, size: 13.ms, color: fg),
             ],
           ),
         ),

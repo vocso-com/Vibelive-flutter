@@ -159,6 +159,17 @@ class DeepLinks {
     final route = _route;
     _route = null;
     if (route != null) {
+      final here = _here();
+      // Already on it (a chat's notification tapped while that chat is
+      // open): the push already refreshed it; a second copy would need two
+      // Backs.
+      if (here == route) return;
+      // One chat over another: swap it, so Back still goes where the first
+      // chat was opened from instead of through a pile of chats.
+      const chat = '${AppRoutes.chat}/';
+      if (route.startsWith(chat) && (here?.startsWith(chat) ?? false)) {
+        return _replace(route);
+      }
       // Tabs of the Home shell are a `go`; any other screen stacks on Home.
       const tabs = [AppRoutes.home, AppRoutes.explore, AppRoutes.profileTab];
       return _go(route, push: !tabs.any(route.startsWith));
@@ -286,6 +297,25 @@ class DeepLinks {
       push ? appRouter.push(location) : appRouter.go(location);
     } catch (e) {
       Log.w('DeepLinks', 'navigation to $location failed: $e');
+    }
+  }
+
+  void _replace(String location) {
+    try {
+      appRouter.pushReplacement(location);
+    } catch (e) {
+      Log.w('DeepLinks', 'navigation to $location failed: $e');
+    }
+  }
+
+  /// The screen on top now, or null before the router has one. Not
+  /// `configuration.uri`: that stays on the page below after a `push`.
+  String? _here() {
+    try {
+      final config = appRouter.routerDelegate.currentConfiguration;
+      return config.isEmpty ? null : config.last.matchedLocation;
+    } catch (_) {
+      return null;
     }
   }
 

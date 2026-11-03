@@ -84,6 +84,10 @@ dependencies:
   facebook_app_events: ^0.31.0
   webview_flutter: ^4.14.1
   record: ^6.2.1
+  # Chat screens: no screenshots / recordings while one is visible. Pinned:
+  # 1.5.2+ dropped its Kotlin jvmTarget, which fails this app's Android
+  # build (Java 17 vs Kotlin 21).
+  screen_protector: 1.5.1
   path_provider: ^2.1.6
   # Host video intros and statuses. The Flutter team's own player; the only
   # alternative here was an HTML5 <video> inside webview_flutter, which costs a

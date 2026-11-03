@@ -98,6 +98,26 @@ abstract final class CampaignLinks {
     ),
     search,
     CampaignRoute('history', AppRoutes.explore),
+    // The Chats tab, and one chat: `userid` is the other person's
+    // public-user id (`/chat/:userId`).
+    CampaignRoute(
+      'chats',
+      AppRoutes.home,
+      aliases: ['messages'],
+      fixed: {'tab': 'CHATS'},
+    ),
+    CampaignRoute(
+      'chat',
+      AppRoutes.chat,
+      params: [
+        CampaignParam(
+          'userid',
+          as: 'userId',
+          required: true,
+          aliases: ['userId', 'id'],
+        ),
+      ],
+    ),
     CampaignRoute(
       'profile',
       AppRoutes.home,

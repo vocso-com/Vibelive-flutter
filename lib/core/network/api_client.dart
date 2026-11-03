@@ -62,6 +62,16 @@ abstract final class ApiClient {
     ),
   );
 
+  /// Raw bytes (a private picture kept in memory only).
+  static Future<Uint8List> getBytes(String path) => guard(() async {
+    final res = await dio.get<List<int>>(
+      path,
+      options: _opts().copyWith(responseType: ResponseType.bytes),
+    );
+    final data = res.data ?? const <int>[];
+    return data is Uint8List ? data : Uint8List.fromList(data);
+  });
+
   static Future<dynamic> post(
     String path, {
     Object? data,

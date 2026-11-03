@@ -8,6 +8,7 @@ import '../../../core/network/api_exception.dart';
 import '../../../core/session/session_store.dart';
 import '../../api/listingflow/listing_models.dart';
 import '../../api/listingflow/listing_queries.dart';
+import '../../chatscreen/entry/history_chat.dart';
 import '../../component/c_alert.dart';
 import '../../listingflow/profile/host_profile_sheet.dart';
 import 'helper/history_entry.dart';
@@ -99,6 +100,8 @@ class HistoryActions {
     );
     if (choice == null || !context.mounted) return;
     switch (choice) {
+      case HistoryMenuChoice.chat:
+        openHistoryChat(context, entry);
       case HistoryMenuChoice.rate:
         if (await showReviewSheet(context, entry)) {
           unawaited(

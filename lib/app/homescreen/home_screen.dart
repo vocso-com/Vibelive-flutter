@@ -12,6 +12,7 @@ import '../authscreen/helper/deep_links.dart';
 import '../banner/top_warn_bar.dart';
 import '../callscreen/call/return_to_call_bar.dart';
 import '../callscreen/history/history_view.dart';
+import '../chatscreen/list/chats_view.dart';
 import '../client/me/helper/me_data.dart';
 import '../client/me/me_view.dart';
 import '../client/me/widgets/host_availability_sheet.dart';
@@ -27,7 +28,7 @@ import 'discover/discover_view.dart';
 import 'helper/home_controller.dart';
 import 'helper/own_host_refresh.dart';
 
-/// Signed-in shell: Discover · History · Me with the floating navbar.
+/// Signed-in shell: Discover · Chats · History · Me with the floating navbar.
 /// Tabs are built on first visit and kept alive (no refetch, no rebuild on
 /// switch); hidden tabs stop their animations.
 class HomeScreen extends HookWidget {
@@ -134,9 +135,10 @@ class HomeScreen extends HookWidget {
                       // A minimized call (back on the call screen).
                       const ReturnToCallBar(),
                       if (tab == HomeTab.discover) DiscoverTopBar(home: home),
+                      if (tab == HomeTab.chats) ChatsTopBar(home: home),
                       if (tab == HomeTab.me) MeTopBar(home: home),
                       if (tab == HomeTab.history) HistoryTopBar(home: home),
-                      if (tab != HomeTab.history)
+                      if (tab != HomeTab.history && tab != HomeTab.chats)
                         TopWarnBar(moderation: tab == HomeTab.discover),
                       Expanded(child: body!),
                     ],
@@ -193,6 +195,7 @@ class _TabsState extends State<_Tabs> {
           HomeTab.discover,
           () => DiscoverView(home: widget.home, initialTopic: widget.topic),
         ),
+        slot(HomeTab.chats, () => ChatsView(home: widget.home)),
         slot(HomeTab.history, () => HistoryView(home: widget.home)),
         slot(HomeTab.me, () => MeView(home: widget.home)),
       ],

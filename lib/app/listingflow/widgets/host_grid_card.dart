@@ -6,6 +6,7 @@ import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/vibe_colors.dart';
 import '../../../core/utils/scale.dart';
 import '../../api/listingflow/listing_models.dart';
+import '../../chatscreen/entry/chat_entry.dart';
 import '../../component/c_image.dart';
 import '../../component/c_text.dart';
 import '../../component/pressable.dart';
@@ -182,7 +183,11 @@ class HostGridCard extends StatelessWidget {
                   if (onCall != null)
                     Padding(
                       padding: EdgeInsets.only(top: 8.ms),
-                      child: _CallNow(onPressed: () => onCall!(h)),
+                      // Message (¼) + Call Now (¾) while chat is on.
+                      child: ChatCallSplit(
+                        host: h,
+                        call: _CallNow(onPressed: () => onCall!(h)),
+                      ),
                     ),
                 ],
               ),
@@ -227,12 +232,17 @@ class _CallNow extends StatelessWidget {
           children: [
             Icon(LucideIcons.phoneCall, size: 13.ms, color: fg),
             SizedBox(width: 6.ms),
-            CText(
-              'home:card.call_now',
-              size: 12,
-              weight: FontWeight.w900,
-              color: fg,
-              maxLines: 1,
+            // Beside the message button it has ¾ of a half card: a long
+            // label shortens instead of overflowing.
+            Flexible(
+              child: CText(
+                'home:card.call_now',
+                size: 12,
+                weight: FontWeight.w900,
+                color: fg,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
           ],
         ),

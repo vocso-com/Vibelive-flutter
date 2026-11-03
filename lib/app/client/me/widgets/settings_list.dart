@@ -12,6 +12,7 @@ import '../../../component/c_alert.dart';
 import '../../../component/c_text.dart';
 import '../../../component/c_toast.dart';
 import '../../../component/pressable.dart';
+import '../../../chatscreen/settings/chat_settings_card.dart';
 import '../../../hosthub/hub/host_hub_menu.dart';
 import '../../../hosthub/hub/hub_list.dart';
 import '../../../hosthub/onboarding/helper/host_palette.dart';
@@ -205,6 +206,8 @@ class MeSettingsList extends HookWidget {
         gap,
         const _LanguageCard(),
         gap,
+        // Chat notifications, and "Accept chats" for hosts (chat on only).
+        const ChatSettingsCard(),
         HubListCard(
           rows: [
             HubListRow(

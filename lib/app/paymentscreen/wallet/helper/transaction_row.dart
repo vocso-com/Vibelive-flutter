@@ -1,5 +1,6 @@
 import '../../../../core/network/strapi.dart';
 import '../../../api/paymentscreen/wallet_models.dart';
+import '../../../chatscreen/helper/chat_wallet_rows.dart';
 import 'wallet_format.dart';
 
 /// Payment status chip of a row. `abandoned`: an old order the backend
@@ -45,7 +46,18 @@ class TransactionRow {
 
     String? detailKey;
     Map<String, String>? detailVars;
-    if (isBonus) {
+    // Chat and private-photo rows say who and how many (contract §6).
+    final chat = isBonus
+        ? null
+        : ChatWalletRow.of(
+            reference: tx.reference,
+            note: J.str(tx.raw['Note']),
+            metadata: tx.metadata,
+          );
+    if (chat != null) {
+      detailKey = chat.detailKey;
+      detailVars = chat.variables;
+    } else if (isBonus) {
       detailKey = bonusReason == 'expiry'
           ? 'payment:tx.bonus_expired_detail'
           : 'payment:tx.bonus_added';
@@ -83,7 +95,9 @@ class TransactionRow {
       transaction: tx,
       kind: kind,
       isCredit: credit,
-      titleKey: isBonus
+      titleKey: chat != null
+          ? chat.titleKey
+          : isBonus
           ? _bonusTitles[bonusReason] ?? 'payment:tx.bonus_credit'
           : switch (kind) {
               TransactionKind.walletTransfer => 'payment:tx.wallet_transfer',

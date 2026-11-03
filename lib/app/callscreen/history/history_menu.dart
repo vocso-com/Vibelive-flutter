@@ -8,14 +8,15 @@ import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/vibe_colors.dart';
 import '../../../core/utils/scale.dart';
 import '../../api/callscreen/call_queries.dart';
+import '../../chatscreen/entry/history_chat.dart';
 import '../../component/c_text.dart';
 import '../../component/pressable.dart';
 import 'helper/history_entry.dart';
 
-enum HistoryMenuChoice { rate, profile, report }
+enum HistoryMenuChoice { chat, rate, profile, report }
 
-/// The row's ⋮ menu (RN explore `MenuAction` modal): Rate this Call, See
-/// Profile, Report. Null when dismissed.
+/// The row's ⋮ menu (RN explore `MenuAction` modal): Message (chat on),
+/// Rate this Call, See Profile, Report. Null when dismissed.
 Future<HistoryMenuChoice?> showHistoryMenu(
   BuildContext context,
   HistoryEntry entry,
@@ -47,6 +48,7 @@ class _HistoryMenu extends HookWidget {
     final checking =
         e.canRate && !reviewed && (review.isLoading || review.isFetching);
     void pick(HistoryMenuChoice choice) => Navigator.of(context).pop(choice);
+    final chat = useHistoryChatRoute(context, e);
 
     return SafeArea(
       child: Align(
@@ -66,6 +68,12 @@ class _HistoryMenu extends HookWidget {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
+                  if (chat != null)
+                    _MenuAction(
+                      icon: LucideIcons.messageCircle,
+                      label: 'chat:history.message',
+                      onPressed: () => pick(HistoryMenuChoice.chat),
+                    ),
                   if (e.canRate)
                     _MenuAction(
                       icon: LucideIcons.star,
