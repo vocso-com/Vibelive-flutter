@@ -1,21 +1,26 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:go_router/go_router.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../core/network/api_exception.dart';
+import '../../../core/query/query_client.dart';
 import '../../../core/router/app_router.dart';
 import '../../../core/session/session_store.dart';
 import '../../../core/storage/app_prefs.dart';
+import '../../../core/utils/log.dart';
 import '../../api/paymentscreen/runtime_config_queries.dart';
 import '../../api/authscreen/interests_queries.dart';
 import '../../api/client/client_models.dart';
 import '../../api/client/client_queries.dart';
 import '../../api/hosthub/approval_models.dart';
+import '../../api/hosthub/hosthub_keys.dart';
 import '../../api/hosthub/hosthub_queries.dart';
 import '../../api/hosthub/profile_models.dart';
 import '../../api/paymentscreen/billing_models.dart';
 import '../../api/paymentscreen/payment_queries.dart';
 import '../../component/c_alert.dart';
+import '../../component/c_state_view.dart';
 import '../../component/keyboard_inset.dart';
 import '../../component/status_bar_style.dart';
 import '../common/host_page.dart';
@@ -113,7 +118,15 @@ class HostOnboardingScreen extends HookWidget {
       });
       return null;
     }, const []);
-    final (me, ready, host) = _usePrefill(context, draft, session);
+    final (me, ready, host, loadError, retryLoad) = _usePrefill(
+      context,
+      draft,
+      session,
+    );
+    // Someone who already has a host profile: the edit screen, or a host in
+    // the flow. Their profile must be loaded before anything is shown or
+    // saved, and they never create one.
+    final ownsProfile = editStep != null || session.isExpert;
     // What review asked to change: marked on the steps it is about.
     final messages = useHostModerationMessages(context, enabled: host != null);
     final review = useMemoized(
@@ -151,9 +164,51 @@ class HostOnboardingScreen extends HookWidget {
       }
     }
 
+    // The server already has a host profile for this account (409
+    // HOST_PROFILE_EXISTS: this screen did not know it). The draft was for a
+    // profile that exists, so it goes; the session gets the real one back,
+    // and the Host Hub opens on it.
+    Future<void> openExistingProfile(String user) async {
+      await draft.clear();
+      try {
+        await ensureMyProfile(user, staleDuration: StaleTime.none);
+      } on ApiException catch (e) {
+        Log.w('hostflow', 'profile reload after 409 failed: $e');
+      }
+      queryCache.invalidateAll([
+        HostHubKeys.profileAll,
+        HostHubKeys.imagesAll,
+        HostHubKeys.approvalAll,
+      ]);
+      if (!context.mounted) return;
+      await CAlert.show(
+        context: context,
+        title: 'hostflow:errors.profile_exists_title',
+        message: 'hostflow:errors.profile_exists',
+      );
+      // After this frame: the flow resets its busy state when submit returns.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (context.mounted) context.go('${AppRoutes.home}?tab=me');
+      });
+    }
+
     Future<HostStep?> runSubmit() async {
       final user = session.userDocumentId;
       if (user == null) return HostStep.guidelines;
+      // Never a second profile: with no id here, theirs was not loaded (the
+      // screen waits for it), and a submit would create one that takes the
+      // account off the real one.
+      if (ownsProfile && draft.expertId == null) {
+        Log.w('hostflow', 'submit without the host profile; not creating');
+        await CAlert.show(
+          context: context,
+          title: 'hostflow:errors.profile_load_title',
+          message: 'hostflow:errors.profile_load',
+          variant: CAlertVariant.error,
+        );
+        retryLoad();
+        return HostStep.guidelines;
+      }
       try {
         final form = await ensureInterestForm();
         final input = HostSubmitPlan.build(
@@ -171,6 +226,11 @@ class HostOnboardingScreen extends HookWidget {
         await draft.clear();
         return null;
       } on ApiException catch (e) {
+        if (HostSubmitErrors.isProfileExists(e)) {
+          funnel.submitFailed(e, HostStep.guidelines);
+          await openExistingProfile(user);
+          return HostStep.guidelines;
+        }
         // A field the server rejected: back to its step with the error
         // shown there (e.g. a handle another profile already owns).
         final target = HostSubmitErrors.stepFor(e);
@@ -191,7 +251,22 @@ class HostOnboardingScreen extends HookWidget {
     );
 
     final p = HostPalette.of(context);
-    if (editStep != null && !ready) {
+    if (ownsProfile && !ready) {
+      // Their profile could not be read: say so. Never a blank form, which
+      // would save over it or create a second one.
+      if (loadError != null) {
+        return HostPage(
+          title: 'hostflow:hub.pro_details',
+          body: CStateView(
+            key: const ValueKey('host-profile-load-error'),
+            icon: LucideIcons.cloudOff,
+            title: 'hostflow:errors.profile_load_title',
+            message: 'hostflow:errors.profile_load',
+            actionLabel: 'actions.retry',
+            onAction: retryLoad,
+          ),
+        );
+      }
       return ThemedStatusBar(
         child: Scaffold(
           backgroundColor: p.bg,
@@ -239,10 +314,18 @@ class HostOnboardingScreen extends HookWidget {
 }
 
 /// Prefill from Personal Info (and, for a host resubmitting, the saved host
-/// profile and topics) once the reads are in. Returns "my profile" and
-/// whether the prefill (topics included, for a host) is done, and the saved
-/// host profile (null for a new host).
-(UserWithExpert?, bool, HostProfile?) _usePrefill(
+/// profile and topics) once the reads are in. Returns "my profile",
+/// whether the prefill (topics included, for a host) is done, the saved
+/// host profile (null for a new host), and for a host whose reads failed the
+/// error and a retry.
+///
+/// A host's failed read is NOT "no profile". It used to count as done: on
+/// 29 Oct a 401 here seeded a new-host draft (no profile id, a handle from
+/// the name), and Submit created a second profile that took the account off
+/// the approved one. Their topics the same: seeded empty, a save would wipe
+/// them.
+(UserWithExpert?, bool, HostProfile?, ApiException?, VoidCallback)
+_usePrefill(
   BuildContext context,
   HostDraftController draft,
   SessionState session,
@@ -254,7 +337,7 @@ class HostOnboardingScreen extends HookWidget {
   final form = useInterestForm(context, enabled: isHost);
   final answers = useMyInterests(context, enabled: !isHost);
 
-  final hostReady = !isHost || host.data != null || host.isError;
+  final hostReady = !isHost || host.data != null;
   final meReady = me.data != null || me.isError;
   useEffect(() {
     if (!meReady || !hostReady || draft.seeded) return null;
@@ -270,6 +353,21 @@ class HostOnboardingScreen extends HookWidget {
     );
     return null;
   }, [meReady, hostReady]);
+
+  // A draft seeded without the host's profile (older builds did that when the
+  // read failed) has no profile id and is never seeded again. It is this
+  // host's own, so Submit updates their profile instead of being refused.
+  final hostKey = host.data?.key;
+  useEffect(() {
+    if (hostKey != null &&
+        hostKey.isNotEmpty &&
+        draft.seeded &&
+        draft.expertId == null) {
+      draft.expertId = hostKey;
+      draft.flush();
+    }
+    return null;
+  }, [hostKey]);
 
   // The client's "How do you identify?" answer, if it arrives later.
   useEffect(() {
@@ -293,9 +391,18 @@ class HostOnboardingScreen extends HookWidget {
     draft.flush();
     return null;
   }, [expertise.data, form.data]);
-  final topicsReady =
-      !isHost || draft.topicsSeeded || expertise.isError || form.isError;
-  return (me.data, draft.seeded && topicsReady, host.data);
+  final topicsReady = !isHost || draft.topicsSeeded;
+  final ApiException? loadError = !isHost
+      ? null
+      : (host.data == null ? host.error : null) ??
+            (draft.topicsSeeded ? null : expertise.error ?? form.error);
+  void retry() {
+    if (host.isError) host.refetch();
+    if (expertise.isError) expertise.refetch();
+    if (form.isError) form.refetch();
+  }
+
+  return (me.data, draft.seeded && topicsReady, host.data, loadError, retry);
 }
 
 class _Flow extends HookWidget {

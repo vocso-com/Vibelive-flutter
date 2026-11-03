@@ -1,28 +1,68 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:vibelive/app/api/instant_call/instant_call_api.dart';
+import 'package:vibelive/app/component/morph_fab.dart';
 import 'package:vibelive/app/homescreen/discover/talk_now_button.dart';
+import 'package:vibelive/app/navbar/bottombar/navbar_collapse.dart';
 import 'package:vibelive/core/network/api_exception.dart';
+import 'package:vibelive/core/theme/app_colors.dart';
 
 import 'host_onboarding_support/harness.dart';
 
 /// Talk Now: shown only while the server has it on for this user, and its
-/// refusals in the user's own words.
+/// refusals in the user's own words. On Discover it floats as a pill that
+/// folds into a round call button.
 void main() {
   setUpAll(() async {
     await setUpHostHarness();
   });
+  // Each test is a fresh app launch: the intro (pill, then fold) plays.
+  // Calls placed by a tap: (video?), without starting the call layer.
+  final placed = <bool>[];
+  final realPlace = TalkNowButton.placeCall;
+  setUp(() {
+    MorphFab.resetIntros();
+    placed.clear();
+    TalkNowButton.placeCall =
+        ({bool video = false, int? maxRingSeconds}) async => placed.add(video);
+  });
+  tearDown(() {
+    NavbarCollapse.instance.value = false;
+    TalkNowButton.placeCall = realPlace;
+  });
 
-  Future<void> open(WidgetTester tester) async {
+  Future<void> open(
+    WidgetTester tester, {
+    bool reduceMotion = false,
+    ThemeMode theme = ThemeMode.light,
+  }) async {
     phone(tester);
+    const button = Scaffold(body: Column(children: [TalkNowButton()]));
     await pumpRoutes(
       tester,
-      const Scaffold(body: Column(children: [TalkNowButton()])),
+      reduceMotion
+          ? Builder(
+              builder: (context) => MediaQuery(
+                data: MediaQuery.of(context).copyWith(disableAnimations: true),
+                child: button,
+              ),
+            )
+          : button,
+      theme: theme,
     );
     await pumpFor(tester, 400);
   }
 
-  Finder button() => find.byType(GestureDetector);
+  Finder button() => find.byKey(const ValueKey('talk-now'));
+
+  /// The morphing box (the circle's tap target fills it).
+  Size box(WidgetTester tester) =>
+      tester.getSize(find.byKey(const ValueKey('morph-fab-circle')));
+
+  bool folded(WidgetTester tester) {
+    final s = box(tester);
+    return s.width < 100 && (s.width - s.height).abs() < 0.5;
+  }
 
   testWidgets('hidden while the server has Talk Now off', (tester) async {
     await resetHost();
@@ -82,7 +122,8 @@ void main() {
       'callerVideoRate': 25,
     };
     await open(tester);
-    expect(button(), findsNWidgets(2));
+    expect(find.byKey(const ValueKey('talk-now-voice')), findsOneWidget);
+    expect(find.byKey(const ValueKey('talk-now-video')), findsOneWidget);
     expect(find.textContaining('10'), findsWidgets);
     expect(find.textContaining('25'), findsWidgets);
     await finishHost(tester);
@@ -96,8 +137,164 @@ void main() {
       'callerVideoRate': 25,
     };
     await open(tester);
-    expect(button(), findsOneWidget);
+    expect(find.byKey(const ValueKey('talk-now-call')), findsOneWidget);
+    expect(find.byKey(const ValueKey('talk-now-voice')), findsNothing);
+    expect(find.byKey(const ValueKey('talk-now-video')), findsNothing);
     expect(find.textContaining('25'), findsWidgets);
+    await finishHost(tester);
+  });
+
+  // ── The pill that folds into a call button ──────────────────────────────
+
+  const voiceOnly = {
+    'enabled': true,
+    'allowedCallTypes': 'voice_only',
+    'callerVoiceRate': 12,
+  };
+
+  testWidgets('arrives as the full pill, folds into the circle after 3 s; '
+      'ONE tap on the circle places the call; a long press opens the pill, '
+      'and it folds back by itself', (tester) async {
+    final backend = await resetHost();
+    backend.instantConfig = voiceOnly;
+    await open(tester);
+
+    expect(box(tester).width, greaterThan(300));
+    expect(find.text('Talk Now'), findsOneWidget);
+    await pumpFor(tester, 2000);
+    expect(folded(tester), isFalse, reason: 'still within the 3 s');
+
+    await pumpFor(tester, 2800);
+    expect(folded(tester), isTrue);
+
+    // The price is on the circle itself, so one tap is enough: a badge on
+    // its bottom edge, centred, the icon keeping the whole circle.
+    final circle = tester.getRect(
+      find.byKey(const ValueKey('morph-fab-circle')),
+    );
+    final badge = find.byKey(const ValueKey('morph-fab-badge'));
+    expect(
+      find.descendant(of: badge, matching: find.text('₹12/MIN')),
+      findsOneWidget,
+    );
+    final chip = tester.getRect(badge);
+    expect((chip.center.dx - circle.center.dx).abs(), lessThan(1.5));
+    expect((chip.center.dy - circle.bottom).abs(), lessThan(circle.height / 4));
+    await tester.tap(find.byKey(const ValueKey('morph-fab-circle')));
+    await pumpFor(tester, 300);
+    expect(placed, [false], reason: 'one tap, one voice call');
+    expect(folded(tester), isTrue, reason: 'no "open first" step');
+
+    // A long press opens the pill again; it folds back by itself.
+    await tester.longPress(find.byKey(const ValueKey('morph-fab-circle')));
+    await pumpFor(tester, 900);
+    expect(box(tester).width, greaterThan(300));
+    expect(placed, [false], reason: 'opening it places nothing');
+    await pumpFor(tester, 4200);
+    expect(folded(tester), isTrue);
+    await finishHost(tester);
+  });
+
+  testWidgets('both types: the circle places voice (the cheaper); video is in '
+      'the pill', (tester) async {
+    final backend = await resetHost();
+    backend.instantConfig = {
+      'enabled': true,
+      'allowedCallTypes': 'both',
+      'callerVoiceRate': 10,
+      'callerVideoRate': 25,
+    };
+    await open(tester);
+    // In the open pill each chip is one tap.
+    await tester.tap(find.byKey(const ValueKey('talk-now-video')));
+    await pumpFor(tester, 100);
+    expect(placed, [true]);
+
+    await pumpFor(tester, 5000);
+    expect(folded(tester), isTrue);
+    await tester.tap(find.byKey(const ValueKey('morph-fab-circle')));
+    await pumpFor(tester, 300);
+    expect(placed, [true, false]);
+    await finishHost(tester);
+  });
+
+  testWidgets('video only: the circle shows video and places video', (
+    tester,
+  ) async {
+    final backend = await resetHost();
+    backend.instantConfig = {
+      'enabled': true,
+      'allowedCallTypes': 'video_only',
+      'callerVideoRate': 25,
+    };
+    await open(tester);
+    await pumpFor(tester, 5000);
+    expect(folded(tester), isTrue);
+    await tester.tap(find.byKey(const ValueKey('morph-fab-circle')));
+    await pumpFor(tester, 300);
+    expect(placed, [true]);
+    await finishHost(tester);
+  });
+
+  testWidgets('lime with dark text in light mode and dark mode alike', (
+    tester,
+  ) async {
+    for (final theme in [ThemeMode.light, ThemeMode.dark]) {
+      MorphFab.resetIntros();
+      final backend = await resetHost();
+      backend.instantConfig = voiceOnly;
+      await open(tester, theme: theme);
+      final gradients = [
+        for (final box in tester.widgetList<DecoratedBox>(
+          find.descendant(of: button(), matching: find.byType(DecoratedBox)),
+        ))
+          if (box.decoration case BoxDecoration(
+            gradient: final LinearGradient g,
+          ))
+            g.colors.first,
+      ];
+      expect(gradients, contains(BrandColors.lime), reason: '$theme');
+      final title = tester.widget<Text>(find.text('Talk Now'));
+      expect(title.style?.color, AppColors.black, reason: '$theme');
+      await finishHost(tester);
+    }
+  });
+
+  testWidgets('scrolling the feed folds it early', (tester) async {
+    final backend = await resetHost();
+    backend.instantConfig = voiceOnly;
+    await open(tester);
+    expect(folded(tester), isFalse);
+    NavbarCollapse.instance.value = true;
+    await pumpFor(tester, 900);
+    expect(folded(tester), isTrue);
+    await finishHost(tester);
+  });
+
+  testWidgets('the intro plays once per launch: later it arrives folded', (
+    tester,
+  ) async {
+    final backend = await resetHost();
+    backend.instantConfig = voiceOnly;
+    await open(tester);
+    expect(folded(tester), isFalse);
+    await finishHost(tester);
+
+    // Discover built again in the same launch (no reset in between).
+    final again = await resetHost();
+    again.instantConfig = voiceOnly;
+    await open(tester);
+    expect(folded(tester), isTrue);
+    await finishHost(tester);
+  });
+
+  testWidgets('"reduce motion": the fold lands at once', (tester) async {
+    final backend = await resetHost();
+    backend.instantConfig = voiceOnly;
+    await open(tester, reduceMotion: true);
+    expect(folded(tester), isFalse);
+    await pumpFor(tester, 3050);
+    expect(folded(tester), isTrue);
     await finishHost(tester);
   });
 

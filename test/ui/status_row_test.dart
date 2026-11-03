@@ -221,7 +221,7 @@ void main() {
       ],
     };
     await open(tester);
-    expect(find.text('Vibes'), findsOneWidget);
+    expect(find.byKey(const ValueKey('status-row')), findsOneWidget);
     expect(find.text('Asha'), findsOneWidget);
     expect(find.text('Meera'), findsOneWidget);
     expect(find.text('Add Vibe'), findsNothing, reason: 'a client');
@@ -315,7 +315,7 @@ void main() {
     again.replies['GET /api/host-statuses/feed'] =
         backend.replies['GET /api/host-statuses/feed']!;
     await open(tester, include: (_) => false);
-    expect(find.text('Vibes'), findsNothing);
+    expect(find.byKey(const ValueKey('status-row')), findsNothing);
     await finishHost(tester);
   });
 
@@ -381,7 +381,7 @@ void main() {
     final backend = await resetHost(expert: expert);
     statusesOn(backend, on: false);
     await open(tester);
-    expect(find.text('Vibes'), findsNothing);
+    expect(find.byKey(const ValueKey('status-row')), findsNothing);
     expect(backend.sent('GET', '/host-statuses/feed'), isEmpty);
     await finishHost(tester);
   });
@@ -438,11 +438,11 @@ void main() {
       ],
     };
     await open(tester);
-    expect(find.text('Vibes'), findsNothing);
+    expect(find.byKey(const ValueKey('status-row')), findsNothing);
     statusesOn(backend);
     AppUpdatePush.onUpdate('config_updated'); // the silent push
     await pumpFor(tester, 800);
-    expect(find.text('Vibes'), findsOneWidget);
+    expect(find.byKey(const ValueKey('status-row')), findsOneWidget);
     expect(find.text('Asha'), findsOneWidget);
     await finishHost(tester);
   });
@@ -578,7 +578,7 @@ void main() {
       },
     };
     await open(tester);
-    expect(find.text('Vibes'), findsNothing);
+    expect(find.byKey(const ValueKey('status-row')), findsNothing);
     expect(backend.sent('GET', '/host-statuses/feed'), isEmpty);
     await finishHost(tester);
   });

@@ -25,7 +25,10 @@ and every word on screen are passed in, so it drops into any app.
   `pro_video_editor` (native: Media3 on Android, AVFoundation on iOS; no FFmpeg).
   The preview and the export use the same colour matrix and the same caption
   painter, so what you see is what you get. An untouched clip is returned as
-  recorded (no re-encode).
+  recorded (no re-encode), except Android's front camera: CameraX records it
+  unmirrored while the preview is mirrored, so the editor shows it flipped and
+  the export bakes that flip in (once). iOS already records it as previewed;
+  gallery videos are never flipped.
 
 ## Use
 

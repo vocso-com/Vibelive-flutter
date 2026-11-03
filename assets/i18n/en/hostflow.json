@@ -234,7 +234,11 @@
     "agree": "Please agree to the Host Guidelines to continue.",
     "server": "{{message}} Please fix this and try again.",
     "voice": "Record a short voice intro to continue.",
-    "photos_too_many": "You can keep up to {{max}} photos. Remove one to continue."
+    "photos_too_many": "You can keep up to {{max}} photos. Remove one to continue.",
+    "profile_load_title": "We couldn't load your host profile",
+    "profile_load": "Nothing was changed. Check your connection and try again.",
+    "profile_exists_title": "You already have a host profile",
+    "profile_exists": "We've opened it for you, so you can make your changes there."
   },
   "approved": {
     "title": "You're approved! 🎉",

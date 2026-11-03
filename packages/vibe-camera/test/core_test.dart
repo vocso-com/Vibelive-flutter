@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'dart:ui';
 
+import 'package:flutter/foundation.dart' show TargetPlatform;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:vibe_camera/vibe_camera.dart';
 import 'package:vibe_camera/src/capture/camera_session.dart';
@@ -143,6 +144,35 @@ void main() {
       expect(job(VibeCropAspect.square).outputSize, const Size(720, 720));
       expect(job(VibeCropAspect.square).bitrate, 5000000);
     });
+
+    test('a crop framed on the flipped preview is mirrored back for the renderer', () {
+      const info = VibeVideoInfo(duration: Duration(seconds: 5), size: Size(1280, 720));
+      VibeExportJob job({required bool mirror, Offset center = const Offset(0.5, 0.5)}) => VibeExportJob(
+        source: _file,
+        edit: VibeEdit(trim: VibeTrim.full(info.duration), aspect: VibeCropAspect.square, cropCenter: center),
+        info: info,
+        quality: VibeExportQuality.p720,
+        maxFps: 30,
+        mirror: mirror,
+      );
+      // Framed at the left edge of what was shown…
+      final left = job(mirror: true, center: const Offset(0, 0.5));
+      expect(left.edit.cropRect(info.size), const Rect.fromLTWH(0, 0, 720, 720));
+      // …is the right edge of the unflipped recording.
+      expect(left.sourceCrop, const Rect.fromLTWH(560, 0, 720, 720));
+      expect(left.outputSize, const Size(720, 720), reason: 'same size either way');
+      expect(job(mirror: false, center: const Offset(0, 0.5)).sourceCrop, const Rect.fromLTWH(0, 0, 720, 720));
+      expect(job(mirror: true).sourceCrop, const Rect.fromLTWH(280, 0, 720, 720), reason: 'centred stays centred');
+      expect(job(mirror: false).mirror, isFalse);
+    });
+  });
+
+  test('only Android front-camera recordings are the mirror of their preview', () {
+    expect(CameraSession.mirrorsRecording(VibeLens.front, TargetPlatform.android), isTrue);
+    expect(CameraSession.mirrorsRecording(VibeLens.back, TargetPlatform.android), isFalse);
+    expect(CameraSession.mirrorsRecording(VibeLens.front, TargetPlatform.iOS), isFalse,
+        reason: 'iOS records the front camera mirrored, as previewed');
+    expect(CameraSession.mirrorsRecording(VibeLens.back, TargetPlatform.iOS), isFalse);
   });
 
   test('frame rates asked for, best first', () {

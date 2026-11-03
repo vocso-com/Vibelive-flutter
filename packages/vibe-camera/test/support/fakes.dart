@@ -8,12 +8,14 @@ import 'package:video_player_platform_interface/video_player_platform_interface.
 
 /// A camera that "records" by writing a small file.
 class FakeSession implements VibeCaptureSession {
-  FakeSession({this.lens = VibeLens.front, this.fps = 120});
+  FakeSession({this.lens = VibeLens.front, this.fps = 120, this.mirrorRecording = false});
 
   @override
   final VibeLens lens;
   @override
   final int? fps;
+  @override
+  final bool mirrorRecording;
   bool recording = false;
   double? light;
   bool? torch;

@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:camera/camera.dart';
+import 'package:flutter/foundation.dart' show defaultTargetPlatform;
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
@@ -23,6 +24,10 @@ abstract class VibeCaptureSession {
   /// Frames per second the camera accepted (null: its own default).
   int? get fps;
   VibeLens get lens;
+
+  /// The recorded file is the preview's mirror image, so the editor flips
+  /// it left-right (shown and baked in) to give back what the user saw.
+  bool get mirrorRecording;
   bool get hasTorch;
   bool get isRecording;
   double get minZoom;
@@ -86,6 +91,16 @@ class CameraSession implements VibeCaptureSession {
     final f? when f >= 60 => 8000000,
     _ => 6000000,
   };
+
+  /// Whether a [lens] recording on [platform] comes out as the mirror image
+  /// of its preview. The front preview is drawn mirrored (selfie style) on
+  /// both platforms. iOS records it mirrored too (camera_avfoundation mirrors
+  /// the one capture connection that feeds both), but Android's CameraX
+  /// records the front camera unmirrored (VideoCapture's mirror mode is off
+  /// by default and the plugin never sets it). The back camera is never
+  /// mirrored.
+  static bool mirrorsRecording(VibeLens lens, TargetPlatform platform) =>
+      lens == VibeLens.front && platform == TargetPlatform.android;
 
   static Future<VibeCaptureSession> open({
     required VibeLens lens,
@@ -161,6 +176,9 @@ class CameraSession implements VibeCaptureSession {
 
   @override
   Widget preview() => _CoverPreview(controller: _controller);
+
+  @override
+  bool get mirrorRecording => mirrorsRecording(lens, defaultTargetPlatform);
 
   @override
   bool get hasTorch => lens == VibeLens.back;

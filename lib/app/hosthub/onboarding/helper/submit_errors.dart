@@ -48,6 +48,16 @@ abstract final class HostSubmitErrors {
     return null;
   }
 
+  /// The account already has a host profile (409 `HOST_PROFILE_EXISTS`): the
+  /// server refused a second one, which would have taken the account off it.
+  static bool isProfileExists(ApiException e) {
+    if (e.statusCode != 409) return false;
+    final body = e.data;
+    final error = body is Map ? body['error'] : null;
+    final details = error is Map ? error['details'] : null;
+    return details is Map && details['code'] == 'HOST_PROFILE_EXISTS';
+  }
+
   /// The step to go back to, or null when the error isn't about a field.
   static HostStep? stepFor(ApiException e) {
     final field = _field(e);

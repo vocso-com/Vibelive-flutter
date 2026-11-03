@@ -33,6 +33,7 @@ class VibeEditScreen extends StatefulWidget {
     required this.recordedAt,
     this.fps,
     this.initialFilter,
+    this.mirror = false,
   });
 
   final File file;
@@ -40,6 +41,11 @@ class VibeEditScreen extends StatefulWidget {
   final DateTime recordedAt;
   final int? fps;
   final VibeFilter? initialFilter;
+
+  /// Flip the clip left-right, here and in the saved video: a recording that
+  /// is the mirror image of the camera preview
+  /// (`VibeCaptureSession.mirrorRecording`). Never for a gallery video.
+  final bool mirror;
 
   @override
   State<VibeEditScreen> createState() => _VibeEditScreenState();
@@ -156,7 +162,8 @@ class _VibeEditScreenState extends State<VibeEditScreen> {
     final info = _info;
     if (edit == null || info == null || _saving != null) return;
     final kept = edit.trim.length;
-    if (edit.isUntouched(info.duration)) {
+    // A mirrored recording always renders: the flip has to be baked in.
+    if (!widget.mirror && edit.isUntouched(info.duration)) {
       Navigator.of(context).pop(
         VibeCameraResult(
           file: widget.file,
@@ -180,6 +187,7 @@ class _VibeEditScreenState extends State<VibeEditScreen> {
       info: info,
       quality: widget.config.exportQuality,
       maxFps: widget.config.maxOutputFps,
+      mirror: widget.mirror,
     );
     try {
       final out = await _exporter.export(
@@ -287,6 +295,7 @@ class _VibeEditScreenState extends State<VibeEditScreen> {
                                 edit: edit,
                                 info: info,
                                 player: player,
+                                mirror: widget.mirror,
                                 tool: _tool,
                                 hiddenId: _editingId,
                                 draggingId: _draggingId,
@@ -329,6 +338,7 @@ class _VibeEditScreenState extends State<VibeEditScreen> {
                                 info: info,
                                 player: player,
                                 thumbs: _thumbs,
+                                mirror: widget.mirror,
                                 config: widget.config,
                                 onChanged: (next) {
                                   final trimChanged = next.trim != edit.trim;
@@ -363,12 +373,14 @@ class _VibeEditScreenState extends State<VibeEditScreen> {
   }
 }
 
-/// The clip as it will come out: cropped frame, look and light, captions.
+/// The clip as it will come out: cropped frame, flip, look and light,
+/// captions.
 class _Preview extends StatefulWidget {
   const _Preview({
     required this.edit,
     required this.info,
     required this.player,
+    required this.mirror,
     required this.tool,
     required this.hiddenId,
     required this.draggingId,
@@ -382,6 +394,10 @@ class _Preview extends StatefulWidget {
   final VibeEdit edit;
   final VibeVideoInfo info;
   final VideoPlayerController player;
+
+  /// The picture flipped left-right. The crop frame is placed on this
+  /// flipped picture (the exporter maps it back); captions are not flipped.
+  final bool mirror;
   final VibeTool tool;
   final String? hiddenId;
   final String? draggingId;
@@ -461,7 +477,10 @@ class _PreviewState extends State<_Preview> {
                       height: video.height * scale,
                       child: ColorFiltered(
                         colorFilter: ColorFilter.matrix(edit.matrix),
-                        child: VideoPlayer(widget.player),
+                        child: Transform.flip(
+                          flipX: widget.mirror,
+                          child: VideoPlayer(widget.player),
+                        ),
                       ),
                     ),
                     Positioned.fill(
@@ -607,6 +626,7 @@ class _ToolPanel extends StatelessWidget {
     required this.info,
     required this.player,
     required this.thumbs,
+    required this.mirror,
     required this.config,
     required this.onChanged,
     required this.onAddText,
@@ -616,7 +636,10 @@ class _ToolPanel extends StatelessWidget {
   final VibeEdit edit;
   final VibeVideoInfo info;
   final VideoPlayerController player;
+
+  /// Frames of the recording file: flipped like the preview when [mirror].
   final List<Uint8List> thumbs;
+  final bool mirror;
   final VibeCameraConfig config;
   final ValueChanged<VibeEdit> onChanged;
   final VoidCallback onAddText;
@@ -634,6 +657,7 @@ class _ToolPanel extends StatelessWidget {
         trim: edit.trim,
         position: player.value.position,
         thumbs: thumbs,
+        mirror: mirror,
         accent: config.accent,
         max: config.maxDuration,
         min: config.minDuration,
@@ -697,7 +721,10 @@ class _ToolPanel extends StatelessWidget {
                         ? VibeFilterThumb(filter: f)
                         : ColorFiltered(
                             colorFilter: ColorFilter.matrix(f.matrix),
-                            child: Image.memory(thumb, fit: BoxFit.cover, gaplessPlayback: true),
+                            child: Transform.flip(
+                              flipX: mirror,
+                              child: Image.memory(thumb, fit: BoxFit.cover, gaplessPlayback: true),
+                            ),
                           ),
                   ),
                 ),

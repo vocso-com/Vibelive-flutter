@@ -218,6 +218,8 @@ class _VibeCaptureScreenState extends State<VibeCaptureScreen>
             recordedAt: since,
             fps: session.fps,
             initialFilter: _look,
+            // Android's front camera: the file is the preview's mirror image.
+            mirror: session.mirrorRecording,
           ),
         ),
         transitionsBuilder: (_, a, _, child) => FadeTransition(opacity: a, child: child),
@@ -233,7 +235,8 @@ class _VibeCaptureScreenState extends State<VibeCaptureScreen>
   }
 
   /// A video from the phone's gallery, through the same editor (trimmed to
-  /// the limit there). Only offered when the app passed a picker.
+  /// the limit there), never flipped. Only offered when the app passed a
+  /// picker.
   Future<void> _fromGallery() async {
     final pick = widget.config.pickFromGallery;
     if (pick == null || _recording || _busy) return;

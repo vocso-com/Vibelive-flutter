@@ -10,6 +10,7 @@ import 'package:pretty_dio_logger/pretty_dio_logger.dart';
 import 'package:shared_preferences_platform_interface/in_memory_shared_preferences_async.dart';
 import 'package:shared_preferences_platform_interface/shared_preferences_async_platform_interface.dart';
 import 'package:vibelive/app/api/listingflow/filter_models.dart';
+import 'package:vibelive/app/component/morph_fab.dart';
 import 'package:vibelive/app/homescreen/discover/active_filters.dart';
 import 'package:vibelive/app/listingflow/widgets/host_grid_card.dart';
 import 'package:vibelive/app/navbar/bottombar/bottom_navbar.dart';
@@ -34,6 +35,9 @@ class _Backend implements HttpClientAdapter {
 
   final bool rich;
   final feedPages = <int>[];
+
+  /// `/instant-call/config`: Talk Now on (both call types) or off.
+  bool talkNow = false;
 
   @override
   Future<ResponseBody> fetch(
@@ -91,6 +95,15 @@ class _Backend implements HttpClientAdapter {
             {'id': 1, 'balance': rich ? 98765432.5 : 120.5},
           ],
         };
+      case '/api/instant-call/config':
+        return talkNow
+            ? {
+                'enabled': true,
+                'allowedCallTypes': 'both',
+                'callerVoiceRate': 10,
+                'callerVideoRate': 25,
+              }
+            : {'enabled': false};
       default:
         return {'data': <Object>[]};
     }
@@ -164,10 +177,14 @@ void main() {
   Future<void> openHome(
     WidgetTester tester, {
     Size size = const Size(390, 844),
+    double bottomInset = 0,
   }) async {
+    final inset = FakeViewPadding(bottom: bottomInset * 3);
     tester.view
       ..physicalSize = size * 3
-      ..devicePixelRatio = 3;
+      ..devicePixelRatio = 3
+      ..padding = inset
+      ..viewPadding = inset;
     addTearDown(tester.view.reset);
     await tester.pumpWidget(
       VibeLiveApp(
@@ -295,6 +312,41 @@ void main() {
     await tester.binding.handlePopRoute();
     await tester.pump();
     expect(exits, ['SystemNavigator.pop']);
+    await finish(tester);
+  });
+
+  testWidgets('Talk Now floats above the navbar on Discover only: the pill, '
+      'then the circle at the navbar\'s right edge; none in the header', (
+    tester,
+  ) async {
+    MorphFab.resetIntros();
+    backend.talkNow = true;
+    // A phone with a gesture bar / home indicator: the Scaffold strips that
+    // inset from its body, which once sank the button under the navbar.
+    await openHome(tester, bottomInset: 34);
+    await _pump(tester, 1000);
+
+    final nav = tester.getRect(find.byType(BottomNavbar));
+    final dock = find.byKey(const ValueKey('morph-fab-circle'));
+    expect(dock, findsOneWidget, reason: 'one Talk Now, the floating one');
+    final pill = tester.getRect(dock);
+    expect(pill.bottom, lessThanOrEqualTo(nav.top), reason: 'not under it');
+    expect(nav.top - pill.bottom, closeTo(12.ms, 1.5), reason: 'just above');
+    expect(pill.width, greaterThan(300));
+    expect(find.text('Talk Now'), findsOneWidget);
+
+    // Folded, and the landing pop settled.
+    await _pump(tester, 4400);
+    final circle = tester.getRect(dock);
+    expect(circle.width, lessThan(100));
+    expect(circle.bottom, lessThanOrEqualTo(nav.top));
+    // The dock's own right edge (the navbar widget includes its margins).
+    expect((circle.right - (nav.right - 16.ms)).abs(), lessThan(1.5));
+
+    // Other tabs: no Talk Now.
+    await tester.tap(find.bySemanticsLabel('Profile'));
+    await _pump(tester, 400);
+    expect(dock, findsNothing);
     await finish(tester);
   });
 

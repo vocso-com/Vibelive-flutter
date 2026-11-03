@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:vibe_camera/vibe_camera.dart';
+import 'package:video_player/video_player.dart' show VideoPlayer;
 import 'package:video_player_platform_interface/video_player_platform_interface.dart';
 
 import 'support/fakes.dart';
@@ -32,6 +33,12 @@ void main() {
     await pumpFor(tester, 600);
     return tester.state<LauncherState>(find.byType(Launcher, skipOffstage: false));
   }
+
+  /// The editor preview's horizontal scale: −1 flipped, 1 as recorded.
+  double flipOf(WidgetTester tester) => tester
+      .widget<Transform>(find.ancestor(of: find.byType(VideoPlayer), matching: find.byType(Transform)).first)
+      .transform
+      .storage[0];
 
   group('camera', () {
     testWidgets('live preview, no frame-rate badge, a look picked from the strip', (tester) async {
@@ -112,6 +119,30 @@ void main() {
       expect(launcher.result!.edited, isFalse);
     });
 
+    testWidgets('a recording that mirrors its preview is shown flipped and always saved flipped', (tester) async {
+      session = FakeSession(mirrorRecording: true);
+      exporter = FakeExporter(info: const VibeVideoInfo(duration: Duration(seconds: 2), size: Size(720, 1280)));
+      final launcher = await recordAndEdit(tester);
+      expect(flipOf(tester), -1, reason: 'the editor shows what the camera showed');
+      await tester.tap(find.byKey(const ValueKey('vibe-done')));
+      await pumpFor(tester, 800);
+      expect(exporter.jobs, hasLength(1), reason: 'untouched, but the flip has to be baked in');
+      expect(exporter.jobs.single.mirror, isTrue);
+      expect(launcher.result!.edited, isTrue);
+      expect(launcher.result!.file.path, contains('vibe_out_'));
+    });
+
+    testWidgets('a recording that already looks like its preview is not flipped', (tester) async {
+      session = FakeSession(lens: VibeLens.back);
+      await recordAndEdit(tester);
+      expect(flipOf(tester), 1);
+      await tester.tap(find.byKey(const ValueKey('vibe-edit-filter-warm')));
+      await tester.pump();
+      await tester.tap(find.byKey(const ValueKey('vibe-done')));
+      await pumpFor(tester, 800);
+      expect(exporter.jobs.single.mirror, isFalse);
+    });
+
     testWidgets('look, crop and a caption are baked in on Done', (tester) async {
       final launcher = await recordAndEdit(tester);
       await tester.tap(find.byKey(const ValueKey('vibe-edit-filter-warm')));
@@ -179,7 +210,9 @@ void main() {
       await pumpFor(tester, 600);
     });
 
-    testWidgets('a picked video goes through the editor and comes back', (tester) async {
+    testWidgets('a picked video goes through the editor and comes back, never flipped', (tester) async {
+      // Even while the open camera is one whose recordings get flipped.
+      session = FakeSession(mirrorRecording: true);
       exporter = FakeExporter(info: const VibeVideoInfo(duration: Duration(seconds: 90), size: Size(720, 1280)));
       final picked = File('${Directory.systemTemp.path}/vibe_gallery_${DateTime.now().microsecondsSinceEpoch}.mp4')
         ..writeAsBytesSync([0, 0, 0]);
@@ -200,8 +233,10 @@ void main() {
       await pumpFor(tester, 800);
       expect(asked, 1);
       expect(find.byKey(const ValueKey('vibe-done')), findsOneWidget, reason: 'the editor is open');
+      expect(flipOf(tester), 1);
       await tester.tap(find.byKey(const ValueKey('vibe-done')));
       await pumpFor(tester, 800);
+      expect(exporter.jobs.single.mirror, isFalse);
       final result = launcher.result!;
       expect(result.duration, lessThanOrEqualTo(const Duration(seconds: 30)),
           reason: 'a long gallery video is trimmed to the limit');

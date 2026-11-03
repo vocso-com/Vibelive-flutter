@@ -33,6 +33,7 @@ class VibeExportJob {
     required this.info,
     required this.quality,
     required this.maxFps,
+    this.mirror = false,
   });
 
   final File source;
@@ -41,10 +42,27 @@ class VibeExportJob {
   final VibeExportQuality quality;
   final int maxFps;
 
+  /// Flip the picture left-right (captions stay readable: they go on after).
+  final bool mirror;
+
   /// The exported picture size: the crop, or the whole frame.
   Size get outputSize {
     final crop = edit.cropRect(info.size);
     return VibeCrop.isFull(info.size, crop) ? info.size : crop.size;
+  }
+
+  /// The crop in the source's own, unflipped picture, which is where
+  /// pro_video_editor takes it on both platforms. The edit's crop was framed
+  /// on the flipped preview, so when [mirror] it is mirrored back here.
+  Rect get sourceCrop {
+    final crop = edit.cropRect(info.size);
+    if (!mirror) return crop;
+    return Rect.fromLTWH(
+      math.max(0, info.size.width - crop.right),
+      crop.top,
+      crop.width,
+      crop.height,
+    );
   }
 
   int get bitrate => switch (quality) {
@@ -120,8 +138,8 @@ class ProVideoExporter implements VibeExporter {
     final stamp = DateTime.now().microsecondsSinceEpoch;
     final edit = job.edit;
     final info = job.info;
-    final crop = edit.cropRect(info.size);
-    final cropped = !VibeCrop.isFull(info.size, crop);
+    final cropped = !VibeCrop.isFull(info.size, edit.cropRect(info.size));
+    final crop = job.sourceCrop;
 
     final layers = <pve.ImageLayer>[];
     if (edit.texts.isNotEmpty) {
@@ -138,12 +156,15 @@ class ProVideoExporter implements VibeExporter {
       videoSegments: [pve.VideoSegment(video: pve.EditorVideo.file(job.source))],
       startTime: trimmed ? edit.trim.start : null,
       endTime: trimmed ? edit.trim.end : null,
-      transform: cropped
+      // Both platforms flip before laying the captions on: the text is never
+      // mirrored.
+      transform: cropped || job.mirror
           ? pve.ExportTransform(
-              x: crop.left.round(),
-              y: crop.top.round(),
-              width: crop.width.round(),
-              height: crop.height.round(),
+              flipX: job.mirror,
+              x: cropped ? crop.left.round() : null,
+              y: cropped ? crop.top.round() : null,
+              width: cropped ? crop.width.round() : null,
+              height: cropped ? crop.height.round() : null,
             )
           : null,
       colorFilters: edit.hasColor ? [pve.ColorFilter(matrix: edit.matrix)] : const [],

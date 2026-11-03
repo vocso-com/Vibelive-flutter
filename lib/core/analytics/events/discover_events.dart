@@ -33,6 +33,9 @@ abstract final class DiscoverEvents {
   static void talkNowTapped({required bool blockedByCall}) =>
       Analytics.log('talk_now_tapped', {'blocked_by_call': blockedByCall});
 
+  /// The folded Talk Now circle tapped open (back to the pill with prices).
+  static void talkNowOpened() => Analytics.log('talk_now_opened');
+
   /// A host's circle in the Home status row: [position] in the row, [seen]
   /// whether all of theirs were already watched.
   static void statusOpened({

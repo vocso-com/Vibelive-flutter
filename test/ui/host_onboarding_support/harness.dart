@@ -146,6 +146,9 @@ class HostBackend implements HttpClientAdapter {
   /// checked before the built-in ones.
   final replies = <String, Object? Function(RequestOptions o)>{};
 
+  /// `'POST /api/expert-profiles'` → status for its [replies] body (e.g. 409).
+  final statuses = <String, int>{};
+
   List<Call> sent(String method, String path) => [
     for (final c in calls)
       if (c.method == method && c.path == '/api$path') c,
@@ -176,7 +179,7 @@ class HostBackend implements HttpClientAdapter {
     }
     return ResponseBody.fromString(
       jsonEncode(_reply(o)),
-      200,
+      statuses['${o.method} ${o.path}'] ?? 200,
       headers: {
         Headers.contentTypeHeader: ['application/json'],
       },

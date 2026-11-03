@@ -18,12 +18,16 @@ class VibeTrimBar extends StatelessWidget {
     required this.onChanged,
     this.min = const Duration(seconds: 1),
     this.max,
+    this.mirror = false,
   });
 
   final Duration duration;
   final VibeTrim trim;
   final Duration position;
   final List<Uint8List> thumbs;
+
+  /// Each frame flipped left-right, like the editor's preview.
+  final bool mirror;
   final Color accent;
   final ValueChanged<VibeTrim> onChanged;
   final Duration min;
@@ -94,7 +98,12 @@ class VibeTrimBar extends StatelessWidget {
                           : Row(
                               children: [
                                 for (final t in thumbs)
-                                  Expanded(child: Image.memory(t, fit: BoxFit.cover, gaplessPlayback: true, height: double.infinity)),
+                                  Expanded(
+                                    child: Transform.flip(
+                                      flipX: mirror,
+                                      child: Image.memory(t, fit: BoxFit.cover, gaplessPlayback: true, height: double.infinity),
+                                    ),
+                                  ),
                               ],
                             ),
                     ),

@@ -6,7 +6,6 @@ import '../../../core/analytics/events/discover_events.dart';
 import '../../../core/network/api_exception.dart';
 import '../../../core/network/strapi.dart';
 import '../../../core/session/session_store.dart';
-import '../../../core/theme/vibe_colors.dart';
 import '../../../core/utils/scale.dart';
 import '../../api/host_status/host_status_models.dart';
 import '../../api/host_status/host_status_queries.dart';
@@ -16,7 +15,6 @@ import '../../api/hosthub/eligibility.dart';
 import '../../api/listingflow/listing_models.dart';
 import '../../api/listingflow/listing_queries.dart';
 import '../../api/paymentscreen/runtime_config_queries.dart';
-import '../../component/c_text.dart';
 import '../../component/c_toast.dart';
 import '../../hosthub/approved/widgets/status_capture.dart';
 import '../../listingflow/profile/helper/call_start.dart';
@@ -44,7 +42,6 @@ class StatusRow extends HookWidget {
 
   @override
   Widget build(BuildContext context) {
-    final c = context.colors;
     final session = useValueListenable(SessionStore.instance);
     final media = useRuntimeConfig(context).hostMedia;
     // The admin's master switch (Host media → Vibes in the app).
@@ -144,32 +141,20 @@ class StatusRow extends HookWidget {
         ),
     ];
 
+    // Just the circles: no "Vibes" heading above them (the "Your Vibe"
+    // circle already says what the row is).
     return Padding(
-      padding: EdgeInsets.only(top: 6.ms, bottom: 4.ms),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Padding(
-            padding: EdgeInsets.symmetric(horizontal: 6.ms),
-            child: CText(
-              'home:statuses.title',
-              size: 15,
-              weight: FontWeight.w800,
-              color: c.text,
-            ),
-          ),
-          SizedBox(height: 8.ms),
-          SizedBox(
-            height: StatusCircle.photo + 26.ms,
-            child: ListView.separated(
-              scrollDirection: Axis.horizontal,
-              padding: EdgeInsets.symmetric(horizontal: 6.ms),
-              itemCount: circles.length,
-              separatorBuilder: (_, _) => SizedBox(width: 10.ms),
-              itemBuilder: (_, i) => circles[i],
-            ),
-          ),
-        ],
+      key: const ValueKey('status-row'),
+      padding: EdgeInsets.only(top: 8.ms, bottom: 4.ms),
+      child: SizedBox(
+        height: StatusCircle.photo + 26.ms,
+        child: ListView.separated(
+          scrollDirection: Axis.horizontal,
+          padding: EdgeInsets.symmetric(horizontal: 6.ms),
+          itemCount: circles.length,
+          separatorBuilder: (_, _) => SizedBox(width: 10.ms),
+          itemBuilder: (_, i) => circles[i],
+        ),
       ),
     );
   }

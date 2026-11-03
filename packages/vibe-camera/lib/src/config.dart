@@ -57,7 +57,9 @@ class VibeCameraConfig {
   final int maxOutputFps;
 
   /// After recording: the editor (filters, light, trim, crop, text). False
-  /// returns the recording as it is.
+  /// returns the recording as it is, never flipped: on Android's front camera
+  /// that is the mirror image of the preview (only the editor flips it back,
+  /// see `VibeCaptureSession.mirrorRecording`).
   final bool edit;
 
   /// "Open settings" when camera or microphone access was refused; hidden

@@ -206,6 +206,7 @@ Helpers: `lib/core/analytics/events/discover_events.dart` (`DiscoverEvents`). Al
 | top_bar_button_tapped | Discover/Me/History header button | button (search, filter, wallet, back, me_menu), tab | |
 | discover_topic_selected | topic chip tapped (user) | kind (all/popular/topic), topic, position | |
 | talk_now_tapped | "Talk now" button | blocked_by_call | |
+| talk_now_opened | the folded Talk Now circle tapped open (shows the prices again) | | |
 | status_opened | a host's circle in the Home status row | host_id, position, seen | |
 | promo_banner_viewed | a promo banner came on screen (once per banner per session) | banner_id, placement (`home`/`wallet`), position, template (`spotlight`, `offer`, `full_image`, `glass`, `minimal`, `countdown`, `custom`) | |
 | promo_banner_tapped | a promo banner was tapped | banner_id, placement, action (`app`/`url`/`none`), template | |

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
@@ -263,12 +264,24 @@ class DiscoverView extends HookWidget {
       return null;
     }, [error != null, tab.value.kind]);
 
-    // RN: 140 above the bottom safe area, clear of the floating navbar.
+    // The floating navbar's full height (its safe-area gap included). Not
+    // viewPadding: a Scaffold with a bottom bar strips the bottom inset from
+    // its body, so here viewPadding is ~0 on phones with a gesture bar, and
+    // anything placed by it sinks under the navbar. With `extendBody` the
+    // body's padding.bottom is exactly the bar's height.
+    final navbar = MediaQuery.paddingOf(context).bottom;
+    // Talk Now floats this far above the navbar (its pill is 64 tall).
+    final dockGap = 12.ms;
+    // RN: 140 above the bottom safe area, clear of the floating navbar; and
+    // the last cards scroll clear of the open Talk Now pill too.
     final padding = EdgeInsets.fromLTRB(
       10.ms,
       10.ms,
       10.ms,
-      140.ms + MediaQuery.viewPaddingOf(context).bottom,
+      math.max(
+        140.ms + MediaQuery.viewPaddingOf(context).bottom,
+        navbar + dockGap + 64.ms + 12.ms,
+      ),
     );
     // Banners, topics and active filters scroll with the feed (mockup);
     // while the first page loads they sit above its skeleton.
@@ -283,7 +296,6 @@ class DiscoverView extends HookWidget {
           placement: PromoPlacement.home,
           padding: EdgeInsets.fromLTRB(6.ms, 4.ms, 6.ms, 6.ms),
         ),
-        const TalkNowButton(),
         TopicTabs(
           tabs: tabs,
           selected: tab.value,
@@ -310,89 +322,104 @@ class DiscoverView extends HookWidget {
         StatusRow(include: statusInclude),
       ],
     );
-    return Column(
+    return Stack(
       children: [
-        Expanded(
-          // One scroll view in every state: swapping the tree when the first
-          // page landed tore down a Scrollable mid-drag (`_hold == null`).
-          child: LayoutBuilder(
-            builder: (context, box) {
-              listWidth.value = box.maxWidth;
-              return InfiniteScroll(
-                controller: scroll,
-                padding: padding,
-                hasMore: !loading && !isPopular && feed.hasMore,
-                loadingMore: feed.isLoadingMore,
-                loadMoreFailed: feed.query.isFetchNextPageError,
-                onLoadMore: () {
-                  DiscoverEvents.feedLoadMore(
-                    page: (feed.query.data?.pages.length ?? 0) + 1,
-                    loaded: feed.hosts.length,
+        Column(
+          children: [
+            Expanded(
+              // One scroll view in every state: swapping the tree when the
+              // first page landed tore down a Scrollable mid-drag
+              // (`_hold == null`).
+              child: LayoutBuilder(
+                builder: (context, box) {
+                  listWidth.value = box.maxWidth;
+                  return InfiniteScroll(
+                    controller: scroll,
+                    padding: padding,
+                    hasMore: !loading && !isPopular && feed.hasMore,
+                    loadingMore: feed.isLoadingMore,
+                    loadMoreFailed: feed.query.isFetchNextPageError,
+                    onLoadMore: () {
+                      DiscoverEvents.feedLoadMore(
+                        page: (feed.query.data?.pages.length ?? 0) + 1,
+                        loaded: feed.hosts.length,
+                      );
+                      feed.loadMore();
+                    },
+                    // A page is ~8 rows (~2.5 screens): ask while that much is
+                    // still below, so it lands before the user gets there.
+                    loadAhead: 2.5,
+                    onRefresh: () => refresh(),
+                    endLabel: loading || rows.isEmpty ? null : 'home:feed.end',
+                    onScroll: NavbarCollapse.instance.track,
+                    // Filtered view: the count is unknown, so one plain pair
+                    // row (never a spinner in a list).
+                    loadingBuilder: next == null
+                        ? (_) => const Shimmer(child: _SkeletonRow())
+                        : (_) => _MoreSkeleton(next),
+                    slivers: [
+                      SliverToBoxAdapter(child: header),
+                      if (loading)
+                        const SliverToBoxAdapter(child: _FeedSkeleton())
+                      else if (error != null)
+                        SliverFillRemaining(
+                          hasScrollBody: false,
+                          child: _LoadError(
+                            error: error,
+                            onRetry: () => refresh(trigger: 'retry'),
+                          ),
+                        )
+                      else if (rows.isEmpty)
+                        SliverFillRemaining(
+                          hasScrollBody: false,
+                          child: CStateView.empty(
+                            title: tab.value.emptyKey,
+                            message: null,
+                          ),
+                        )
+                      else
+                        SliverVariedExtentList.builder(
+                          itemCount: rows.length,
+                          itemExtentBuilder: (i, _) =>
+                              i < rows.length ? rows[i].height + 12.ms : null,
+                          findChildIndexCallback: (key) =>
+                              key is ValueKey<String>
+                              ? rowIndex[key.value]
+                              : null,
+                          itemBuilder: (context, i) {
+                            final row = rows[i];
+                            // The half row the next card lands in: its empty
+                            // slot shows that card's skeleton meanwhile.
+                            if ((next?.fillsSlot ?? false) &&
+                                i == rows.length - 1) {
+                              return _Row(
+                                row,
+                                key: ValueKey(row.key),
+                                pendingSlot: true,
+                                onCard: onCard,
+                              );
+                            }
+                            return rowWidgets[row] ??= _Row(
+                              row,
+                              key: ValueKey(row.key),
+                              onCard: onCard,
+                            );
+                          },
+                        ),
+                    ],
                   );
-                  feed.loadMore();
                 },
-                // A page is ~8 rows (~2.5 screens): ask while that much is
-                // still below, so it lands before the user gets there.
-                loadAhead: 2.5,
-                onRefresh: () => refresh(),
-                endLabel: loading || rows.isEmpty ? null : 'home:feed.end',
-                onScroll: NavbarCollapse.instance.track,
-                // Filtered view: the count is unknown, so one plain pair
-                // row (never a spinner in a list).
-                loadingBuilder: next == null
-                    ? (_) => const Shimmer(child: _SkeletonRow())
-                    : (_) => _MoreSkeleton(next),
-                slivers: [
-                  SliverToBoxAdapter(child: header),
-                  if (loading)
-                    const SliverToBoxAdapter(child: _FeedSkeleton())
-                  else if (error != null)
-                    SliverFillRemaining(
-                      hasScrollBody: false,
-                      child: _LoadError(
-                        error: error,
-                        onRetry: () => refresh(trigger: 'retry'),
-                      ),
-                    )
-                  else if (rows.isEmpty)
-                    SliverFillRemaining(
-                      hasScrollBody: false,
-                      child: CStateView.empty(
-                        title: tab.value.emptyKey,
-                        message: null,
-                      ),
-                    )
-                  else
-                    SliverVariedExtentList.builder(
-                      itemCount: rows.length,
-                      itemExtentBuilder: (i, _) =>
-                          i < rows.length ? rows[i].height + 12.ms : null,
-                      findChildIndexCallback: (key) =>
-                          key is ValueKey<String> ? rowIndex[key.value] : null,
-                      itemBuilder: (context, i) {
-                        final row = rows[i];
-                        // The half row the next card lands in: its empty
-                        // slot shows that card's skeleton meanwhile.
-                        if ((next?.fillsSlot ?? false) &&
-                            i == rows.length - 1) {
-                          return _Row(
-                            row,
-                            key: ValueKey(row.key),
-                            pendingSlot: true,
-                            onCard: onCard,
-                          );
-                        }
-                        return rowWidgets[row] ??= _Row(
-                          row,
-                          key: ValueKey(row.key),
-                          onCard: onCard,
-                        );
-                      },
-                    ),
-                ],
-              );
-            },
-          ),
+              ),
+            ),
+          ],
+        ),
+        // Talk Now floats just above the navbar, on Discover only: a pill on
+        // arrival, then a round call button at the right.
+        Positioned(
+          left: 16.ms,
+          right: 16.ms,
+          bottom: navbar + dockGap,
+          child: const TalkNowButton(),
         ),
       ],
     );
