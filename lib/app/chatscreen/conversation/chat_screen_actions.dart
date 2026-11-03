@@ -100,8 +100,8 @@ class ChatScreenActions implements ChatBubbleActions {
     final camera = choice == ChatAttach.camera;
     final photo = await _pick(camera: camera);
     if (photo == null || !context.mounted) return;
-    final price = priceOf(ChatMessageType.image);
-    if (!await confirmPhoto(context, photo: photo, price: price)) return;
+    if (!await confirmPhoto(context, photo: photo)) return;
+    final price = priceOf(ChatMessageType.image); // analytics only
     controller.sendPhoto(photo.path, width: photo.width, height: photo.height);
     ChatEvents.messageSent(
       type: 'image',

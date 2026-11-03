@@ -126,35 +126,6 @@ void main() {
       expect(ChatPricing.privatePriceAllowed(200, rules), isTrue);
       expect(ChatPricing.privatePriceAllowed(200.01, rules), isFalse);
     });
-
-    test('price lines', () {
-      final c = config(hostMediaPercent: 50);
-      final idle = ChatPriceLine.idle(
-        side: ChatSide.payer,
-        config: c,
-        textPrice: 2,
-        imagePrice: 3,
-      );
-      expect(idle.key, 'chat:price.line');
-      expect(idle.variables, {'text': '₹2', 'photo': '₹3', 'voice': '₹2'});
-      expect(
-        ChatPriceLine.idle(
-          side: ChatSide.host,
-          config: config(),
-          textPrice: 0,
-          imagePrice: 1.5,
-        ).key,
-        'chat:price.host_line_unknown',
-      );
-      expect(ChatPriceLine.typing(const ChatPrice(200)).variables, {
-        'price': '₹2',
-      });
-      expect(ChatPriceLine.typing(ChatPrice.free).key, 'chat:price.send_free');
-      expect(
-        ChatPriceLine.recording(const ChatPrice(100, fromEarnings: true)).key,
-        'chat:price.voice_from_earnings',
-      );
-    });
   });
 
   group('rows', () {

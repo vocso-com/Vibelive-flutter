@@ -10,22 +10,18 @@ import '../../component/c_text.dart';
 import '../../component/c_toast.dart';
 import '../../component/pressable.dart';
 import '../helper/chat_format.dart';
-import '../helper/chat_pricing.dart';
 import 'chat_palette.dart';
 import 'voice_recorder.dart';
 
 /// The input bar: a photo button, the text field, and send (with text) or
-/// a hold-to-record mic (without). The price of what is about to be sent is
-/// always on the line above it. Typing rebuilds only the parts that change
-/// (the send / mic swap, the price line, the counter).
+/// a hold-to-record mic (without). No prices here: chat prices show only
+/// in the chat menu's Prices sheet. Typing rebuilds only the parts that
+/// change (the send / mic swap, the counter).
 class ChatComposer extends StatefulWidget {
   const ChatComposer({
     super.key,
     required this.controller,
     required this.maxLength,
-    required this.idleLine,
-    required this.textPrice,
-    required this.voicePrice,
     required this.voiceMaxSeconds,
     required this.onSend,
     required this.onAttach,
@@ -35,14 +31,6 @@ class ChatComposer extends StatefulWidget {
   final TextEditingController controller;
   final int maxLength;
 
-  /// The line while nothing is typed: each type's price.
-  final ChatPriceLine idleLine;
-
-  /// What a text costs.
-  final ChatPrice textPrice;
-
-  /// What a voice note of that many seconds costs.
-  final ChatPrice Function(int seconds) voicePrice;
   final int voiceMaxSeconds;
   final ValueChanged<String> onSend;
   final VoidCallback onAttach;
@@ -111,15 +99,6 @@ class _ChatComposerState extends State<ChatComposer> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              _PriceLineView(
-                hasText: _hasText,
-                recording: _voice.since,
-                elapsed: _voice.elapsed,
-                idle: widget.idleLine,
-                text: widget.textPrice,
-                voice: widget.voicePrice,
-              ),
-              SizedBox(height: 6.ms),
               ValueListenableBuilder<DateTime?>(
                 valueListenable: _voice.since,
                 builder: (context, since, field) => Row(
@@ -235,56 +214,6 @@ class _Field extends StatelessWidget {
           ),
         ],
       ),
-    );
-  }
-}
-
-/// The price of what is about to be sent.
-class _PriceLineView extends StatelessWidget {
-  const _PriceLineView({
-    required this.hasText,
-    required this.recording,
-    required this.elapsed,
-    required this.idle,
-    required this.text,
-    required this.voice,
-  });
-
-  final ValueListenable<bool> hasText;
-  final ValueListenable<DateTime?> recording;
-  final ValueListenable<int> elapsed;
-  final ChatPriceLine idle;
-  final ChatPrice text;
-  final ChatPrice Function(int seconds) voice;
-
-  @override
-  Widget build(BuildContext context) {
-    final p = ChatPalette.of(context);
-    return ListenableBuilder(
-      listenable: Listenable.merge([hasText, recording, elapsed]),
-      builder: (context, _) {
-        final line = recording.value != null
-            ? ChatPriceLine.recording(voice(elapsed.value))
-            : hasText.value
-            ? ChatPriceLine.typing(text)
-            : idle;
-        return Semantics(
-          liveRegion: true,
-          child: SizedBox(
-            width: double.infinity,
-            child: CText(
-              line.key,
-              key: const ValueKey('chat-price-line'),
-              variables: line.variables,
-              size: 11.5,
-              weight: FontWeight.w600,
-              color: p.muted,
-              maxLines: 2,
-              align: TextAlign.center,
-            ),
-          ),
-        );
-      },
     );
   }
 }

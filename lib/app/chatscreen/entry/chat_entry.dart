@@ -16,7 +16,6 @@ import '../../api/chat/chat_queries.dart';
 import '../../api/listingflow/listing_models.dart';
 import '../../component/c_text.dart';
 import '../../component/pressable.dart';
-import '../helper/chat_pricing.dart';
 
 /// Ways into a chat from elsewhere in the app.
 abstract final class ChatEntry {
@@ -35,6 +34,17 @@ abstract final class ChatEntry {
     return id == null ? null : AppRoutes.chatWith('$id');
   }
 
+  /// The host's name as they wrote it ("Priya", not the card's "PRIYA"):
+  /// the public user's name, else the handle, else the card's name.
+  static String displayName(HostCard host) {
+    final user = Strapi.map(host.raw['user']);
+    for (final v in [user?['name'], host.raw['handler'], host.name]) {
+      final s = v?.toString().trim() ?? '';
+      if (s.isNotEmpty && s != 'null') return s;
+    }
+    return '';
+  }
+
   /// A host card can show a chat action: the host takes chats, has a public
   /// user, and is not the person looking at it.
   static bool canChatWith(HostCard host) =>
@@ -43,9 +53,10 @@ abstract final class ChatEntry {
       host.receiverId != SessionStore.instance.value.userId;
 }
 
-/// A Discover card's bottom row: a message button (a quarter of the width)
-/// beside Call Now (three quarters) while chat is on for this account and
-/// the host takes chats. Otherwise Call Now alone, exactly as before chat.
+/// A Discover card's bottom row: Call Now (three quarters of the width)
+/// with a message button after it (a quarter, on the right; mirrored in
+/// Urdu) while chat is on for this account and the host takes chats.
+/// Otherwise Call Now alone, exactly as before chat.
 class ChatCallSplit extends StatelessWidget {
   const ChatCallSplit({
     super.key,
@@ -71,6 +82,8 @@ class ChatCallSplit extends StatelessWidget {
       if (!on || route == null || !ChatEntry.canChatWith(host)) return call!;
       return Row(
         children: [
+          Expanded(flex: 3, child: call!),
+          SizedBox(width: 6.ms),
           Expanded(
             child: _CardChatButton(
               onPressed: () {
@@ -82,8 +95,6 @@ class ChatCallSplit extends StatelessWidget {
               },
             ),
           ),
-          SizedBox(width: 6.ms),
-          Expanded(flex: 3, child: call!),
         ],
       );
     },
@@ -119,9 +130,11 @@ class _CardChatButton extends StatelessWidget {
   );
 }
 
-/// "Chat · ₹2/msg" next to the call buttons on a host's profile: only
-/// while chat is on, the host takes chats, and it is not the viewer's own
-/// profile.
+/// "Chat with Priya" under the call buttons on a host's profile, full
+/// width in the outlined call button's style (the call row keeps its two
+/// buttons, lined up). Only while chat is on, the host takes chats, and it
+/// is not the viewer's own profile. No price (only the chat menu's Prices
+/// sheet shows chat prices).
 class ProfileChatButton extends StatelessWidget {
   const ProfileChatButton({
     super.key,
@@ -148,18 +161,18 @@ class ProfileChatButton extends StatelessWidget {
     if (isMe || route == null || !ChatEntry.hostAcceptsChats(host)) {
       return const SizedBox.shrink();
     }
-    final config = currentChatConfig();
     final c = context.colors;
     final dark = c.isDark;
-    final price = config.textPrice > 0
-        ? ChatPricing.money(config.textPrice)
-        : null;
+    final name = ChatEntry.displayName(host);
     return Padding(
-      padding: EdgeInsetsDirectional.only(start: 10.ms),
+      padding: EdgeInsets.only(top: 10.ms),
       child: Pressable(
         key: const ValueKey('profile-chat-button'),
         activeOpacity: 0.85,
-        semanticLabel: context.t('chat:profile.chat'),
+        semanticLabel: context.t(
+          name.isEmpty ? 'chat:profile.chat' : 'chat:profile.chat_with',
+          variables: {'name': name},
+        ),
         onPressed: () {
           ChatEvents.entryTapped(
             source: 'profile',
@@ -168,9 +181,9 @@ class ProfileChatButton extends StatelessWidget {
           open(route);
         },
         child: Container(
-          height: 54.ms,
-          constraints: BoxConstraints(minWidth: 64.ms),
-          padding: EdgeInsets.symmetric(horizontal: 10.ms),
+          height: 50.ms,
+          width: double.infinity,
+          padding: EdgeInsets.symmetric(horizontal: 16.ms),
           decoration: BoxDecoration(
             color: dark ? AppColors.whiteA(0.08) : AppColors.blackA(0.04),
             borderRadius: BorderRadius.circular(20.ms),
@@ -179,18 +192,21 @@ class ProfileChatButton extends StatelessWidget {
               color: dark ? AppColors.whiteA(0.2) : AppColors.blackA(0.15),
             ),
           ),
-          child: Column(
+          child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(LucideIcons.messageCircle, size: 20.ms, color: c.text),
-              SizedBox(height: 2.ms),
-              CText(
-                price == null ? 'chat:profile.chat' : 'chat:profile.chat_price',
-                variables: price == null ? null : {'price': price},
-                size: 10,
-                weight: FontWeight.w800,
-                color: c.text,
-                maxLines: 1,
+              Icon(LucideIcons.messageCircle, size: 19.ms, color: c.text),
+              SizedBox(width: 8.ms),
+              Flexible(
+                child: CText(
+                  name.isEmpty ? 'chat:profile.chat' : 'chat:profile.chat_with',
+                  variables: {'name': name},
+                  size: 14,
+                  weight: FontWeight.w800,
+                  color: c.text,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
             ],
           ),

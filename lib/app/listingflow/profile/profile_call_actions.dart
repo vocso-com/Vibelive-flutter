@@ -13,7 +13,7 @@ import 'helper/host_profile_rules.dart';
 import 'profile_header.dart';
 
 /// Audio / video call buttons with their rates (RN `CallActionsContent`),
-/// and Chat beside them.
+/// and Chat under them.
 /// A call type without a rate is hidden; company accounts call for free (the
 /// rate still shows, above the label).
 /// Only this block rebuilds while a call is being prepared.
@@ -109,14 +109,14 @@ class ProfileCallActions extends StatelessWidget {
                   ),
                 if (!showAudio && !showVideo)
                   const Expanded(child: ProfileCallsUnavailable()),
-                // Chat, when it is on and the host takes chats.
-                ProfileChatButton(
-                  host: host,
-                  isMe: isMe,
-                  open: controller.navigate,
-                ),
               ],
             ),
+          ),
+          // Chat under the calls, when it is on and the host takes chats.
+          ProfileChatButton(
+            host: host,
+            isMe: isMe,
+            open: controller.navigate,
           ),
         ],
       ),

@@ -25,7 +25,6 @@ import '../components/chat_header.dart';
 import '../components/chat_palette.dart';
 import '../components/chat_secure_zone.dart';
 import '../components/low_balance_bar.dart';
-import '../helper/chat_pricing.dart';
 import '../helper/low_balance.dart';
 import '../helper/chat_room_controller.dart';
 import '../helper/chat_screen_guard.dart';
@@ -365,7 +364,6 @@ class _Bottom extends StatelessWidget {
         ? 'chat:notice.reply_only'
         : null;
     if (notice != null) return _Notice(text: notice);
-    final side = open.mySide;
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -383,14 +381,6 @@ class _Bottom extends StatelessWidget {
         ChatComposer(
           controller: text,
           maxLength: config.maxMessageLength,
-          idleLine: ChatPriceLine.idle(
-            side: side,
-            config: config,
-            textPrice: open.pricePerMessage,
-            imagePrice: open.imagePrice,
-          ),
-          textPrice: actions.priceOf(ChatMessageType.text),
-          voicePrice: (s) => actions.priceOf(ChatMessageType.audio, seconds: s),
           voiceMaxSeconds: config.voice.maxSeconds,
           onSend: actions.sendText,
           onAttach: () => unawaited(actions.attachPhoto()),

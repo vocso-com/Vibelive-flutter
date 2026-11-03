@@ -16,6 +16,7 @@ import 'package:vibelive/app/api/listingflow/listing_models.dart';
 import 'package:vibelive/app/callscreen/helper/push/app_update_push.dart';
 import 'package:vibelive/app/callscreen/helper/push/chat_push.dart';
 import 'package:vibelive/app/callscreen/helper/push/push_envelope.dart';
+import 'package:vibelive/app/callscreen/helper/call_permissions.dart';
 import 'package:vibelive/app/callscreen/helper/push/notification_tap_router.dart';
 import 'package:vibelive/app/chatscreen/components/message_bubble.dart';
 import 'package:vibelive/app/chatscreen/conversation/chat_screen.dart';
@@ -50,6 +51,18 @@ final _png = base64Decode(
 );
 
 /// The chat API (backend docs/chat_api.md §4) with switches for each case.
+/// The call layer's permission gate without the plugin channel.
+class _Granted implements CallPermissionBackend {
+  @override
+  Future<CallAccess> check({required bool video}) async => CallAccess.granted;
+
+  @override
+  Future<CallAccess> request({required bool video}) async => CallAccess.granted;
+
+  @override
+  Future<void> openSettings() async {}
+}
+
 /// Me: user 1. The other person: host 7, conversation c1.
 class _Backend implements HttpClientAdapter {
   /// `/chats/config`: an HTTP status, or `malformed` / `offline`.
@@ -73,6 +86,12 @@ class _Backend implements HttpClientAdapter {
   final messageReads = <Map<String, dynamic>>[];
   var unlocked = false;
 
+  /// `POST /api/initiateCall` bodies (a call placed from the chat header).
+  final calls = <Map<String, Object?>>[];
+
+  /// The cash wallet (`GET /api/wallets`): the call's balance gate.
+  double wallet = 100;
+
   int _seq = 0;
 
   @override
@@ -82,6 +101,9 @@ class _Backend implements HttpClientAdapter {
     Future<void>? _,
   ) async {
     paths.add('${o.method} ${o.path}');
+    if (o.method == 'POST' && o.path == '/api/initiateCall') {
+      calls.add(Map<String, Object?>.from(o.data as Map));
+    }
     if (o.path == '/api/chats/config') {
       if (config == 'offline') throw _offline(o);
       if (config == 'malformed') {
@@ -254,10 +276,15 @@ class _Backend implements HttpClientAdapter {
         return {'ok': true};
       case 'GET /api/chats/settings':
         return {'acceptChats': null, 'notify': true};
+      // The host behind the chat (user 7): the header's call buttons.
+      case 'GET /api/expert-profiles':
+        return {
+          'data': [_host()],
+        };
       case 'GET /api/wallets':
         return {
           'data': [
-            {'id': 1, 'balance': 100},
+            {'id': 1, 'balance': wallet},
           ],
         };
       default:
@@ -502,9 +529,14 @@ void main() {
     await _pump(tester, 900);
     expect(find.byType(ChatScreen), findsOneWidget);
     expect(find.text('Hello there'), findsWidgets);
-    // Price before sending.
-    expect(find.text('Message ₹2 · Photo ₹3 · Voice from ₹2'), findsOneWidget);
+    // No chat prices on the screen: only the menu's Prices sheet has them.
+    expect(find.textContaining('₹'), findsNothing);
     expect(backend.paths, contains('POST /api/chats/conversations/c1/read'));
+    await tester.tap(find.byIcon(LucideIcons.ellipsisVertical));
+    await _pump(tester, 500);
+    await tester.tap(find.text('Prices'));
+    await _pump(tester, 500);
+    expect(find.textContaining('₹2'), findsWidgets);
     await finish(tester);
   });
 
@@ -513,8 +545,17 @@ void main() {
   ) async {
     await openApp(tester);
     await openProfile(tester);
-    expect(find.byKey(const ValueKey('profile-chat-button')), findsOneWidget);
-    await tester.tap(find.byKey(const ValueKey('profile-chat-button')));
+    final chat = find.byKey(const ValueKey('profile-chat-button'));
+    expect(chat, findsOneWidget);
+    expect(find.text('Chat with Priya'), findsOneWidget);
+    // Under the call buttons, as wide as their row.
+    final calls = find.byType(ProfileCallButton);
+    final callsLeft = tester.getTopLeft(calls.first).dx;
+    final callsRight = tester.getTopRight(calls.last).dx;
+    expect(tester.getTopLeft(chat).dy, greaterThan(tester.getBottomLeft(calls.first).dy));
+    expect(tester.getTopLeft(chat).dx, closeTo(callsLeft, 1));
+    expect(tester.getTopRight(chat).dx, closeTo(callsRight, 1));
+    await tester.tap(chat);
     await _pump(tester, 900);
     expect(find.byType(ChatScreen), findsOneWidget);
     await finish(tester);
@@ -529,7 +570,8 @@ void main() {
       'Hi Priya',
     );
     await tester.pump();
-    expect(find.text('₹2 to send this message'), findsOneWidget);
+    // Chat prices live only in the menu's Prices sheet.
+    expect(find.textContaining('₹'), findsNothing);
     await tester.tap(find.byKey(const ValueKey('chat-send')));
     await tester.pump();
     expect(find.text('Hi Priya'), findsOneWidget); // at once
@@ -729,6 +771,52 @@ void main() {
       expect(find.byType(HomeScreen), findsOneWidget);
       await finish(tester);
     });
+  });
+
+  testWidgets('header calls: voice and video look alike, and call the '
+      'person in the chat; one call at a time', (tester) async {
+    backend.wallet = 500; // past the call's balance gate (5 min × ₹30)
+    CallPermissions.backend = _Granted();
+    await openApp(tester, location: AppRoutes.chatWith('7'));
+    final voice = find.byKey(const ValueKey('chat-call-audio'));
+    final video = find.byKey(const ValueKey('chat-call-video'));
+    expect(voice, findsOneWidget);
+    expect(video, findsOneWidget);
+    BoxDecoration disc(Finder f) =>
+        tester
+                .widget<Container>(
+                  find.descendant(of: f, matching: find.byType(Container)).first,
+                )
+                .decoration!
+            as BoxDecoration;
+    expect(disc(voice).color, disc(video).color);
+    expect(tester.getSize(voice), tester.getSize(video));
+
+    await tester.tap(video);
+    await _pump(tester, 400);
+    expect(find.text('Before you connect'), findsOneWidget);
+    await tester.tap(find.text('Start'));
+    await _pump(tester, 800);
+    // The call went to Priya (user 7), the person in this chat.
+    expect(backend.calls, hasLength(1));
+    expect(backend.calls.single['receiverId'], 7);
+    expect(backend.calls.single['type'], 'videoCall');
+
+    // This fake answers nothing joinable: the call layer's alert. Once it
+    // is closed, both buttons work again (no spinner left behind).
+    await tester.tap(find.text('OK').last);
+    await _pump(tester, 400);
+    expect(
+      find.descendant(
+        of: find.byType(ChatScreen),
+        matching: find.byType(CircularProgressIndicator),
+      ),
+      findsNothing,
+    );
+    await tester.tap(voice);
+    await _pump(tester, 400);
+    expect(find.text('Before you connect'), findsOneWidget);
+    await finish(tester);
   });
 
   testWidgets('a malformed chat push is ignored safely', (tester) async {

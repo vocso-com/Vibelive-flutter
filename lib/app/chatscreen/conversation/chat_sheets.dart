@@ -106,11 +106,11 @@ Future<ChatAttach?> showAttachSheet(
   );
 }, name: 'chat_attach_sheet');
 
-/// The picked photo and what it costs; true to send.
+/// The picked photo; true to send. No price (only the menu's Prices sheet
+/// shows chat prices).
 Future<bool> confirmPhoto(
   BuildContext context, {
   required ChatPickedPhoto photo,
-  required ChatPrice price,
 }) async {
   final ok = await showProfileSheet<bool>(context, (sheet) {
     final w = MediaQuery.sizeOf(sheet).width - 40.ms;
@@ -118,7 +118,6 @@ Future<bool> confirmPhoto(
       120.0,
       MediaQuery.sizeOf(sheet).height * 0.5,
     );
-    final (key, vars) = _photoPrice(price);
     return SheetCard(
       handle: true,
       child: Padding(
@@ -136,15 +135,7 @@ Future<bool> confirmPhoto(
                 cacheWidth: (w * MediaQuery.devicePixelRatioOf(sheet)).round(),
               ),
             ),
-            SizedBox(height: 14.ms),
-            CText(
-              key,
-              variables: vars,
-              size: 13,
-              weight: FontWeight.w700,
-              align: TextAlign.center,
-            ),
-            SizedBox(height: 14.ms),
+            SizedBox(height: 16.ms),
             CButton(
               key: const ValueKey('chat-photo-send'),
               title: 'chat:composer.send_photo',
@@ -157,16 +148,6 @@ Future<bool> confirmPhoto(
     );
   }, name: 'chat_photo_confirm_sheet');
   return ok ?? false;
-}
-
-(String, Map<String, String>) _photoPrice(ChatPrice price) {
-  if (!price.isKnown) return ('chat:price.photo_earnings', const {});
-  if (price.isFree) return ('chat:price.photo_free', const {});
-  final money = ChatPricing.moneyPaise(price.paise!);
-  return (
-    price.fromEarnings ? 'chat:price.photo_from_earnings' : 'chat:price.photo',
-    {'price': money},
-  );
 }
 
 /// "Unlock this photo?": price, where it comes from, what is in the
@@ -382,10 +363,16 @@ Future<bool> showChatPrices(
                         maxLines: 1,
                       ),
                     ),
+                    SizedBox(width: 10.ms),
+                    // A width of its own: in a Row a CButton would take
+                    // all of it (infinite) and the sheet failed to lay out.
                     CButton(
+                      key: const ValueKey('chat-prices-add-money'),
                       title: 'chat:low_balance.add',
                       variant: CButtonVariant.small,
                       showArrow: false,
+                      width: 124.ms,
+                      height: 40.ms,
                       onPressed: () => Navigator.of(sheet).pop(true),
                     ),
                   ],

@@ -69,22 +69,6 @@
     "private": "Private photo (they pay to see it)",
     "send_photo": "Send photo"
   },
-  "price": {
-    "line": "Message {{text}} · Photo {{photo}} · Voice from {{voice}}",
-    "free_line": "Messages here are free",
-    "host_line": "Replies are free · Photo {{photo}} · Voice from {{voice}}, from your earnings",
-    "host_line_unknown": "Replies are free · Photos and voice notes are paid from your earnings",
-    "send_text": "{{price}} to send this message",
-    "send_free": "Free to send",
-    "voice": "Voice note · {{price}}",
-    "voice_from_earnings": "Voice note · {{price}} from your earnings",
-    "voice_free": "Voice note · free",
-    "voice_earnings": "Voice note · paid from your earnings",
-    "photo": "This photo costs {{price}}",
-    "photo_from_earnings": "This photo costs {{price}} from your earnings",
-    "photo_earnings": "This photo is paid from your earnings",
-    "photo_free": "This photo is free to send"
-  },
   "notice": {
     "host_off": "Not taking chats right now",
     "reply_only": "You can reply once they message you",
@@ -217,7 +201,7 @@
   },
   "profile": {
     "chat": "Chat",
-    "chat_price": "{{price}}/msg"
+    "chat_with": "Chat with {{name}}"
   },
   "secure": {
     "shield": "This chat is hidden while your screen is recorded"

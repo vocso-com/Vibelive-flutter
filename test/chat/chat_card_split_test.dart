@@ -43,8 +43,8 @@ void main() {
     'handler': 'priya',
     'tagline': 'Let us talk',
     'isActive': true,
-    'rates': {'videoCallRate': 30, 'voiceCallRate': 20},
-    'host_profile_images': <Object>[],
+    'rates': const {'videoCallRate': 30, 'voiceCallRate': 20},
+    'host_profile_images': const <Object>[],
     'user': {'id': userId, 'documentId': 'usr$userId', 'name': 'Priya'},
     'chat_enabled': ?acceptsChats,
   });
@@ -115,7 +115,7 @@ void main() {
     expect(calls(), 1);
   });
 
-  testWidgets('chat on: message ¼ beside Call Now ¾; a tap opens the chat', (
+  testWidgets('chat on: Call Now ¾, message ¼ on the right; a tap opens it', (
     tester,
   ) async {
     ChatAvailability.instance.value = true;
@@ -124,6 +124,11 @@ void main() {
     final chatWidth = tester.getSize(find.byKey(chatKey)).width;
     final callWidth = tester.getSize(callNow()).width;
     expect(callWidth / chatWidth, closeTo(3, 0.05));
+    expect(
+      tester.getCenter(find.byKey(chatKey)).dx,
+      greaterThan(tester.getCenter(callNow()).dx),
+      reason: 'the message button is on the right',
+    );
 
     await tester.tap(callNow());
     expect(calls(), 1, reason: 'Call Now still calls');

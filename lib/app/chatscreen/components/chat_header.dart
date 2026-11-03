@@ -220,50 +220,63 @@ class ChatAvatar extends StatelessWidget {
   }
 }
 
-/// A small round call button in the header.
+/// A round call button in the header. Voice and video look the same (a
+/// soft accent disc, the profile's call icons): one pair, two call types.
 class ChatCallButton extends StatelessWidget {
   const ChatCallButton({
     super.key,
     required this.video,
     required this.onTap,
     this.busy = false,
+    this.enabled = true,
   });
 
   final bool video;
   final VoidCallback? onTap;
+
+  /// This button's call is being prepared: a spinner in place of the icon.
   final bool busy;
+
+  /// False while either call is being prepared: one call at a time.
+  final bool enabled;
 
   @override
   Widget build(BuildContext context) {
     final p = ChatPalette.of(context);
-    return Pressable(
-      onPressed: busy ? null : onTap,
-      semanticLabel: context.t(
-        video ? 'chat:header.video_call' : 'chat:header.voice_call',
-      ),
-      child: Container(
-        width: 36.ms,
-        height: 36.ms,
-        margin: EdgeInsetsDirectional.only(start: 6.ms),
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          color: video ? p.accent : p.chip,
+    final active = enabled && !busy;
+    return Opacity(
+      opacity: active || busy ? 1 : 0.4,
+      child: Pressable(
+        onPressed: active ? onTap : null,
+        activeOpacity: 0.8,
+        semanticLabel: context.t(
+          video ? 'chat:header.video_call' : 'chat:header.voice_call',
         ),
-        child: busy
-            ? Padding(
-                padding: EdgeInsets.all(9.ms),
-                child: RepaintBoundary(
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    color: video ? p.onAccent : p.text,
+        child: Container(
+          width: 38.ms,
+          height: 38.ms,
+          margin: EdgeInsetsDirectional.only(start: 6.ms),
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: p.accent.withValues(alpha: 0.14),
+          ),
+          child: busy
+              ? SizedBox.square(
+                  dimension: 16.ms,
+                  child: RepaintBoundary(
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: p.accent,
+                    ),
                   ),
+                )
+              : Icon(
+                  video ? Icons.videocam : Icons.call,
+                  size: (video ? 21 : 19).ms,
+                  color: p.accent,
                 ),
-              )
-            : Icon(
-                video ? LucideIcons.video : LucideIcons.phone,
-                size: 17.ms,
-                color: video ? p.onAccent : p.text,
-              ),
+        ),
       ),
     );
   }
