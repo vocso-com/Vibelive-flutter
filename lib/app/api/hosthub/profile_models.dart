@@ -132,6 +132,11 @@ class HostProfile {
 
   HostRates get rates => HostRates.from(raw['rates']);
 
+  /// Backend-controlled pricing for this host (call_pricing §5.2), present on
+  /// the host's own profile only when the feature is active for them;
+  /// [CallPricing.inactive] otherwise, which keeps the editable rate screen.
+  CallPricing get callPricing => CallPricing.from(raw['callPricing']);
+
   List<HostOption> get languages => [
     for (final row in Strapi.list(raw['language'])) ?HostOption.language(row),
   ];
@@ -282,6 +287,54 @@ class HostRates {
     'voiceCallRate': voiceCallRate,
     'videoCallRate': videoCallRate,
   };
+}
+
+/// What VibeLive pays this host per minute when the backend controls pricing
+/// (call_pricing §5.2): read from the `callPricing` block the backend adds to
+/// the host's own expert-profile. Parsed leniently — absent or `active:false`
+/// reads as [inactive] (the host keeps the editable rate screen), and a
+/// missing amount reads as null (the screen shows nothing for it rather than
+/// crashing). The app never sends any of this back; it is display-only.
+class CallPricing {
+  const CallPricing({
+    required this.active,
+    this.level,
+    this.voiceEarn,
+    this.videoEarn,
+    this.currency = '₹',
+  });
+
+  /// The feature is off for this host: the current editable rate screen.
+  static const inactive = CallPricing(active: false);
+
+  factory CallPricing.from(dynamic raw) {
+    final m = Strapi.map(raw);
+    if (m == null || !HostFlag.isOn(m['active'])) return inactive;
+    // A non-finite or negative amount is treated as absent (show nothing).
+    double? earn(dynamic v) {
+      final n = J.number(v);
+      return n != null && n.isFinite && n >= 0 ? n.toDouble() : null;
+    }
+
+    final cur = (J.str(m['currency']) ?? '').trim();
+    return CallPricing(
+      active: true,
+      level: J.integer(m['level']),
+      voiceEarn: earn(m['voiceEarn']),
+      videoEarn: earn(m['videoEarn']),
+      currency: cur.isEmpty ? '₹' : cur,
+    );
+  }
+
+  final bool active;
+
+  /// The host's earning level (1–5), for an optional note. Null = not sent.
+  final int? level;
+
+  /// Per-minute host earnings (₹). Null = the backend sent no number.
+  final double? voiceEarn;
+  final double? videoEarn;
+  final String currency;
 }
 
 enum HostWeekday {

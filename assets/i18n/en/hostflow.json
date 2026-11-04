@@ -139,7 +139,11 @@
     "earn_desc": "You receive this amount for every minute of a completed call.",
     "fee_line": "Customer pays ₹{{pays}}/min  •  Platform fee ({{percent}}%) ₹{{fee}}/min",
     "invite_title": "INVITE LINK EARNINGS",
-    "invite_desc": "From people who join with your invite link"
+    "invite_desc": "From people who join with your invite link",
+    "ro_subtitle": "Choose the call formats you offer. Your per-minute earnings are set by VibeLive.",
+    "set_by_vibelive": "Set by VibeLive",
+    "set_note": "Your per-minute earnings are set by VibeLive.",
+    "set_note_level": "Level {{level}} • Your per-minute earnings are set by VibeLive."
   },
   "availability": {
     "title": "When can people call you?",

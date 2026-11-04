@@ -7,9 +7,13 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../../../core/analytics/events/host_events.dart';
 import '../../../../core/config/runtime_config.dart';
 import '../../../../core/i18n/i18n.dart';
+import '../../../../core/query/query_hooks.dart';
 import '../../../../core/router/app_router.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/utils/scale.dart';
+import '../../../api/hosthub/hosthub_keys.dart';
+import '../../../api/hosthub/hosthub_queries.dart';
+import '../../../api/hosthub/profile_models.dart';
 import '../../../api/paymentscreen/billing_models.dart';
 import '../../../api/paymentscreen/payment_queries.dart';
 import '../../../api/paymentscreen/runtime_config_queries.dart';
@@ -33,13 +37,30 @@ import '../widgets/step_body.dart';
 /// CallRatesScreen "Estimated earnings payout"), worked out the way the
 /// backend bills a call ([HostPayoutTerms]).
 class RatesStep extends HookWidget {
-  const RatesStep({super.key, required this.draft});
+  const RatesStep({super.key, required this.draft, this.callPricing});
   final HostDraftController draft;
+
+  /// Overrides the host's own [CallPricing] (tests / explicit callers); null
+  /// reads it from the host's own profile.
+  final CallPricing? callPricing;
 
   @override
   Widget build(BuildContext context) {
     final pricing = usePricingConfig(context).data ?? PricingConfig.empty;
     final runtime = useRuntimeConfig(context);
+    // The backend adds a `callPricing` block to the host's own profile when
+    // it controls pricing for them (call_pricing §5.2). Read unconditionally
+    // (hooks); a non-host / inactive host reads as null and the editable
+    // screen below is unchanged.
+    final ownPricing = useHostProfile(context).data?.callPricing;
+    // Re-read the host's own profile on resume so a change the admin makes
+    // (level, feature on) lands without a reinstall (§7.3); the CONFIG_UPDATED
+    // push with scope `call_pricing` does the same while the app is open.
+    useOnAppLifecycleStateChange((_, state) {
+      if (state == AppLifecycleState.resumed) {
+        queryCache.invalidateAll(const [HostHubKeys.profileAll]);
+      }
+    });
     final voicePayout = HostRatePayout.from(runtime, pricing, video: false);
     final videoPayout = HostRatePayout.from(runtime, pricing, video: true);
     final voiceMin = HostValidation.minRate(pricing.minimumVoiceRate);
@@ -51,6 +72,13 @@ class RatesStep extends HookWidget {
       return null;
     }, [voiceMin, videoMin]);
     final p = HostPalette.of(context);
+
+    // Backend controls pricing for this host: a read-only earnings screen.
+    // The host keeps the format on/off switch; only the amounts are fixed.
+    final backendPricing = callPricing ?? ownPricing ?? CallPricing.inactive;
+    if (backendPricing.active) {
+      return HostEarningsReadOnly(draft: draft, pricing: backendPricing);
+    }
 
     void showEarnings() {
       HostEvents.earningsViewed(
@@ -118,6 +146,243 @@ class RatesStep extends HookWidget {
                 Icon(LucideIcons.arrowRight, size: 14.ms, color: p.accent),
               ],
             ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// The Rates step when VibeLive sets this host's pricing (call_pricing §7.1):
+/// the host no longer picks an amount. Each format shows what they EARN per
+/// minute, set by VibeLive, with the format on/off switch still editable.
+/// No "caller pays", no platform fee, no invite-link rows, no fee sheet.
+class HostEarningsReadOnly extends StatelessWidget {
+  const HostEarningsReadOnly({
+    super.key,
+    required this.draft,
+    required this.pricing,
+  });
+
+  final HostDraftController draft;
+  final CallPricing pricing;
+
+  @override
+  Widget build(BuildContext context) => HostStepBody(
+    title: 'hostflow:rates.title',
+    subtitle: 'hostflow:rates.ro_subtitle',
+    children: [
+      _EarningCard(
+        icon: LucideIcons.headphones,
+        title: 'hostflow:rates.audio',
+        subtitle: 'hostflow:rates.audio_sub',
+        on: draft.audioOn,
+        earn: pricing.voiceEarn,
+        callType: 'audio',
+      ),
+      SizedBox(height: 12.ms),
+      _EarningCard(
+        icon: LucideIcons.video,
+        title: 'hostflow:rates.video',
+        subtitle: 'hostflow:rates.video_sub',
+        on: draft.videoOn,
+        earn: pricing.videoEarn,
+        callType: 'video',
+      ),
+      SizedBox(height: 16.ms),
+      _SetByVibeLiveNote(level: pricing.level),
+    ],
+  );
+}
+
+/// A read-only format card: the same header and switch as [RateFormatCard],
+/// but once on it shows the fixed earning instead of a stepper.
+class _EarningCard extends StatelessWidget {
+  const _EarningCard({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.on,
+    required this.earn,
+    required this.callType,
+  });
+
+  final IconData icon;
+
+  /// i18n keys.
+  final String title;
+  final String subtitle;
+  final ValueNotifier<bool> on;
+
+  /// Per-minute earning (₹); null = the backend sent no number (show nothing).
+  final double? earn;
+
+  /// `audio` / `video`, for analytics.
+  final String callType;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = HostPalette.of(context);
+    return HostCard(
+      padding: EdgeInsets.all(14.ms),
+      child: ValueListenableBuilder<bool>(
+        valueListenable: on,
+        builder: (_, enabled, _) => Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                Container(
+                  width: 48.ms,
+                  height: 48.ms,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    gradient: p.buttonGradient,
+                    borderRadius: BorderRadius.circular(13.ms),
+                  ),
+                  child: Icon(icon, size: 24.ms, color: p.onAccent),
+                ),
+                SizedBox(width: 12.ms),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      CText(
+                        title,
+                        size: 17,
+                        weight: FontWeight.w800,
+                        color: p.text,
+                      ),
+                      SizedBox(height: 2.ms),
+                      CText(
+                        subtitle,
+                        size: 13,
+                        weight: FontWeight.w500,
+                        color: p.muted,
+                      ),
+                    ],
+                  ),
+                ),
+                SizedBox(width: 8.ms),
+                HostSwitch(
+                  key: ValueKey('hostflow-switch-$title'),
+                  value: enabled,
+                  onChanged: (v) {
+                    on.value = v;
+                    HostEvents.callTypeToggled(callType: callType, enabled: v);
+                  },
+                ),
+              ],
+            ),
+            AnimatedSize(
+              duration: const Duration(milliseconds: 220),
+              curve: Curves.easeOut,
+              alignment: Alignment.topCenter,
+              child: enabled
+                  ? Padding(
+                      padding: EdgeInsets.only(top: 14.ms),
+                      child: _EarningAmount(earn: earn),
+                    )
+                  : const SizedBox(width: double.infinity),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// "YOU EARN ₹14 / min" on the money-green card, with "Set by VibeLive"
+/// under it. No info icon: there is no fee breakdown in this mode.
+class _EarningAmount extends StatelessWidget {
+  const _EarningAmount({required this.earn});
+
+  final double? earn;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = _RateColors.of(context);
+    return Container(
+      padding: EdgeInsets.fromLTRB(14.ms, 12.ms, 10.ms, 12.ms),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: c.earnBg,
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(16.ms),
+        border: Border.all(color: c.earnBorder),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                CText(
+                  'hostflow:rates.you_earn',
+                  size: 12,
+                  weight: FontWeight.w800,
+                  letterSpacing: 0.8,
+                  color: c.earnLabel,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                SizedBox(height: 2.ms),
+                // Missing amount: show nothing rather than crash.
+                if (earn case final earn?) ...[
+                  _Amount(amount: earn, color: c.earnAmount, size: 32),
+                  SizedBox(height: 4.ms),
+                ],
+                CText(
+                  'hostflow:rates.set_by_vibelive',
+                  size: 12,
+                  height: 17,
+                  weight: FontWeight.w600,
+                  color: c.earnText,
+                ),
+              ],
+            ),
+          ),
+          SizedBox(width: 6.ms),
+          CoinStack(
+            size: 62.ms,
+            face: c.coinFace,
+            side: c.coinSide,
+            ring: c.coinRing,
+            glyph: c.coinGlyph,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// The footer note: earnings are VibeLive's to set, with the level if known.
+class _SetByVibeLiveNote extends StatelessWidget {
+  const _SetByVibeLiveNote({this.level});
+
+  final int? level;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = HostPalette.of(context);
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        Icon(LucideIcons.info, size: 15.ms, color: p.muted),
+        SizedBox(width: 6.ms),
+        Flexible(
+          child: CText(
+            level != null
+                ? 'hostflow:rates.set_note_level'
+                : 'hostflow:rates.set_note',
+            variables: level != null ? {'level': level} : null,
+            size: 13,
+            height: 18,
+            weight: FontWeight.w500,
+            color: p.muted,
+            align: TextAlign.center,
           ),
         ),
       ],
