@@ -193,6 +193,10 @@ class ChatScreen extends HookWidget {
       void check() {
         final o = controller.open.value;
         if (o == null) return;
+        // The free opener never counts as low balance.
+        if (config.firstMessageFree && o.paying && o.conversationId == null) {
+          return;
+        }
         final low = ChatLowBalance.of(
           paying: o.paying,
           chatEnabled: o.chatEnabled,
@@ -373,6 +377,10 @@ class _Bottom extends StatelessWidget {
           threshold: config.lowBalanceMessages,
           paying: open.paying,
           chatEnabled: open.chatEnabled,
+          // The opener (no conversation yet) is free, so show that instead of
+          // a balance or a low-balance warning.
+          firstMessageFree:
+              config.firstMessageFree && open.conversationId == null,
           onAdd: () {
             ChatEvents.addMoney('bar');
             unawaited(ChatScreenActions.openWallet(context));

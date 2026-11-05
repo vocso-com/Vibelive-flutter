@@ -36,14 +36,13 @@ class _PriceSheet extends HookWidget {
   Widget build(BuildContext context) {
     final c = context.colors;
     final picks = useMemoized(() => ChatPricing.privatePicks(rules), [rules]);
+    // `price` holds what the HOST EARNS; the buyer is charged earning × multiplier.
     final price = useState<double?>(
       picks.isEmpty ? rules.minPrice : picks[picks.length > 1 ? 1 : 0],
     );
     final custom = useTextEditingController();
     final valid = ChatPricing.privatePriceAllowed(price.value, rules);
-    final earn = valid
-        ? ChatPricing.privateSharePaise(price.value!, rules.hostSharePercent)
-        : 0;
+    final buyerPaise = valid ? ChatPricing.buyerPricePaise(price.value!, rules) : 0;
     final range = {
       'min': ChatPricing.money(rules.minPrice),
       'max': ChatPricing.money(rules.maxPrice),
@@ -71,21 +70,37 @@ class _PriceSheet extends HookWidget {
                   color: c.textMuted,
                 ),
                 SizedBox(height: 14.ms),
-                Wrap(
-                  spacing: 8.ms,
-                  runSpacing: 8.ms,
-                  children: [
-                    for (final p in picks)
-                      _Pick(
-                        label: ChatPricing.money(p),
-                        selected: price.value == p && custom.text.isEmpty,
-                        onTap: () {
-                          custom.clear();
-                          price.value = p;
-                        },
+                // Two per row (a tidy 2×2 grid), each showing what the host earns.
+                for (var i = 0; i < picks.length; i += 2) ...[
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _Pick(
+                          label: ChatPricing.money(picks[i]),
+                          selected: price.value == picks[i] && custom.text.isEmpty,
+                          onTap: () {
+                            custom.clear();
+                            price.value = picks[i];
+                          },
+                        ),
                       ),
-                  ],
-                ),
+                      SizedBox(width: 8.ms),
+                      Expanded(
+                        child: i + 1 < picks.length
+                            ? _Pick(
+                                label: ChatPricing.money(picks[i + 1]),
+                                selected: price.value == picks[i + 1] && custom.text.isEmpty,
+                                onTap: () {
+                                  custom.clear();
+                                  price.value = picks[i + 1];
+                                },
+                              )
+                            : const SizedBox.shrink(),
+                      ),
+                    ],
+                  ),
+                  if (i + 2 < picks.length) SizedBox(height: 8.ms),
+                ],
                 SizedBox(height: 12.ms),
                 MediaQuery.withNoTextScaling(
                   child: TextField(
@@ -115,17 +130,23 @@ class _PriceSheet extends HookWidget {
                   ),
                 ),
                 SizedBox(height: 10.ms),
-                if (valid)
+                if (valid) ...[
                   CText(
                     'chat:private.price_earn',
-                    variables: {
-                      'earn': ChatPricing.moneyPaise(earn),
-                      'percent': '${rules.hostSharePercent}',
-                    },
-                    size: 13,
-                    weight: FontWeight.w700,
+                    variables: {'earn': ChatPricing.money(price.value!)},
+                    size: 14,
+                    weight: FontWeight.w800,
                     color: StatusColors.success,
                   ),
+                  SizedBox(height: 3.ms),
+                  CText(
+                    'chat:private.price_buyer',
+                    variables: {'buyer': ChatPricing.moneyPaise(buyerPaise)},
+                    size: 12,
+                    weight: FontWeight.w600,
+                    color: c.textMuted,
+                  ),
+                ],
                 SizedBox(height: 14.ms),
                 CButton(
                   key: const ValueKey('chat-private-send'),
@@ -137,8 +158,11 @@ class _PriceSheet extends HookWidget {
                       : null,
                   showArrow: false,
                   disabled: !valid,
+                  // Return the BUYER price (earning × multiplier); the server charges that
+                  // and pays the host back their earning.
                   onPressed: valid
-                      ? () => Navigator.of(context).pop(price.value)
+                      ? () => Navigator.of(context)
+                            .pop(ChatPricing.buyerPricePaise(price.value!, rules) / 100)
                       : null,
                 ),
               ],

@@ -114,20 +114,27 @@ abstract final class ChatPricing {
   }
 
   /// A host's share of a private photo sold at [price] rupees: floor in
-  /// paise, as the server pays it.
+  /// paise, as the server pays it (legacy share-percent model).
   static int privateSharePaise(double price, int percent) =>
       (paise(price) * percent / 100).floor();
 
-  /// [price] inside the admin's range.
-  static bool privatePriceAllowed(double? price, ChatPrivatePhotoRules rules) =>
-      price != null &&
-      paise(price) >= paise(rules.minPrice) &&
-      paise(price) <= paise(rules.maxPrice);
+  /// The buyer price (in paise) for a host [earn]ing, with the admin markup:
+  /// what the buyer is shown and charged. The backend pays the host back
+  /// `buyer ÷ multiplier`, so this round-trips to [earn].
+  static int buyerPricePaise(double earn, ChatPrivatePhotoRules rules) =>
+      (paise(earn) * rules.earnMultiplier).round();
 
-  /// Quick picks for the host's price sheet, inside [rules]' range; the
-  /// range ends themselves when no pick fits.
+  /// [earn] (what the host wants to earn) inside the admin's earning range.
+  static bool privatePriceAllowed(double? earn, ChatPrivatePhotoRules rules) =>
+      earn != null &&
+      paise(earn) >= paise(rules.minPrice) &&
+      paise(earn) <= paise(rules.maxPrice);
+
+  /// Quick host-earning picks for the price sheet, inside [rules]' range;
+  /// the range ends themselves when no pick fits. Round numbers so the
+  /// buyer price (× the multiplier) stays tidy at the common 1.2.
   static List<double> privatePicks(ChatPrivatePhotoRules rules) {
-    const picks = [49.0, 99.0, 199.0, 499.0];
+    const picks = [50.0, 100.0, 200.0, 500.0];
     final inside = [
       for (final p in picks)
         if (privatePriceAllowed(p, rules)) p,

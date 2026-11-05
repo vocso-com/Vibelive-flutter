@@ -86,6 +86,7 @@
     "left": "Only {{count}} message left",
     "left_plural": "Only {{count}} messages left",
     "empty": "Add money to send messages",
+    "first_free": "Your first message is free",
     "add": "Add money"
   },
   "recharge": {
@@ -128,15 +129,16 @@
     "try_again": "Try again",
     "close": "Close",
     "price_title": "Private photo",
-    "price_body": "It shows blurred, to you too. They pay your price to open it for a short time.",
-    "price_custom": "Your own price",
+    "price_body": "It shows blurred, to them and to you. You set what you earn; they pay a little more to open it for a short time.",
+    "price_custom": "Your own amount",
     "price_range": "From {{min}} to {{max}}",
-    "price_earn": "You earn {{earn}} when they unlock it ({{percent}}%)",
-    "price_send": "Send for {{price}}",
+    "price_earn": "You earn {{earn}}",
+    "price_send": "Send · you earn {{price}}",
     "price_set": "Set a price",
     "a11y_locked": "Private photo, locked. Unlock for {{price}}",
     "a11y_bought": "Private photo you bought",
-    "a11y_mine": "Your private photo, {{price}}"
+    "a11y_mine": "Your private photo, {{price}}",
+    "price_buyer": "Buyer pays {{buyer}}"
   },
   "say_hi": {
     "title": "Say hi 👋",

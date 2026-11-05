@@ -120,11 +120,17 @@ void main() {
       expect(ChatPricing.moneyPaise(1999), '₹19.99');
       expect(ChatPricing.privateSharePaise(99, 70), 6930);
       expect(ChatPricing.privateSharePaise(0.99, 70), 69);
+      // min/max now bound the host's EARNING; picks are round earning amounts.
       const rules = ChatPrivatePhotoRules(minPrice: 10, maxPrice: 200);
-      expect(ChatPricing.privatePicks(rules), [49.0, 99.0, 199.0]);
+      expect(ChatPricing.privatePicks(rules), [50.0, 100.0, 200.0]);
       expect(ChatPricing.privatePriceAllowed(5, rules), isFalse);
       expect(ChatPricing.privatePriceAllowed(200, rules), isTrue);
       expect(ChatPricing.privatePriceAllowed(200.01, rules), isFalse);
+      // buyer price = earning × multiplier (default 1.2), in paise.
+      expect(ChatPricing.buyerPricePaise(50, rules), 6000);
+      expect(ChatPricing.buyerPricePaise(100, rules), 12000);
+      const flat = ChatPrivatePhotoRules(minPrice: 10, maxPrice: 200, earnMultiplier: 1.0);
+      expect(ChatPricing.buyerPricePaise(100, flat), 10000);
     });
   });
 

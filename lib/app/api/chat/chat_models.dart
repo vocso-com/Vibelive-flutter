@@ -65,26 +65,34 @@ class ChatPrivatePhotoRules {
     this.minPrice = 10,
     this.maxPrice = 2000,
     this.hostSharePercent = 70,
+    this.earnMultiplier = 1.2,
     this.accessMinutes = 10,
     this.viewSeconds = 300,
   });
 
   factory ChatPrivatePhotoRules.fromJson(Object? json) {
     final j = _map(json);
+    final mult = J.number(j['earnMultiplier']) ?? 1.2;
     return ChatPrivatePhotoRules(
       enabled: _flag(j['enabled'], false),
       minPrice: J.number(j['minPrice']) ?? 10,
       maxPrice: J.number(j['maxPrice']) ?? 2000,
       hostSharePercent: _int(j['hostSharePercent'], 70),
+      earnMultiplier: mult < 1 ? 1.0 : mult,
       accessMinutes: _int(j['accessMinutes'], 10),
       viewSeconds: _int(j['viewSeconds'], 300),
     );
   }
 
+  /// min/max bound what the HOST EARNS.
   final bool enabled;
   final double minPrice;
   final double maxPrice;
   final int hostSharePercent;
+
+  /// The buyer is shown and charged the host's earning times this (admin-set,
+  /// default 1.2). The host sees only their earning.
+  final double earnMultiplier;
   final int accessMinutes;
   final int viewSeconds;
 }
@@ -105,6 +113,7 @@ class ChatConfig {
     this.lowBalanceMessages = 10,
     this.pollSeconds = 20,
     this.screenshotProtection = true,
+    this.firstMessageFree = false,
     this.mediaMaxMb = 10,
     this.privatePhotos = const ChatPrivatePhotoRules(),
     this.hostMediaPercent,
@@ -133,6 +142,9 @@ class ChatConfig {
       lowBalanceMessages: _int(j['lowBalanceMessages'], 10),
       pollSeconds: _int(j['pollSeconds'], 20),
       screenshotProtection: _flag(j['screenshotProtection'], true),
+      // Default off: never promise a free opener unless the server (new
+      // backend) says so, or an older backend would charge for it.
+      firstMessageFree: _flag(j['firstMessageFree'], false),
       mediaMaxMb: _int(j['mediaMaxMb'], 10),
       privatePhotos: ChatPrivatePhotoRules.fromJson(j['privatePhotos']),
       // Not in contract v1's table; see its Changes section.
@@ -159,6 +171,10 @@ class ChatConfig {
   /// An open chat re-reads after this long without a push; 0 = never.
   final int pollSeconds;
   final bool screenshotProtection;
+
+  /// The payer's first message in a conversation is free (no charge, no
+  /// balance needed). Only the opener; later messages are charged.
+  final bool firstMessageFree;
   final int mediaMaxMb;
   final ChatPrivatePhotoRules privatePhotos;
 

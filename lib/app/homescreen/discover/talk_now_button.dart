@@ -19,6 +19,7 @@ import '../../component/c_text.dart';
 import '../../component/morph_fab.dart';
 import '../../component/pressable.dart';
 import '../../navbar/bottombar/navbar_collapse.dart';
+import 'talk_now_menu.dart';
 
 /// "Talk Now": one tap, the server finds a free host. Shown only while the
 /// server has Talk Now on for this user (`/instant-call/config`, which answers
@@ -82,6 +83,10 @@ class TalkNowButton extends HookWidget {
     final voice = config.allows(video: false);
     final video = config.allows(video: true);
     if (!voice && !video) return const SizedBox.shrink();
+    final both = voice && video;
+
+    // To anchor the bubble menu just above the (folded) button.
+    final fabKey = useMemoized(GlobalKey.new);
 
     void place({required bool asVideo}) {
       final onCall = CallController.instance.isOnCall;
@@ -93,7 +98,32 @@ class TalkNowButton extends HookWidget {
       );
     }
 
-    // The circle's one tap: voice when allowed (the cheaper), else video.
+    // Both types: a tap opens the bubble menu (voice and video, each with its
+    // rate), anchored just above the button. If the box is not measurable yet,
+    // fall back to placing the cheaper call rather than doing nothing.
+    void openMenu() {
+      final box = fabKey.currentContext?.findRenderObject();
+      if (box is! RenderBox || !box.hasSize) {
+        place(asVideo: false);
+        return;
+      }
+      final rect = box.localToGlobal(Offset.zero) & box.size;
+      final cs = 56.ms;
+      final anchor = Rect.fromLTWH(rect.right - cs, rect.bottom - cs, cs, cs);
+      DiscoverEvents.talkNowOpened();
+      unawaited(
+        showTalkNowMenu(
+          context,
+          anchor: anchor,
+          voiceRate: config.callerVoiceRate,
+          videoRate: config.callerVideoRate,
+          onPick: ({required bool video}) => place(asVideo: video),
+        ),
+      );
+    }
+
+    // The circle's icon/price: the starting (cheaper) call when both are on,
+    // else the only type. With both, a tap opens the menu instead of calling.
     final circleVideo = !voice;
     final circleRate = circleVideo
         ? config.callerVideoRate
@@ -104,26 +134,30 @@ class TalkNowButton extends HookWidget {
               '${context.t('search:results.per_min')}';
 
     const c = _palette;
-    return MorphFab(
-      key: const ValueKey('talk-now'),
-      introOnce: 'talk_now',
-      foldWhen: NavbarCollapse.instance,
-      onTap: () => place(asVideo: circleVideo),
-      onUnfold: DiscoverEvents.talkNowOpened,
-      colors: c.primaryGradient,
-      iconColor: c.onAccent,
-      icon: circleVideo ? LucideIcons.video : LucideIcons.phone,
-      badge: price,
-      semanticLabel: [context.t('home:talk_now.action'), ?price].join(', '),
-      pillHeight: 64.ms,
-      pillRadius: 20.ms,
-      circleSize: 56.ms,
-      pill: _TalkNowPill(
-        voice: voice,
-        video: video,
-        voiceRate: config.callerVoiceRate,
-        videoRate: config.callerVideoRate,
-        place: (asVideo) => place(asVideo: asVideo),
+    return KeyedSubtree(
+      key: fabKey,
+      child: MorphFab(
+        key: const ValueKey('talk-now'),
+        introOnce: 'talk_now',
+        foldWhen: NavbarCollapse.instance,
+        onTap: both ? openMenu : () => place(asVideo: circleVideo),
+        onUnfold: DiscoverEvents.talkNowOpened,
+        colors: c.primaryGradient,
+        iconColor: c.onAccent,
+        icon: circleVideo ? LucideIcons.video : LucideIcons.phone,
+        badge: price,
+        semanticLabel: [context.t('home:talk_now.action'), ?price].join(', '),
+        pillHeight: 64.ms,
+        pillRadius: 20.ms,
+        circleSize: 56.ms,
+        pill: _TalkNowPill(
+          voice: voice,
+          video: video,
+          voiceRate: config.callerVoiceRate,
+          videoRate: config.callerVideoRate,
+          place: (asVideo) => place(asVideo: asVideo),
+          openMenu: openMenu,
+        ),
       ),
     );
   }
@@ -137,6 +171,7 @@ class _TalkNowPill extends StatelessWidget {
     required this.voiceRate,
     required this.videoRate,
     required this.place,
+    required this.openMenu,
   });
 
   final bool voice;
@@ -147,6 +182,9 @@ class _TalkNowPill extends StatelessWidget {
   final double? voiceRate;
   final double? videoRate;
   final void Function(bool video) place;
+
+  /// Both types offered: a tap anywhere on the pill opens the bubble menu.
+  final VoidCallback openMenu;
 
   @override
   Widget build(BuildContext context) {
@@ -186,12 +224,12 @@ class _TalkNowPill extends StatelessWidget {
           ),
           SizedBox(width: 8.ms),
           if (both) ...[
+            // Rates shown for a glance; the whole pill opens the menu to choose.
             _RateChip(
               key: const ValueKey('talk-now-voice'),
               icon: LucideIcons.phone,
               label: 'home:talk_now.voice',
               rate: voiceRate,
-              onTap: () => place(false),
             ),
             SizedBox(width: 6.ms),
             _RateChip(
@@ -199,7 +237,6 @@ class _TalkNowPill extends StatelessWidget {
               icon: LucideIcons.video,
               label: 'home:talk_now.video',
               rate: videoRate,
-              onTap: () => place(true),
             ),
           ] else
             _RateChip(
@@ -210,12 +247,12 @@ class _TalkNowPill extends StatelessWidget {
         ],
       ),
     );
-    if (both) return row;
-    // One call type: the whole pill is the button.
+    // Both types: a tap anywhere opens the bubble menu. One type: the whole
+    // pill places that call.
     return Pressable(
-      key: const ValueKey('talk-now-call'),
+      key: ValueKey(both ? 'talk-now-open' : 'talk-now-call'),
       activeOpacity: 0.85,
-      onPressed: () => place(video),
+      onPressed: both ? openMenu : () => place(video),
       child: row,
     );
   }
@@ -271,13 +308,11 @@ class _RateChip extends StatelessWidget {
     required this.icon,
     required this.label,
     required this.rate,
-    this.onTap,
   });
 
   final IconData icon;
   final String label;
   final double? rate;
-  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -318,8 +353,6 @@ class _RateChip extends StatelessWidget {
         ],
       ),
     );
-    final tap = onTap;
-    if (tap == null) return chip;
-    return Pressable(activeOpacity: 0.8, onPressed: tap, child: chip);
+    return chip;
   }
 }

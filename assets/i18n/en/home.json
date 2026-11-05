@@ -46,7 +46,9 @@
     "action": "Talk Now",
     "subtitle": "We'll find someone for you",
     "voice": "Voice",
-    "video": "Video"
+    "video": "Video",
+    "voice_call": "Voice call",
+    "video_call": "Video call"
   },
   "feed": {
     "end": "END OF RESULTS",

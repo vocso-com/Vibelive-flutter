@@ -110,8 +110,9 @@ void main() {
   });
 
   // `both` used to place a voice call with no way to ask for video and no sign
-  // that video existed at all.
-  testWidgets('both call types get a button each, with their own rates', (
+  // that video existed at all. Now the pill shows both with their rates and a
+  // tap opens a bubble menu to choose.
+  testWidgets('both call types: the pill shows voice and video with rates', (
     tester,
   ) async {
     final backend = await resetHost();
@@ -195,8 +196,8 @@ void main() {
     await finishHost(tester);
   });
 
-  testWidgets('both types: the circle places voice (the cheaper); video is in '
-      'the pill', (tester) async {
+  testWidgets('both types: a tap opens the bubble menu; each bubble places its '
+      'own call type', (tester) async {
     final backend = await resetHost();
     backend.instantConfig = {
       'enabled': true,
@@ -205,15 +206,26 @@ void main() {
       'callerVideoRate': 25,
     };
     await open(tester);
-    // In the open pill each chip is one tap.
-    await tester.tap(find.byKey(const ValueKey('talk-now-video')));
-    await pumpFor(tester, 100);
-    expect(placed, [true]);
 
+    // Folds to the circle; one tap opens the bubble menu (voice + video).
     await pumpFor(tester, 5000);
     expect(folded(tester), isTrue);
     await tester.tap(find.byKey(const ValueKey('morph-fab-circle')));
-    await pumpFor(tester, 300);
+    await pumpFor(tester, 500);
+    expect(find.byKey(const ValueKey('talk-now-menu-voice')), findsOneWidget);
+    expect(find.byKey(const ValueKey('talk-now-menu-video')), findsOneWidget);
+
+    // Picking video places a video call and closes the menu.
+    await tester.tap(find.byKey(const ValueKey('talk-now-menu-video')));
+    await pumpFor(tester, 500);
+    expect(placed, [true]);
+    expect(find.byKey(const ValueKey('talk-now-menu-video')), findsNothing);
+
+    // Open again and pick voice.
+    await tester.tap(find.byKey(const ValueKey('morph-fab-circle')));
+    await pumpFor(tester, 500);
+    await tester.tap(find.byKey(const ValueKey('talk-now-menu-voice')));
+    await pumpFor(tester, 500);
     expect(placed, [true, false]);
     await finishHost(tester);
   });
