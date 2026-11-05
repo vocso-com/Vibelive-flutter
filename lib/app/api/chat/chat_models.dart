@@ -108,6 +108,7 @@ class ChatConfig {
     this.mediaMaxMb = 10,
     this.privatePhotos = const ChatPrivatePhotoRules(),
     this.hostMediaPercent,
+    this.hostSharePercent = 50,
     this.audience,
   });
 
@@ -136,6 +137,7 @@ class ChatConfig {
       privatePhotos: ChatPrivatePhotoRules.fromJson(j['privatePhotos']),
       // Not in contract v1's table; see its Changes section.
       hostMediaPercent: J.integer(j['hostMediaPercent']),
+      hostSharePercent: _int(j['hostSharePercent'], 50),
       audience: J.str(j['audience']),
     );
   }
@@ -163,6 +165,11 @@ class ChatConfig {
   /// What a host pays, from earnings, for an own photo or voice note, as a
   /// percent of the list price. Null when the server does not say.
   final int? hostMediaPercent;
+
+  /// The host's share of a message the user paid for, once the host replies
+  /// (a percent). Used to show the host what they earn (the caller is shown
+  /// what they pay).
+  final int hostSharePercent;
 
   /// `company` (company accounts only) or `all`; [enabled] already says
   /// whether this user is in it.

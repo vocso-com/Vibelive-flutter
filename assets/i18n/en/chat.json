@@ -51,7 +51,11 @@
     "from": "from",
     "per_min": "per min",
     "balance": "Your balance: {{balance}}",
-    "note": "A message is charged when you send it; a call per minute while you talk."
+    "note": "A message is charged when you send it; a call per minute while you talk.",
+    "earn_title": "Your earnings",
+    "you_earn": "you earn",
+    "your_earnings": "Your earnings: {{amount}}",
+    "earn_note": "You earn this when you reply. Your replies are free."
   },
   "composer": {
     "hint": "Type a message…",
@@ -224,6 +228,7 @@
     "CHAT_DISABLED": "Chat is turned off right now.",
     "PRIVATE_PHOTOS_DISABLED": "Private photos are turned off right now.",
     "blocked_text": "This message can't be sent: it breaks our community guidelines.",
+    "contact_info": "To keep you safe, phone numbers, emails and links can't be shared in chat.",
     "CHAT_NOT_AVAILABLE": "Chat isn't available with this person yet."
   },
   "push": {

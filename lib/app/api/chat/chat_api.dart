@@ -320,10 +320,14 @@ Future<T> _guard<T>(Future<T> Function() body) async {
     return await body();
   } on ApiException catch (e, st) {
     final refusal = ChatRefusal.of(e);
-    // Text the community rules refuse gets its own line.
-    final key =
-        refusal.code == ChatCodes.validation && refusal.reason == 'blocked_text'
-        ? 'chat:errors.blocked_text'
+    // A validation refusal with its own why (community rules, shared contact details) gets
+    // its own line; everything else falls back to the code's copy.
+    final key = refusal.code == ChatCodes.validation
+        ? switch (refusal.reason) {
+            'blocked_text' => 'chat:errors.blocked_text',
+            'contact_info' => 'chat:errors.contact_info',
+            _ => ChatCodes.keyFor(refusal.code),
+          }
         : ChatCodes.keyFor(refusal.code);
     if (key == null || e.messageKey != null) rethrow;
     Error.throwWithStackTrace(

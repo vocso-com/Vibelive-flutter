@@ -272,40 +272,42 @@ Future<bool> showChatPrices(
 }) async {
   final added = await showProfileSheet<bool>(context, (sheet) {
     final v = config.voice;
+    // The host sees what they EARN (their share of what the user pays, paid when
+    // they reply); the client sees what they PAY. Same split as calls.
+    final isHost = open.mySide == ChatSide.host;
+    final share = config.hostSharePercent / 100.0;
+    String amt(double rupees) =>
+        ChatPricing.money(isHost ? rupees * share : rupees);
     final rows = <(IconData, String, String, Map<String, String>?)>[
       (
         LucideIcons.messageCircle,
         'chat:prices.message',
-        ChatPricing.money(open.pricePerMessage),
+        amt(open.pricePerMessage),
         null,
       ),
-      (
-        LucideIcons.image,
-        'chat:prices.photo',
-        ChatPricing.money(open.imagePrice),
-        null,
-      ),
+      (LucideIcons.image, 'chat:prices.photo', amt(open.imagePrice), null),
       (
         LucideIcons.mic,
         'chat:prices.voice',
-        ChatPricing.money(v.shortPrice),
+        amt(v.shortPrice),
         {
           'short': '${v.shortSec}',
-          'shortPrice': ChatPricing.money(v.shortPrice),
+          'shortPrice': amt(v.shortPrice),
           'long': '${v.longSec}',
-          'longPrice': ChatPricing.money(v.longPrice),
+          'longPrice': amt(v.longPrice),
           'step': '${v.stepSec}',
-          'stepPrice': ChatPricing.money(v.stepPrice),
+          'stepPrice': amt(v.stepPrice),
         },
       ),
-      if (host != null && host.aPrice > 0)
+      // Call rates are what the caller pays to call — only for the paying side.
+      if (!isHost && host != null && host.aPrice > 0)
         (
           LucideIcons.phone,
           'chat:prices.voice_call',
           '₹${HostProfileRules.price(host.aPrice)}',
           null,
         ),
-      if (host != null && host.vPrice > 0)
+      if (!isHost && host != null && host.vPrice > 0)
         (
           LucideIcons.video,
           'chat:prices.video_call',
@@ -319,10 +321,10 @@ Future<bool> showChatPrices(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const SheetHeader(
+          SheetHeader(
             icon: LucideIcons.tag,
             iconColor: BrandColors.lime,
-            title: 'chat:prices.title',
+            title: isHost ? 'chat:prices.earn_title' : 'chat:prices.title',
           ),
           Padding(
             padding: EdgeInsets.fromLTRB(20.ms, 14.ms, 20.ms, 0),
@@ -343,7 +345,9 @@ Future<bool> showChatPrices(
                     icon: icon,
                     label: label,
                     price: price,
-                    unit: label.endsWith('_call')
+                    unit: isHost
+                        ? 'chat:prices.you_earn'
+                        : label.endsWith('_call')
                         ? 'chat:prices.per_min'
                         : (ladder != null
                               ? 'chat:prices.from'
@@ -352,34 +356,48 @@ Future<bool> showChatPrices(
                     noteVariables: ladder,
                   ),
                 SizedBox(height: 8.ms),
-                Row(
-                  children: [
-                    Expanded(
-                      child: CText(
-                        'chat:prices.balance',
-                        variables: {'balance': ChatPricing.money(balance ?? 0)},
-                        size: 14,
-                        weight: FontWeight.w800,
-                        maxLines: 1,
+                // Host: their earnings total, no recharge. Client: cash balance + Add money.
+                if (isHost)
+                  CText(
+                    'chat:prices.your_earnings',
+                    variables: {
+                      'amount': ChatPricing.money(open.earnings ?? balance ?? 0),
+                    },
+                    size: 14,
+                    weight: FontWeight.w800,
+                    maxLines: 1,
+                  )
+                else
+                  Row(
+                    children: [
+                      Expanded(
+                        child: CText(
+                          'chat:prices.balance',
+                          variables: {
+                            'balance': ChatPricing.money(balance ?? 0),
+                          },
+                          size: 14,
+                          weight: FontWeight.w800,
+                          maxLines: 1,
+                        ),
                       ),
-                    ),
-                    SizedBox(width: 10.ms),
-                    // A width of its own: in a Row a CButton would take
-                    // all of it (infinite) and the sheet failed to lay out.
-                    CButton(
-                      key: const ValueKey('chat-prices-add-money'),
-                      title: 'chat:low_balance.add',
-                      variant: CButtonVariant.small,
-                      showArrow: false,
-                      width: 124.ms,
-                      height: 40.ms,
-                      onPressed: () => Navigator.of(sheet).pop(true),
-                    ),
-                  ],
-                ),
+                      SizedBox(width: 10.ms),
+                      // A width of its own: in a Row a CButton would take
+                      // all of it (infinite) and the sheet failed to lay out.
+                      CButton(
+                        key: const ValueKey('chat-prices-add-money'),
+                        title: 'chat:low_balance.add',
+                        variant: CButtonVariant.small,
+                        showArrow: false,
+                        width: 124.ms,
+                        height: 40.ms,
+                        onPressed: () => Navigator.of(sheet).pop(true),
+                      ),
+                    ],
+                  ),
                 SizedBox(height: 10.ms),
                 CText(
-                  'chat:prices.note',
+                  isHost ? 'chat:prices.earn_note' : 'chat:prices.note',
                   size: 11.5,
                   weight: FontWeight.w500,
                   color: muted,
