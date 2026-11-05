@@ -22,6 +22,7 @@ import 'package:vibelive/app/chatscreen/components/message_bubble.dart';
 import 'package:vibelive/app/chatscreen/conversation/chat_screen.dart';
 import 'package:vibelive/app/chatscreen/conversation/private_photo_viewer.dart';
 import 'package:vibelive/app/chatscreen/helper/chat_outbox.dart';
+import 'package:vibelive/app/chatscreen/helper/chat_room_controller.dart';
 import 'package:vibelive/app/chatscreen/helper/chat_screen_guard.dart';
 import 'package:vibelive/app/chatscreen/list/chat_tab.dart';
 import 'package:vibelive/app/chatscreen/list/chats_view.dart';
@@ -406,6 +407,7 @@ void main() {
     ChatAvailability.instance.value = false;
     ChatOutbox.instance.debugReset();
     ChatScreenGuard.instance.debugReset();
+    ChatRoomController.clearCache();
     NotificationTapRouter.debugReset();
     NetworkStatus.instance.value = true;
     ApiClient.dio.httpClientAdapter = backend = _Backend();

@@ -98,7 +98,7 @@ class PrivatePhotoBubble extends StatelessWidget {
                 Image.file(
                   File(local),
                   fit: BoxFit.cover,
-                  cacheWidth: 24,
+                  cacheWidth: 44,
                   filterQuality: FilterQuality.medium,
                   gaplessPlayback: true,
                 )

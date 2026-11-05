@@ -43,6 +43,18 @@ class ChatReceiptMarks {
   int get hashCode => Object.hash(delivered, read);
 }
 
+/// The last state of one open conversation, kept in memory so reopening it
+/// paints the messages at once instead of a blank skeleton while the newest
+/// page loads again (docs/chat_api.md). Per app session only.
+@immutable
+class _RoomSnapshot {
+  const _RoomSnapshot(this.open, this.server, this.receipts, this.hasMore);
+  final ChatOpen? open;
+  final List<ChatMessage> server;
+  final ChatReceiptMarks receipts;
+  final bool hasMore;
+}
+
 /// One open conversation, keyed by the other person's public-user id.
 ///
 /// State is split into small notifiers so each part of the screen rebuilds
@@ -53,6 +65,9 @@ class ChatReceiptMarks {
 /// Reads happen when the chat opens, on a push hint or an app resume
 /// ([ChatSync]), and once per `pollSeconds` while the chat is visible and
 /// the app in front, only if nothing else read meanwhile.
+///
+/// A chat reopened in the same session paints its last messages at once from
+/// [_cache]; the newest page and the prices still refresh in the background.
 class ChatRoomController {
   ChatRoomController({required this.peer, ChatOutbox? outbox})
     : _outbox = outbox ?? ChatOutbox.instance {
@@ -60,7 +75,16 @@ class ChatRoomController {
     _outbox.entries.addListener(_recompose);
     _outboxSub = _outbox.events.listen(_onOutbox);
     _hintSub = ChatSync.instance.hints.listen(_onHint);
+    _seed();
   }
+
+  /// Last-seen state per "me:peer", newest last. Memory only (one session),
+  /// bounded; keyed by the signed-in user so the next account never sees it.
+  static final Map<String, _RoomSnapshot> _cache = {};
+  static const _cacheMax = 15;
+
+  /// Drops every cached conversation (sign-out).
+  static void clearCache() => _cache.clear();
 
   static const _tag = 'ChatRoom';
 
@@ -99,6 +123,10 @@ class ChatRoomController {
   bool _disposed = false;
   bool _spent = false;
   bool _marking = false;
+
+  /// Who / prices have been read fresh from the server this session (not just
+  /// seeded from [_cache]); until then the first full read refreshes them.
+  bool _openFresh = false;
   Timer? _poll;
   Future<void>? _sync;
   bool _syncAgain = false;
@@ -106,6 +134,33 @@ class ChatRoomController {
 
   String? get me => SessionStore.instance.value.userId?.toString();
   String? get conversationId => open.value?.conversationId;
+
+  String get _cacheKey => '${me ?? '?'}:$peer';
+
+  /// Paints the last state of this chat at once (if it is cached for the
+  /// signed-in user), so a reopen never flashes a blank skeleton.
+  void _seed() {
+    final snap = _cache[_cacheKey];
+    if (snap == null) return;
+    _server = snap.server;
+    if (snap.open != null) _setOpen(snap.open!);
+    receipts.value = snap.receipts;
+    hasMore.value = snap.hasMore;
+    _recompose();
+  }
+
+  /// Remembers this chat's state for a reopen, newest-last, bounded.
+  void _stash() {
+    if (_disposed) return;
+    _cache.remove(_cacheKey); // re-insert to mark most-recent (LRU)
+    _cache[_cacheKey] = _RoomSnapshot(
+      open.value,
+      _server,
+      receipts.value,
+      hasMore.value,
+    );
+    if (_cache.length > _cacheMax) _cache.remove(_cache.keys.first);
+  }
 
   // ── Reading ────────────────────────────────────────────────────────────
 
@@ -138,12 +193,14 @@ class ChatRoomController {
     _poll?.cancel();
     try {
       var info = open.value;
-      // No conversation yet: it may exist now (they wrote, or my first
-      // message went).
-      if (info == null || info.conversationId == null) {
+      // No conversation yet (it may exist now — they wrote, or my first
+      // message went), or a full read whose who/prices are still only the
+      // ones seeded from the cache: read them fresh.
+      if (info == null || info.conversationId == null || (full && !_openFresh)) {
         info = await ChatApi.openWith(peer);
         if (_disposed) return;
         _setOpen(info);
+        _openFresh = true;
       }
       final id = info.conversationId;
       if (id != null) {
@@ -275,6 +332,7 @@ class ChatRoomController {
 
   void _recompose() {
     if (_disposed) return;
+    _stash();
     final local = [for (final e in _outbox.forPeer(peer)) e.toMessage()];
     final next = ChatRows.compose(_server, local);
     if (!listEquals(next, messages.value)) messages.value = next;
