@@ -79,7 +79,7 @@ class ChatMessageRow extends StatelessWidget {
         onUnlock: () => actions.onUnlock(m),
         onOpen: () => actions.onOpenPrivate(m),
       ),
-      ChatMessageType.unknown => _TextBubble(
+      ChatMessageType.unknown || ChatMessageType.vanish => _TextBubble(
         message: m,
         mine: mine,
         tail: !row.joinNewer,

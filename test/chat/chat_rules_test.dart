@@ -502,4 +502,106 @@ void main() {
       expect(ChatFormat.countdown(now, now), '00:00');
     });
   });
+
+  // ── 2026-11-12: vanish mode, free messages per user, host voice limit ──────
+  group('vanish, free messages, host voice (backend 2026-11-12)', () {
+    test('vanish info: on only when available; an older backend reads off', () {
+      expect(ChatOpen.fromJson(const {'mySide': 'payer', 'peer': {}}).vanish,
+          ChatVanishInfo.off);
+      final open = ChatOpen.fromJson(const {
+        'mySide': 'payer',
+        'peer': {'userId': 7},
+        'vanish': {'available': true, 'on': true, 'byMe': false},
+        'freeMessagesLeft': 2,
+        'voiceMaxSeconds': 30,
+      });
+      expect(open.vanish.on, isTrue);
+      expect(open.vanish.byMe, isFalse);
+      expect(open.freeMessagesLeft, 2);
+      expect(open.voiceMaxSeconds, 30);
+      // Switched off by the admin: never "on".
+      expect(
+        ChatVanishInfo.fromJson(const {'available': false, 'on': true}).on,
+        isFalse,
+      );
+      // copyWith keeps everything else.
+      final moved = open.withConversation('c9');
+      expect(moved.conversationId, 'c9');
+      expect(moved.vanish, open.vanish);
+      expect(moved.voiceMaxSeconds, 30);
+    });
+
+    test('vanish state: texts flagged vanish, oldest first as sent', () {
+      final s = ChatVanishState.fromJson(const {
+        'available': true,
+        'on': true,
+        'items': [
+          {'id': 'v1', 'senderId': '7', 'type': 'text', 'text': 'a', 'vanish': true},
+          {'id': 'v2', 'senderId': '1', 'type': 'text', 'text': 'b', 'vanish': true},
+          {'id': ''},
+        ],
+      });
+      expect(s.info.on, isTrue);
+      expect(s.items.map((m) => m.id), ['v1', 'v2']);
+      expect(s.items.every((m) => m.vanish), isTrue);
+      expect(s.items.first.copyWith(readAt: DateTime(2026)).vanish, isTrue);
+    });
+
+    test('free messages: per person; an older backend falls back to the '
+        'first-message flag', () {
+      final now = ChatConfig.fromJson(const {
+        'enabled': true,
+        'firstMessageFree': true,
+        'freeMessages': {'perUser': 3, 'left': 1},
+        'retentionDays': 7,
+        'vanish': {'enabled': true, 'unreadHours': 24},
+      });
+      expect(now.freeMessagesPerUser, 3);
+      expect(now.freeMessagesLeft, 1);
+      expect(now.retentionDays, 7);
+      expect(now.vanishEnabled, isTrue);
+      final old = ChatConfig.fromJson(const {'enabled': true, 'firstMessageFree': true});
+      expect(old.freeMessagesLeft, 1);
+      expect(old.vanishEnabled, isFalse, reason: 'no vanish on an old backend');
+      expect(ChatConfig.fromJson(const {'enabled': true}).freeMessagesLeft, 0);
+      final sent = ChatSendResult.fromJson(const {
+        'message': {'id': 'm1', 'senderId': '1', 'type': 'text', 'text': 'x'},
+        'charged': 0,
+        'freeMessagesLeft': 0,
+      });
+      expect(sent.freeMessagesLeft, 0);
+    });
+
+    test("a host's voice limit; an older backend has none", () {
+      final v = ChatVoicePricing.fromJson(const {'maxSeconds': 120, 'hostMaxSeconds': 30});
+      expect(v.hostMaxSeconds, 30);
+      expect(ChatVoicePricing.fromJson(const {'maxSeconds': 120}).hostMaxSeconds, isNull);
+    });
+
+    test('the chat list knows a vanish last message (never its words)', () {
+      expect(ChatMessageType.parse('vanish'), ChatMessageType.vanish);
+      expect(ChatPricing.listPaise(ChatMessageType.vanish, const ChatConfig()), 0);
+    });
+
+    test('vanish refusals have their own copy', () {
+      for (final code in [ChatCodes.vanishOff, ChatCodes.vanishDisabled, ChatCodes.vanishFull]) {
+        expect(ChatCodes.keyFor(code), 'chat:errors.$code');
+      }
+    });
+
+    test('a vanish entry stays vanish through retries', () {
+      final e = OutboxEntry(
+        clientId: 'k',
+        peerUserId: '7',
+        senderId: '1',
+        type: ChatMessageType.text,
+        createdAt: DateTime(2026),
+        text: 'x',
+        vanish: true,
+      );
+      expect(PendingQueue.retry(e).vanish, isTrue);
+      expect(e.toMessage().vanish, isTrue);
+    });
+  });
 }
+

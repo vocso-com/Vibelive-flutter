@@ -33,6 +33,7 @@ class ChatVoicePricing {
     this.stepSec = 20,
     this.stepPrice = 1,
     this.maxSeconds = 120,
+    this.hostMaxSeconds,
   });
 
   factory ChatVoicePricing.fromJson(Object? json) {
@@ -45,6 +46,7 @@ class ChatVoicePricing {
       stepSec: _int(j['stepSec'], 20),
       stepPrice: _money(j['stepPrice']),
       maxSeconds: _int(j['maxSeconds'], 120),
+      hostMaxSeconds: J.integer(j['hostMaxSeconds']),
     );
   }
 
@@ -55,6 +57,10 @@ class ChatVoicePricing {
   final int stepSec;
   final double stepPrice;
   final int maxSeconds;
+
+  /// An approved host's longest voice note (the server refuses longer). Null
+  /// from an older backend: the general [maxSeconds] applies.
+  final int? hostMaxSeconds;
 }
 
 /// `privatePhotos` of [ChatConfig].
@@ -114,6 +120,10 @@ class ChatConfig {
     this.pollSeconds = 20,
     this.screenshotProtection = true,
     this.firstMessageFree = false,
+    this.freeMessagesPerUser = 0,
+    this.freeMessagesLeft = 0,
+    this.retentionDays = 0,
+    this.vanishEnabled = false,
     this.mediaMaxMb = 10,
     this.privatePhotos = const ChatPrivatePhotoRules(),
     this.hostMediaPercent,
@@ -145,6 +155,15 @@ class ChatConfig {
       // Default off: never promise a free opener unless the server (new
       // backend) says so, or an older backend would charge for it.
       firstMessageFree: _flag(j['firstMessageFree'], false),
+      // Per person (2026-11-12). An older backend sends only firstMessageFree.
+      freeMessagesPerUser: _int(_map(j['freeMessages'])['perUser'], 0),
+      freeMessagesLeft: _int(
+        _map(j['freeMessages'])['left'],
+        _flag(j['firstMessageFree'], false) ? 1 : 0,
+      ),
+      retentionDays: _int(j['retentionDays'], 0),
+      // Only an explicit "on" from a backend that has vanish mode.
+      vanishEnabled: _flag(_map(j['vanish'])['enabled'], false),
       mediaMaxMb: _int(j['mediaMaxMb'], 10),
       privatePhotos: ChatPrivatePhotoRules.fromJson(j['privatePhotos']),
       // Not in contract v1's table; see its Changes section.
@@ -175,6 +194,18 @@ class ChatConfig {
   /// The payer's first message in a conversation is free (no charge, no
   /// balance needed). Only the opener; later messages are charged.
   final bool firstMessageFree;
+
+  /// Free messages each person gets, once across all their chats (0 = none).
+  final int freeMessagesPerUser;
+
+  /// How many of them this signed-in person still has.
+  final int freeMessagesLeft;
+
+  /// Messages are deleted for good after this many days (0 = kept).
+  final int retentionDays;
+
+  /// Vanish mode exists on this server and is switched on by the admin.
+  final bool vanishEnabled;
   final int mediaMaxMb;
   final ChatPrivatePhotoRules privatePhotos;
 
@@ -393,6 +424,9 @@ class ChatOpen {
     this.balance,
     this.earnings,
     this.reason,
+    this.freeMessagesLeft,
+    this.vanish = ChatVanishInfo.off,
+    this.voiceMaxSeconds,
   });
 
   factory ChatOpen.fromJson(Object? json) {
@@ -407,6 +441,9 @@ class ChatOpen {
       balance: J.number(j['balance']),
       earnings: J.number(j['earnings']),
       reason: J.str(j['reason']),
+      freeMessagesLeft: J.integer(j['freeMessagesLeft']),
+      vanish: ChatVanishInfo.fromJson(j['vanish']),
+      voiceMaxSeconds: J.integer(j['voiceMaxSeconds']),
     );
   }
 
@@ -429,13 +466,30 @@ class ChatOpen {
   /// company-only chat with someone who isn't a company account).
   final String? reason;
 
+  /// How many free messages I still have (paying side); null from an older
+  /// backend.
+  final int? freeMessagesLeft;
+
+  /// Vanish mode in this chat, as the server says.
+  final ChatVanishInfo vanish;
+
+  /// The longest voice note I may send here (a host's own limit); null from
+  /// an older backend.
+  final int? voiceMaxSeconds;
+
   /// Chat can't happen with this person at all (not just "chats off").
   bool get notAvailable => reason == 'CHAT_NOT_AVAILABLE';
 
   bool get paying => mySide == ChatSide.payer;
 
-  ChatOpen withConversation(String id) => ChatOpen(
-    conversationId: id,
+  ChatOpen withConversation(String id) => copyWith(conversationId: id);
+
+  ChatOpen copyWith({
+    String? conversationId,
+    ChatVanishInfo? vanish,
+    int? freeMessagesLeft,
+  }) => ChatOpen(
+    conversationId: conversationId ?? this.conversationId,
     mySide: mySide,
     peer: peer,
     chatEnabled: chatEnabled,
@@ -444,7 +498,79 @@ class ChatOpen {
     balance: balance,
     earnings: earnings,
     reason: reason,
+    freeMessagesLeft: freeMessagesLeft ?? this.freeMessagesLeft,
+    vanish: vanish ?? this.vanish,
+    voiceMaxSeconds: voiceMaxSeconds,
   );
+}
+
+/// Vanish mode in one chat (docs/chat_api.md, 2026-11-12): while [on], texts
+/// are kept only in the server's memory and disappear once the other person
+/// has read them and left the chat.
+@immutable
+class ChatVanishInfo {
+  const ChatVanishInfo({
+    this.available = false,
+    this.on = false,
+    this.since,
+    this.byMe = false,
+  });
+
+  static const off = ChatVanishInfo();
+
+  factory ChatVanishInfo.fromJson(Object? json) {
+    final j = _map(json);
+    if (j.isEmpty) return off;
+    final available = _flag(j['available'], false);
+    return ChatVanishInfo(
+      available: available,
+      on: available && _flag(j['on'], false),
+      since: _date(j['since']),
+      byMe: _flag(j['byMe'], false),
+    );
+  }
+
+  /// The admin has vanish mode on (the server knows about it at all).
+  final bool available;
+  final bool on;
+  final DateTime? since;
+
+  /// I turned it on (else the other person did).
+  final bool byMe;
+
+  @override
+  bool operator ==(Object other) =>
+      other is ChatVanishInfo &&
+      other.available == available &&
+      other.on == on &&
+      other.since == since &&
+      other.byMe == byMe;
+
+  @override
+  int get hashCode => Object.hash(available, on, since, byMe);
+}
+
+/// `GET|POST /chats/conversations/:id/vanish`: the mode and its waiting texts.
+@immutable
+class ChatVanishState {
+  const ChatVanishState({this.info = ChatVanishInfo.off, this.items = const []});
+
+  factory ChatVanishState.fromJson(Object? json) {
+    final j = Strapi.map(json) ?? const <String, dynamic>{};
+    final items = j['items'];
+    return ChatVanishState(
+      info: ChatVanishInfo.fromJson(j),
+      items: [
+        if (items is List)
+          for (final m in items) ChatMessage.fromJson(m),
+      ].where((m) => m.id.isNotEmpty).toList(),
+    );
+  }
+
+  final ChatVanishInfo info;
+
+  /// Oldest first, as the server keeps them.
+  final List<ChatMessage> items;
 }
 
 /// `GET|PUT /chats/settings`.

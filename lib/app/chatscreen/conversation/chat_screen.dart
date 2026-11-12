@@ -18,6 +18,7 @@ import '../../callscreen/helper/push/chat_push.dart';
 import '../../component/c_alert.dart';
 import '../../component/c_state_view.dart';
 import '../../component/c_text.dart';
+import '../../component/c_toast.dart';
 import '../../component/skeleton.dart';
 import '../../listingflow/profile/host_profile_sheet.dart';
 import '../components/chat_composer.dart';
@@ -25,6 +26,7 @@ import '../components/chat_header.dart';
 import '../components/chat_palette.dart';
 import '../components/chat_secure_zone.dart';
 import '../components/low_balance_bar.dart';
+import '../components/vanish_mode.dart';
 import '../helper/low_balance.dart';
 import '../helper/chat_room_controller.dart';
 import '../helper/chat_screen_guard.dart';
@@ -71,11 +73,14 @@ class ChatScreen extends HookWidget {
       };
     }, [controller]);
     _useVisibility(context, controller);
+    _useLeaveVanishInBackground(controller);
     _useOpenedEvent(controller);
     _useLowBalanceEvent(controller, config);
     useCloseWhenChatOff(context);
 
     final open = useValueListenable(controller.open);
+    final vanish = useValueListenable(controller.vanish);
+    final switching = useState(false);
     final host = useChatHost(open?.peer);
     // The app's block flow (it refreshes every list the person is in).
     final block = useBlockUser(
@@ -110,12 +115,48 @@ class ChatScreen extends HookWidget {
               onPeer: host == null
                   ? null
                   : () => showHostProfile(context, host, source: 'chat'),
-              calls: open != null && open.paying && host != null
+              // No calls in vanish mode.
+              calls:
+                  open != null && open.paying && host != null && !vanish.on
                   ? ChatCallButtons(host: host)
                   : null,
             ),
+            if (open != null && vanish.on)
+              VanishBanner(
+                info: vanish,
+                peerName: open.peer.name,
+                busy: switching.value,
+                onTurnOff: () => unawaited(
+                  _switchVanish(context, controller, switching, false, 'banner'),
+                ),
+              ),
             Expanded(
-              child: _Body(controller: controller, actions: actions, me: me),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 250),
+                color: vanish.on ? VanishLook.backdrop : p.screen,
+                child: Stack(
+                  children: [
+                    Positioned.fill(
+                      child: _Body(
+                        controller: controller,
+                        actions: actions,
+                        me: me,
+                      ),
+                    ),
+                    if (vanish.on)
+                      Positioned.fill(
+                        child: IgnorePointer(
+                          child: ValueListenableBuilder<List<ChatMessage>>(
+                            valueListenable: controller.messages,
+                            builder: (_, list, _) => list.isEmpty
+                                ? const VanishEmpty()
+                                : const SizedBox.shrink(),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
             ),
             if (open != null)
               _Bottom(
@@ -124,6 +165,10 @@ class ChatScreen extends HookWidget {
                 controller: controller,
                 actions: actions,
                 text: text,
+                vanish: vanish,
+                onSwitchVanish: (on) => unawaited(
+                  _switchVanish(context, controller, switching, on, 'swipe'),
+                ),
               ),
           ],
         ),
@@ -161,6 +206,44 @@ class ChatScreen extends HookWidget {
       controller.open.addListener(onOpen);
       return () => controller.open.removeListener(onOpen);
     }, [controller, visible]);
+  }
+
+  /// The app went to the background: that is leaving the chat, so what I
+  /// read in vanish mode goes (closing the screen does it too). A sheet over
+  /// the chat is not leaving.
+  static void _useLeaveVanishInBackground(ChatRoomController controller) {
+    final lifecycle = useAppLifecycleState();
+    useEffect(() {
+      if (lifecycle == AppLifecycleState.paused ||
+          lifecycle == AppLifecycleState.hidden ||
+          lifecycle == AppLifecycleState.detached) {
+        controller.leaveVanish();
+      }
+      return null;
+    }, [lifecycle]);
+  }
+
+  /// Switches vanish mode for this chat (both people see it).
+  static Future<void> _switchVanish(
+    BuildContext context,
+    ChatRoomController controller,
+    ValueNotifier<bool> busy,
+    bool on,
+    String source,
+  ) async {
+    if (busy.value) return;
+    busy.value = true;
+    try {
+      await controller.setVanish(on);
+      // No toast: the banner appearing / going says it, and a toast would sit
+      // over the composer right when they start typing.
+      ChatEvents.vanishSwitched(on: on, source: source, result: 'done');
+    } on ApiException catch (e) {
+      ChatEvents.vanishSwitched(on: on, source: source, result: 'failed');
+      CToast.error(e);
+    } finally {
+      if (context.mounted) busy.value = false;
+    }
   }
 
   static void _useOpenedEvent(ChatRoomController controller) {
@@ -346,6 +429,8 @@ class _Bottom extends StatelessWidget {
     required this.controller,
     required this.actions,
     required this.text,
+    required this.vanish,
+    required this.onSwitchVanish,
   });
 
   final ChatOpen open;
@@ -353,6 +438,8 @@ class _Bottom extends StatelessWidget {
   final ChatRoomController controller;
   final ChatScreenActions actions;
   final TextEditingController text;
+  final ChatVanishInfo vanish;
+  final ValueChanged<bool> onSwitchVanish;
 
   @override
   Widget build(BuildContext context) {
@@ -368,9 +455,18 @@ class _Bottom extends StatelessWidget {
         ? 'chat:notice.reply_only'
         : null;
     if (notice != null) return _Notice(text: notice);
+    // A host's own (shorter) limit when the server says so.
+    final voiceMax = open.voiceMaxSeconds ?? config.voice.maxSeconds;
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
+        // Drag up (from the bottom towards the top) to switch vanish mode.
+        if (vanish.available || config.vanishEnabled)
+          VanishSwipeHandle(
+            on: vanish.on,
+            enabled: open.conversationId != null,
+            onSwitch: () => onSwitchVanish(!vanish.on),
+          ),
         LowBalanceBar(
           balance: controller.balance,
           textPrice: open.pricePerMessage,
@@ -381,15 +477,21 @@ class _Bottom extends StatelessWidget {
           // a balance or a low-balance warning.
           firstMessageFree:
               config.firstMessageFree && open.conversationId == null,
+          // My free messages left (once per person, across all chats).
+          freeLeft: controller.freeLeft,
           onAdd: () {
             ChatEvents.addMoney('bar');
             unawaited(ChatScreenActions.openWallet(context));
           },
         ),
         ChatComposer(
+          // Rebuilt when the recorder limit or vanish mode changes (the
+          // recorder is made once per composer); the text survives.
+          key: ValueKey('chat-composer-${vanish.on}-$voiceMax'),
           controller: text,
           maxLength: config.maxMessageLength,
-          voiceMaxSeconds: config.voice.maxSeconds,
+          voiceMaxSeconds: voiceMax,
+          textOnly: vanish.on,
           onSend: actions.sendText,
           onAttach: () => unawaited(actions.attachPhoto()),
           onVoice: actions.sendVoice,

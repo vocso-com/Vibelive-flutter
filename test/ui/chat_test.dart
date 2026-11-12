@@ -90,6 +90,15 @@ class _Backend implements HttpClientAdapter {
   /// `POST /api/initiateCall` bodies (a call placed from the chat header).
   final calls = <Map<String, Object?>>[];
 
+  /// Vanish mode (2026-11-12): the server's switch, its texts (oldest first)
+  /// and every vanish request seen.
+  bool vanishOn = false;
+  final vanishItems = <Map<String, Object?>>[];
+  final vanishCalls = <String>[];
+
+  /// `freeMessagesLeft` in `/chats/with/7` (null: an older backend).
+  int? freeLeft;
+
   /// The cash wallet (`GET /api/wallets`): the call's balance gate.
   double wallet = 100;
 
@@ -161,6 +170,8 @@ class _Backend implements HttpClientAdapter {
 
   int _status(RequestOptions o) {
     if (o.method == 'POST' && o.path == '/api/chats/messages') {
+      final data = o.data;
+      if (data is Map && data['vanish'] == true && !vanishOn) return 409;
       if (sendNotAvailable) return 403;
       if (lowBalanceNext) return 402;
       if (failNextSends > 0) return 500;
@@ -204,7 +215,22 @@ class _Backend implements HttpClientAdapter {
           'pricePerMessage': 2,
           'imagePrice': 3,
           'balance': 100,
+          'freeMessagesLeft': freeLeft,
+          'vanish': {'available': true, 'on': vanishOn, 'byMe': false},
         };
+      case 'GET /api/chats/conversations/c1/vanish':
+        vanishCalls.add('state${q['enter'] == '1' ? ' enter' : ''}');
+        return _vanishState();
+      case 'POST /api/chats/conversations/c1/vanish':
+        final on = (o.data as Map)['on'] == true;
+        vanishCalls.add('switch $on');
+        vanishOn = on;
+        if (!on) vanishItems.clear();
+        return _vanishState(byMe: true);
+      case 'POST /api/chats/conversations/c1/vanish/leave':
+        vanishCalls.add('leave');
+        vanishItems.removeWhere((m) => m['senderId'] == '7');
+        return {'ok': true, 'removed': 0};
       case 'GET /api/chats/with/8':
         return {
           'conversationId': null,
@@ -229,6 +255,29 @@ class _Backend implements HttpClientAdapter {
         final body = Map<String, Object?>.from(o.data as Map);
         sent.add(body);
         if (offline) throw _offline(o);
+        if (body['vanish'] == true && !vanishOn) {
+          return {
+            'error': {
+              'status': 409,
+              'name': 'ConflictError',
+              'message': 'Vanish mode is off in this chat.',
+              'details': {'code': 'CHAT_VANISH_OFF'},
+            },
+          };
+        }
+        if (vanishOn) {
+          final v = {
+            ..._message(
+              'v${_seq++}',
+              sender: '1',
+              text: body['text'] as String?,
+              clientId: body['clientId'] as String?,
+            ),
+            'vanish': true,
+          };
+          vanishItems.add(v);
+          return {'message': v, 'charged': 2, 'balance': 98};
+        }
         if (sendNotAvailable) {
           notAvailable = true;
           return {
@@ -292,6 +341,14 @@ class _Backend implements HttpClientAdapter {
         return {'data': <Object>[]};
     }
   }
+
+  Map<String, Object?> _vanishState({bool byMe = false}) => {
+    'conversationId': 'c1',
+    'available': true,
+    'on': vanishOn,
+    'byMe': byMe,
+    'items': vanishOn ? vanishItems : <Object>[],
+  };
 
   static final _peer = {
     'userId': '7',
@@ -983,6 +1040,120 @@ void main() {
     await _pump(tester, 900);
     expect(find.byType(ChatMessageRow), findsWidgets);
     expect(tester.takeException(), isNull);
+    await finish(tester);
+  });
+
+  // ── 2026-11-12: vanish mode, free messages, the host's voice limit ─────────
+
+  Future<void> swipeUpForVanish(WidgetTester tester) async {
+    await tester.drag(
+      find.byKey(const ValueKey('chat-vanish-handle')),
+      const Offset(0, -140),
+    );
+    await _pump(tester, 600);
+  }
+
+  testWidgets('vanish mode: swipe up turns it on — banner, no calls, text '
+      'only, and texts go as vanish', (tester) async {
+    await openApp(tester, location: AppRoutes.chatWith('7'));
+    expect(find.byKey(const ValueKey('chat-call-audio')), findsOneWidget);
+    expect(find.byIcon(LucideIcons.imagePlus), findsOneWidget);
+
+    await swipeUpForVanish(tester);
+    expect(backend.vanishCalls, contains('switch true'));
+    expect(find.byKey(const ValueKey('chat-vanish-banner')), findsOneWidget);
+    expect(find.text('Vanish mode is on'), findsOneWidget, reason: 'banner only, no toast over the composer');
+    // No calls and no attachments in vanish mode.
+    expect(find.byKey(const ValueKey('chat-call-audio')), findsNothing);
+    expect(find.byKey(const ValueKey('chat-call-video')), findsNothing);
+    expect(find.byIcon(LucideIcons.imagePlus), findsNothing);
+    expect(find.byKey(const ValueKey('chat-mic')), findsNothing);
+    // Nothing waits yet.
+    expect(find.text("You're in vanish mode"), findsOneWidget);
+
+    await tester.enterText(
+      find.byKey(const ValueKey('chat-composer-field')),
+      'just between us',
+    );
+    await tester.pump();
+    await tester.tap(find.byKey(const ValueKey('chat-send')));
+    await _pump(tester, 500);
+    expect(backend.sent.last['vanish'], true);
+    expect(backend.sent.last['text'], 'just between us');
+    expect(find.text('just between us'), findsOneWidget);
+    await finish(tester);
+  });
+
+  testWidgets('vanish mode: "Turn off" brings the normal chat back', (
+    tester,
+  ) async {
+    backend.messages.add(_Backend._message('m1', text: 'normal hello'));
+    backend.vanishOn = true;
+    backend.vanishItems.add({
+      ..._Backend._message('v1', text: 'secret one'),
+      'vanish': true,
+    });
+    await openApp(tester, location: AppRoutes.chatWith('7'));
+    expect(find.text('secret one'), findsOneWidget);
+    expect(find.text('normal hello'), findsNothing);
+    // The first read on opening says `enter`.
+    expect(backend.vanishCalls.first, 'state enter');
+
+    await tester.tap(find.byKey(const ValueKey('chat-vanish-turn-off')));
+    await _pump(tester, 600);
+    expect(backend.vanishCalls, contains('switch false'));
+    expect(find.byKey(const ValueKey('chat-vanish-banner')), findsNothing);
+    expect(find.text('secret one'), findsNothing);
+    expect(find.text('normal hello'), findsOneWidget);
+    expect(find.byKey(const ValueKey('chat-call-audio')), findsOneWidget);
+    await finish(tester);
+  });
+
+  testWidgets('vanish mode: closing the chat leaves it (what I read goes)', (
+    tester,
+  ) async {
+    backend.vanishOn = true;
+    backend.vanishItems.add({
+      ..._Backend._message('v1', text: 'read me'),
+      'vanish': true,
+    });
+    await openApp(tester, location: AppRoutes.chatWith('7'));
+    expect(find.text('read me'), findsOneWidget);
+    appRouter.pop();
+    await _pump(tester, 600);
+    expect(backend.vanishCalls, contains('leave'));
+    await finish(tester);
+  });
+
+  testWidgets('vanish turned off by the other person mid-send: nothing is '
+      'stored, the text comes back in the box', (tester) async {
+    backend.vanishOn = true;
+    await openApp(tester, location: AppRoutes.chatWith('7'));
+    backend.vanishOn = false; // they just turned it off
+    await tester.enterText(
+      find.byKey(const ValueKey('chat-composer-field')),
+      'meant to vanish',
+    );
+    await tester.pump();
+    await tester.tap(find.byKey(const ValueKey('chat-send')));
+    await _pump(tester, 800);
+    expect(backend.sent.last['vanish'], true);
+    expect(backend.messages, isEmpty, reason: 'never saved as normal');
+    final field = tester.widget<TextField>(
+      find.byKey(const ValueKey('chat-composer-field')),
+    );
+    expect(field.controller!.text, 'meant to vanish');
+    expect(find.byKey(const ValueKey('chat-vanish-banner')), findsNothing);
+    await finish(tester);
+  });
+
+  testWidgets('free messages: "N free messages left" instead of any warning', (
+    tester,
+  ) async {
+    backend.freeLeft = 2;
+    await openApp(tester, location: AppRoutes.chatWith('7'));
+    expect(find.text('2 free messages left'), findsOneWidget);
+    expect(find.textContaining('₹'), findsNothing);
     await finish(tester);
   });
 }

@@ -154,4 +154,16 @@ abstract final class ChatEvents {
   /// [setting]: `notify` / `accept_chats`.
   static void settingChanged({required String setting, required bool on}) =>
       Analytics.log('chat_setting_changed', {'setting': setting, 'on': on});
+
+  /// Vanish mode switched: [on]; [source] `swipe` / `banner`; [result]
+  /// `done` / `failed`.
+  static void vanishSwitched({
+    required bool on,
+    required String source,
+    required String result,
+  }) => Analytics.log('chat_vanish_switched', {
+    'on': on,
+    'source': source,
+    'result': result,
+  });
 }

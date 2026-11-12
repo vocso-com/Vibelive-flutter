@@ -47,6 +47,7 @@ class ConversationRow extends StatelessWidget {
         LucideIcons.lock,
         'chat:list.private_photo',
       ),
+      ChatMessageType.vanish => (LucideIcons.flame, 'chat:list.vanish'),
       ChatMessageType.unknown => (null, 'chat:list.unsupported'),
       _ => (null, null),
     };

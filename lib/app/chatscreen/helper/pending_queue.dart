@@ -24,6 +24,7 @@ class OutboxEntry {
     this.state = ChatSendState.queued,
     this.errorKey,
     this.attempts = 0,
+    this.vanish = false,
   });
 
   final String clientId;
@@ -47,6 +48,10 @@ class OutboxEntry {
   /// Sends tried so far.
   final int attempts;
 
+  /// Written in vanish mode: sent as a vanish text (memory only on the server;
+  /// this queue is memory only too).
+  final bool vanish;
+
   OutboxEntry copyWith({
     ChatSendState? state,
     String? errorKey,
@@ -67,6 +72,7 @@ class OutboxEntry {
     state: state ?? this.state,
     errorKey: clearError ? null : (errorKey ?? this.errorKey),
     attempts: attempts ?? this.attempts,
+    vanish: vanish,
   );
 
   /// The optimistic bubble.
@@ -86,6 +92,7 @@ class OutboxEntry {
         : null,
     state: state,
     errorKey: errorKey,
+    vanish: vanish,
   );
 }
 

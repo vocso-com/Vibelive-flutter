@@ -76,7 +76,9 @@ abstract final class ChatPricing {
     ChatMessageType.image => paise(imagePrice ?? config.imagePrice),
     ChatMessageType.audio => voicePaise(config.voice, seconds),
     // The host sets it; the buyer pays it on unlock, never to send.
-    ChatMessageType.privateImage || ChatMessageType.unknown => 0,
+    ChatMessageType.privateImage ||
+    ChatMessageType.vanish ||
+    ChatMessageType.unknown => 0,
   };
 
   /// What sending [type] costs [side]. The payer pays the list price; a

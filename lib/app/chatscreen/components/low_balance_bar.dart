@@ -27,6 +27,7 @@ class LowBalanceBar extends StatelessWidget {
     required this.chatEnabled,
     required this.onAdd,
     this.firstMessageFree = false,
+    this.freeLeft,
   });
 
   final ValueListenable<double?> balance;
@@ -37,12 +38,33 @@ class LowBalanceBar extends StatelessWidget {
   final VoidCallback onAdd;
 
   /// The next message is the free opener: a calm hint, no balance, no warning.
+  /// (An older backend; a newer one sends [freeLeft].)
   final bool firstMessageFree;
+
+  /// How many of my free messages are left (once per person, across all
+  /// chats). While any are left: "N free messages left", no warning.
+  final ValueListenable<int?>? freeLeft;
 
   @override
   Widget build(BuildContext context) {
     if (!paying || !chatEnabled) return const SizedBox.shrink();
+    final free = freeLeft;
+    if (free != null) {
+      return ValueListenableBuilder<int?>(
+        valueListenable: free,
+        builder: (context, left, _) {
+          if (left == null) {
+            return firstMessageFree ? const _FirstFree() : _balanceStrip();
+          }
+          return left > 0 ? _FirstFree(left: left) : _balanceStrip();
+        },
+      );
+    }
     if (firstMessageFree) return const _FirstFree();
+    return _balanceStrip();
+  }
+
+  Widget _balanceStrip() {
     return ValueListenableBuilder<double?>(
       valueListenable: balance,
       builder: (context, value, _) {
@@ -116,9 +138,13 @@ class _LowPill extends StatelessWidget {
   }
 }
 
-/// The free-opener hint: a calm, positive line, no balance or warning.
+/// The free-messages hint: a calm, positive line, no balance or warning.
+/// [left]: "N free messages left"; without it, the older "first message is
+/// free".
 class _FirstFree extends StatelessWidget {
-  const _FirstFree();
+  const _FirstFree({this.left});
+
+  final int? left;
 
   @override
   Widget build(BuildContext context) {
@@ -136,9 +162,12 @@ class _FirstFree extends StatelessWidget {
         children: [
           Icon(LucideIcons.gift, size: 15.ms, color: green),
           SizedBox(width: 6.ms),
-          const Expanded(
+          Expanded(
             child: CText(
-              'chat:low_balance.first_free',
+              left == null
+                  ? 'chat:low_balance.first_free'
+                  : 'chat:low_balance.free_left',
+              count: left,
               size: 12.5,
               weight: FontWeight.w700,
               color: green,

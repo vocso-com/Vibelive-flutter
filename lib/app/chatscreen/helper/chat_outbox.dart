@@ -140,6 +140,7 @@ class ChatOutbox {
       toUserId: e.peerUserId,
       text: e.text ?? '',
       clientId: e.clientId,
+      vanish: e.vanish,
     ),
     ChatMessageType.privateImage => ChatApi.sendPrivatePhoto(
       toUserId: e.peerUserId,

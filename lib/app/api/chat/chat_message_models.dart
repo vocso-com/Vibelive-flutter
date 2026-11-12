@@ -19,6 +19,10 @@ enum ChatMessageType {
   image,
   audio,
   privateImage,
+
+  /// Only in the chat list's last message: a vanish-mode text (its words are
+  /// never sent there). Vanish messages themselves are [text] + `vanish`.
+  vanish,
   unknown;
 
   static ChatMessageType parse(Object? v) => switch (J.str(v)) {
@@ -26,6 +30,7 @@ enum ChatMessageType {
     'image' => image,
     'audio' => audio,
     'private_image' => privateImage,
+    'vanish' => vanish,
     _ => unknown,
   };
 
@@ -151,6 +156,7 @@ class ChatMessage {
     this.localPath,
     this.state = ChatSendState.sent,
     this.errorKey,
+    this.vanish = false,
   });
 
   factory ChatMessage.fromJson(Object? json) {
@@ -167,6 +173,7 @@ class ChatMessage {
       createdAt: _date(j['createdAt']) ?? DateTime.now(),
       deliveredAt: _date(j['deliveredAt']),
       readAt: _date(j['readAt']),
+      vanish: J.boolean(j['vanish']),
     );
   }
 
@@ -188,6 +195,10 @@ class ChatMessage {
 
   /// i18n key of why a [ChatSendState.failed] message did not go.
   final String? errorKey;
+
+  /// A vanish-mode text: kept only in the server's memory, gone once the
+  /// other person has read it and left the chat.
+  final bool vanish;
 
   /// Stable across "sending" → "sent" (the server echoes the clientId), so
   /// the list keeps the same row.
@@ -217,6 +228,7 @@ class ChatMessage {
     localPath: localPath,
     state: state ?? this.state,
     errorKey: clearError ? null : (errorKey ?? this.errorKey),
+    vanish: vanish,
   );
 }
 
@@ -261,6 +273,7 @@ class ChatSendResult {
     this.charged = 0,
     this.balance,
     this.earnings,
+    this.freeMessagesLeft,
   });
 
   /// Throws [FormatException] without a saved message (the bubble then
@@ -275,6 +288,7 @@ class ChatSendResult {
       charged: _money(j['charged']),
       balance: J.number(j['balance']),
       earnings: J.number(j['earnings']),
+      freeMessagesLeft: J.integer(j['freeMessagesLeft']),
     );
   }
 
@@ -282,4 +296,8 @@ class ChatSendResult {
   final double charged;
   final double? balance;
   final double? earnings;
+
+  /// My free messages left after this send (paying side, when free messages
+  /// are on).
+  final int? freeMessagesLeft;
 }

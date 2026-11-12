@@ -26,10 +26,15 @@ class ChatComposer extends StatefulWidget {
     required this.onSend,
     required this.onAttach,
     required this.onVoice,
+    this.textOnly = false,
   });
 
   final TextEditingController controller;
   final int maxLength;
+
+  /// Vanish mode: text only — no photo button and no voice notes (the server
+  /// refuses them there too).
+  final bool textOnly;
 
   final int voiceMaxSeconds;
   final ValueChanged<String> onSend;
@@ -105,18 +110,25 @@ class _ChatComposerState extends State<ChatComposer> {
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
                     if (since == null) ...[
-                      _RoundButton(
-                        icon: LucideIcons.imagePlus,
-                        label: 'chat:composer.attach',
-                        onTap: widget.onAttach,
-                        filled: false,
-                      ),
-                      SizedBox(width: 6.ms),
+                      if (!widget.textOnly) ...[
+                        _RoundButton(
+                          icon: LucideIcons.imagePlus,
+                          label: 'chat:composer.attach',
+                          onTap: widget.onAttach,
+                          filled: false,
+                        ),
+                        SizedBox(width: 6.ms),
+                      ],
                       Expanded(child: field!),
                     ] else
                       Expanded(child: _RecordingStrip(voice: _voice)),
                     SizedBox(width: 6.ms),
-                    _SendOrMic(hasText: _hasText, voice: _voice, onSend: _send),
+                    _SendOrMic(
+                      hasText: _hasText,
+                      voice: _voice,
+                      onSend: _send,
+                      textOnly: widget.textOnly,
+                    ),
                   ],
                 ),
                 child: _Field(
@@ -224,11 +236,15 @@ class _SendOrMic extends StatelessWidget {
     required this.hasText,
     required this.voice,
     required this.onSend,
+    this.textOnly = false,
   });
 
   final ValueListenable<bool> hasText;
   final VoiceRecording voice;
   final VoidCallback onSend;
+
+  /// No mic: the send button stays (it does nothing until there is text).
+  final bool textOnly;
 
   @override
   Widget build(BuildContext context) {
@@ -236,7 +252,7 @@ class _SendOrMic extends StatelessWidget {
     return ValueListenableBuilder<bool>(
       valueListenable: hasText,
       builder: (context, has, _) {
-        if (has) {
+        if (has || textOnly) {
           return _RoundButton(
             key: const ValueKey('chat-send'),
             icon: LucideIcons.send,

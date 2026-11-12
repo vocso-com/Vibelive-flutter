@@ -109,6 +109,13 @@ class ChatRoomController {
   /// Net earnings (host side).
   final earnings = ValueNotifier<double?>(null);
 
+  /// Vanish mode in this chat (docs/chat_api.md, 2026-11-12). While on, the
+  /// list shows only the vanish texts ([messages] switches over).
+  final vanish = ValueNotifier<ChatVanishInfo>(ChatVanishInfo.off);
+
+  /// My free messages left (paying side); null until the server says.
+  final freeLeft = ValueNotifier<int?>(null);
+
   final _refusals = StreamController<OutboxRefused>.broadcast();
 
   /// My message was refused (402 low balance, or another refusal): the
@@ -119,6 +126,11 @@ class ChatRoomController {
   late final StreamSubscription<ChatHint> _hintSub;
 
   List<ChatMessage> _server = const [];
+
+  /// The vanish texts the server holds for this chat, newest first. Memory
+  /// only, never cached across screens.
+  List<ChatMessage> _vanishItems = const [];
+  bool _vanishEntered = false;
   bool _visible = false;
   bool _disposed = false;
   bool _spent = false;
@@ -217,6 +229,8 @@ class ChatRoomController {
           _apply(page, first: true);
         }
       }
+      if (id != null && vanish.value.on) await _readVanish(id);
+      if (_disposed) return;
       error.value = null;
       _recompose();
       _afterRead();
@@ -237,6 +251,78 @@ class ChatRoomController {
     } on ApiException catch (e) {
       Log.d(_tag, 'reopen failed: $e');
     }
+  }
+
+  // ── Vanish mode ────────────────────────────────────────────────────────
+
+  /// Reads the vanish texts. The first read after the screen opens says
+  /// `enter`, so the server first removes what I read last time.
+  Future<void> _readVanish(String id) async {
+    final enter = !_vanishEntered;
+    _vanishEntered = true;
+    try {
+      final state = await ChatApi.fetchVanish(id, enter: enter);
+      if (_disposed) return;
+      _applyVanish(state);
+    } on ApiException catch (e) {
+      Log.d(_tag, 'vanish read failed: $e');
+    }
+  }
+
+  void _applyVanish(ChatVanishState state) {
+    _vanishItems = state.items.reversed.toList();
+    final info = open.value;
+    if (info != null && info.vanish != state.info) {
+      open.value = info.copyWith(vanish: state.info);
+    }
+    _setVanish(state.info);
+    _recompose();
+  }
+
+  /// The mode switched (by either of us): who / switches again, then texts.
+  Future<void> _refreshVanish() async {
+    await refreshOpen();
+    final id = conversationId;
+    if (id != null && !_disposed) await _readVanish(id);
+    if (!_disposed) _recompose();
+  }
+
+  /// Turns vanish mode on or off for this chat. Throws [ApiException].
+  Future<void> setVanish(bool on) async {
+    final id = conversationId;
+    if (id == null) {
+      throw const ApiException(
+        ApiErrorType.rejected,
+        messageKey: 'chat:vanish.needs_chat',
+      );
+    }
+    final state = await ApiClient.guard(() => ChatApi.setVanish(id, on: on));
+    if (_disposed) return;
+    _vanishEntered = true;
+    _applyVanish(state);
+  }
+
+  /// I left the chat (screen closed, app in the background): the vanish
+  /// texts I read go, here at once and on the server for both of us.
+  void leaveVanish() {
+    final id = conversationId;
+    if (id == null || !vanish.value.on) return;
+    final mine = me;
+    final kept = [
+      for (final m in _vanishItems)
+        if (m.senderId == mine || m.readAt == null) m,
+    ];
+    if (kept.length != _vanishItems.length) {
+      _vanishItems = kept;
+      _recompose();
+    }
+    unawaited(
+      ChatApi.leaveVanish(
+        id,
+      ).catchError((Object e) => Log.d(_tag, 'vanish leave failed: $e')),
+    );
+    // Coming back reads them again as a fresh entry.
+    _vanishEntered = false;
   }
 
   /// Pages forward from [after] (`hasMore` = still newer ones) until up to
@@ -260,7 +346,16 @@ class ChatRoomController {
     open.value = info;
     if (info.balance != null) balance.value = info.balance;
     if (info.earnings != null) earnings.value = info.earnings;
+    if (info.freeMessagesLeft != null) freeLeft.value = info.freeMessagesLeft;
+    _setVanish(info.vanish);
     if (_visible) _announce();
+  }
+
+  void _setVanish(ChatVanishInfo info) {
+    final wasOn = vanish.value.on;
+    vanish.value = info;
+    if (!info.on && _vanishItems.isNotEmpty) _vanishItems = const [];
+    if (wasOn != info.on) _recompose();
   }
 
   void _apply(ChatMessagesPage page, {required bool first}) {
@@ -313,12 +408,20 @@ class ChatRoomController {
   void _markRead() {
     final id = conversationId;
     if (!_visible || _marking || id == null) return;
-    if (!ChatRows.hasUnreadFrom(_server, me)) return;
+    if (!ChatRows.hasUnreadFrom(_server, me) &&
+        !ChatRows.hasUnreadFrom(_vanishItems, me)) {
+      return;
+    }
     _marking = true;
     final at = DateTime.now();
-    // Shown read at once; the server is told below.
+    // Shown read at once; the server is told below. Vanish texts read stay
+    // on screen until I leave (leaveVanish).
     _server = [
       for (final m in _server)
+        m.senderId != me && m.readAt == null ? m.copyWith(readAt: at) : m,
+    ];
+    _vanishItems = [
+      for (final m in _vanishItems)
         m.senderId != me && m.readAt == null ? m.copyWith(readAt: at) : m,
     ];
     _recompose();
@@ -333,8 +436,14 @@ class ChatRoomController {
   void _recompose() {
     if (_disposed) return;
     _stash();
-    final local = [for (final e in _outbox.forPeer(peer)) e.toMessage()];
-    final next = ChatRows.compose(_server, local);
+    // Vanish mode shows only its own texts; normal history comes back when it
+    // is turned off.
+    final inVanish = vanish.value.on;
+    final local = [
+      for (final e in _outbox.forPeer(peer))
+        if (e.vanish == inVanish) e.toMessage(),
+    ];
+    final next = ChatRows.compose(inVanish ? _vanishItems : _server, local);
     if (!listEquals(next, messages.value)) messages.value = next;
   }
 
@@ -363,7 +472,15 @@ class ChatRoomController {
 
   void _onHint(ChatHint hint) {
     if (!hint.concerns(peer: peer, conversationId: conversationId)) return;
-    unawaited(sync(full: hint.event == 'unlocked'));
+    switch (hint.event) {
+      case 'vanish_on' || 'vanish_off':
+        unawaited(_refreshVanish());
+      case 'vanish_gone' || 'vanish_message':
+        final id = conversationId;
+        if (id != null) unawaited(_readVanish(id).then((_) => _markRead()));
+      default:
+        unawaited(sync(full: hint.event == 'unlocked'));
+    }
   }
 
   // ── Sending ────────────────────────────────────────────────────────────
@@ -376,6 +493,7 @@ class ChatRoomController {
     int? width,
     int? height,
     double? price,
+    bool vanish = false,
   }) => OutboxEntry(
     clientId: ChatOutbox.newClientId(),
     peerUserId: peer,
@@ -388,12 +506,15 @@ class ChatRoomController {
     width: width,
     height: height,
     price: price,
+    vanish: vanish,
   );
 
   void sendText(String text) {
     final t = text.trim();
     if (t.isEmpty) return;
-    _outbox.enqueue(_entry(ChatMessageType.text, text: t));
+    _outbox.enqueue(
+      _entry(ChatMessageType.text, text: t, vanish: vanish.value.on),
+    );
   }
 
   void sendPhoto(String path, {int? width, int? height}) => _outbox.enqueue(
@@ -430,9 +551,16 @@ class ChatRoomController {
         if (info != null && info.conversationId == null && convId != null) {
           _setOpen(info.withConversation(convId));
         }
-        _server = ChatRows.merge(_server, [saved]);
+        if (saved.vanish) {
+          _vanishItems = ChatRows.merge(_vanishItems, [saved]);
+        } else {
+          _server = ChatRows.merge(_server, [saved]);
+        }
         if (result.balance != null) balance.value = result.balance;
         if (result.earnings != null) earnings.value = result.earnings;
+        if (result.freeMessagesLeft != null) {
+          freeLeft.value = result.freeMessagesLeft;
+        }
         if (result.charged > 0) _spent = true;
         _recompose();
         invalidateChatLists();
@@ -455,6 +583,8 @@ class ChatRoomController {
   }
 
   void dispose() {
+    // Closing the chat is leaving it: what I read in vanish mode goes.
+    leaveVanish();
     _disposed = true;
     _poll?.cancel();
     ChatSync.instance.hidden(this);
@@ -473,5 +603,7 @@ class ChatRoomController {
     loadingOlder.dispose();
     balance.dispose();
     earnings.dispose();
+    vanish.dispose();
+    freeLeft.dispose();
   }
 }

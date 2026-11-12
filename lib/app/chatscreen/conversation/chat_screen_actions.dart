@@ -150,6 +150,23 @@ class ChatScreenActions implements ChatBubbleActions {
     final type = e.type.wire;
     final code = r.refusal.code ?? r.error.type.name;
     ChatEvents.messageFailed(type: type, reason: code);
+    // Written in vanish mode, but vanish mode is off now (the other person
+    // turned it off, or the admin did): nothing was stored. The text goes back
+    // in the box and the screen switches back, so it is never sent by mistake
+    // as a normal, saved message.
+    if (code == ChatCodes.vanishOff || code == ChatCodes.vanishDisabled) {
+      ChatOutbox.instance.discard(e.clientId);
+      final back = e.text ?? '';
+      if (e.type == ChatMessageType.text && back.isNotEmpty) {
+        final typed = text.text.trim();
+        // Never lose it: after anything typed since, on its own line.
+        text.text = typed.isEmpty ? back : '$typed\n$back';
+      }
+      CToast.error(r.error);
+      if (code == ChatCodes.vanishDisabled) invalidateChatConfig();
+      unawaited(controller.refreshOpen());
+      return;
+    }
     if (r.failure != OutboxFailure.lowBalance) {
       const changed = {
         ChatCodes.hostOff,
@@ -166,7 +183,9 @@ class ChatScreenActions implements ChatBubbleActions {
         if (e.type == ChatMessageType.text && text.text.trim().isEmpty) {
           text.text = e.text ?? '';
         }
-      } else if (code == ChatCodes.lowEarnings || changed.contains(code)) {
+      } else if (code == ChatCodes.lowEarnings ||
+          code == ChatCodes.vanishFull ||
+          changed.contains(code)) {
         CToast.error(r.error);
       }
       // The composer swaps for the right notice.

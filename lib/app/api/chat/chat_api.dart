@@ -30,6 +30,16 @@ abstract final class ChatCodes {
   /// `/chats/with` says it as `reason`).
   static const notAvailable = 'CHAT_NOT_AVAILABLE';
 
+  /// Vanish mode (2026-11-12): sent as vanish but it is off on the server
+  /// (the other person turned it off) — nothing was stored.
+  static const vanishOff = 'CHAT_VANISH_OFF';
+
+  /// The admin switched vanish mode off.
+  static const vanishDisabled = 'CHAT_VANISH_DISABLED';
+
+  /// Too many unread vanish texts waiting in this chat.
+  static const vanishFull = 'CHAT_VANISH_FULL';
+
   /// Codes with their own copy in `chat:errors.*`.
   static const _known = {
     invalidTarget,
@@ -49,6 +59,9 @@ abstract final class ChatCodes {
     disabled,
     privatePhotosDisabled,
     notAvailable,
+    vanishOff,
+    vanishDisabled,
+    vanishFull,
   };
 
   /// `chat:errors.<code>` for a known code, else null.
@@ -179,18 +192,63 @@ abstract final class ChatApi {
     );
   }
 
+  /// [vanish]: written in vanish mode. If the server says vanish mode is
+  /// off the send is refused (`CHAT_VANISH_OFF`) instead of being stored.
   static Future<ChatSendResult> sendText({
     required String toUserId,
     required String text,
     required String clientId,
+    bool vanish = false,
   }) async => ChatSendResult.fromJson(
     await _guard(
       () => ApiClient.post(
         '/chats/messages',
-        data: {'toUserId': toUserId, 'text': text, 'clientId': clientId},
+        data: {
+          'toUserId': toUserId,
+          'text': text,
+          'clientId': clientId,
+          if (vanish) 'vanish': true,
+        },
       ),
     ),
   );
+
+  /// Vanish mode and its waiting texts. [enter]: the chat screen just opened
+  /// (the server first removes what I read before and left).
+  static Future<ChatVanishState> fetchVanish(
+    String conversationId, {
+    bool enter = false,
+  }) async => ChatVanishState.fromJson(
+    await _guard(
+      () => ApiClient.get(
+        '/chats/conversations/${Uri.encodeComponent(conversationId)}/vanish',
+        query: {if (enter) 'enter': '1'},
+      ),
+    ),
+  );
+
+  /// Turns vanish mode on or off for this chat (both people). Off removes
+  /// every vanish text in it.
+  static Future<ChatVanishState> setVanish(
+    String conversationId, {
+    required bool on,
+  }) async => ChatVanishState.fromJson(
+    await _guard(
+      () => ApiClient.post(
+        '/chats/conversations/${Uri.encodeComponent(conversationId)}/vanish',
+        data: {'on': on},
+      ),
+    ),
+  );
+
+  /// I left the chat: the vanish texts I read are removed, for both of us.
+  static Future<void> leaveVanish(String conversationId) async {
+    await _guard(
+      () => ApiClient.post(
+        '/chats/conversations/${Uri.encodeComponent(conversationId)}/vanish/leave',
+      ),
+    );
+  }
 
   /// A photo ([ChatMessageType.image]) or voice note ([ChatMessageType.audio]).
   static Future<ChatSendResult> sendMedia({
@@ -298,17 +356,22 @@ class ChatReportInput {
     required this.conversationId,
     required this.reason,
     this.messageId,
+    this.vanishMessageId,
     this.categoryId,
   });
 
   final String conversationId;
   final String reason;
   final String? messageId;
+
+  /// A reported vanish text: the server copies it into the report.
+  final String? vanishMessageId;
   final Object? categoryId;
 
   JsonMap toJson() => {
     'conversationId': conversationId,
     'messageId': ?messageId,
+    'vanishMessageId': ?vanishMessageId,
     'categoryId': ?categoryId,
     'reason': reason,
   };
@@ -326,6 +389,8 @@ Future<T> _guard<T>(Future<T> Function() body) async {
         ? switch (refusal.reason) {
             'blocked_text' => 'chat:errors.blocked_text',
             'contact_info' => 'chat:errors.contact_info',
+            'vanish_text_only' => 'chat:errors.vanish_text_only',
+            'duration' => 'chat:errors.voice_too_long',
             _ => ChatCodes.keyFor(refusal.code),
           }
         : ChatCodes.keyFor(refusal.code);
