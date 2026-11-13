@@ -14,6 +14,9 @@ import '../helper/wallet_palette.dart';
 /// Money), in the app's own colours: the brand gradient for what to tap
 /// (purple in light, lime in dark, like the wallet's Add money button), green
 /// for money that lands in the wallet, a gold glow for the gift.
+///
+/// Glows (coloured shadows, a tinted picked tile) are for dark only: on a
+/// light page they muddy the cards, so light keeps flat fills and borders.
 @immutable
 class OfferColors {
   const OfferColors._({
@@ -21,6 +24,7 @@ class OfferColors {
     required this.accent,
     required this.onAccent,
     required this.ink,
+    required this.glows,
   });
 
   /// Hero, button, "POPULAR" tag.
@@ -35,6 +39,12 @@ class OfferColors {
   /// An icon on white (the gift) that still reads as the brand.
   final Color ink;
 
+  /// Coloured shadows and tinted fills (dark theme only).
+  final bool glows;
+
+  /// [shadows] in dark, none in light.
+  List<BoxShadow>? glow(List<BoxShadow> shadows) => glows ? shadows : null;
+
   static const gold = Color(0xFFFFD54F);
   static const green = Color(0xFF16C784);
 
@@ -47,6 +57,7 @@ class OfferColors {
     accent: BrandColors.purple,
     onAccent: Colors.white,
     ink: BrandColors.purple,
+    glows: false,
   );
 
   static const _dark = OfferColors._(
@@ -54,6 +65,7 @@ class OfferColors {
     accent: BrandColors.lime,
     onAccent: Colors.black,
     ink: Color(0xFF3F7A12),
+    glows: true,
   );
 
   static OfferColors of(BuildContext context) =>
@@ -165,7 +177,9 @@ class _AmountTile extends StatelessWidget {
         ),
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(14.ms),
-          gradient: active
+          // Picked: a brand tint and glow in dark; in light, the border and
+          // the check alone (a tint there reads as a smudge).
+          gradient: active && o.glows
               ? LinearGradient(
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
@@ -175,19 +189,19 @@ class _AmountTile extends StatelessWidget {
                   ],
                 )
               : null,
-          color: active ? null : (fill ?? p.soft),
+          color: active && o.glows ? null : (fill ?? p.soft),
           border: Border.all(
             color: active ? o.accent : p.cardBorder,
             width: active ? 2 : 1.2,
           ),
           boxShadow: active
-              ? [
+              ? o.glow([
                   BoxShadow(
                     color: o.accent.withValues(alpha: 0.28),
                     blurRadius: 14,
                     offset: const Offset(0, 6),
                   ),
-                ]
+                ])
               : null,
         ),
         child: Column(
@@ -313,13 +327,13 @@ class OfferShineButton extends StatelessWidget {
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(16.ms),
             gradient: LinearGradient(colors: o.gradient),
-            boxShadow: [
+            boxShadow: o.glow([
               BoxShadow(
                 color: o.accent.withValues(alpha: 0.4),
                 blurRadius: 16,
                 offset: const Offset(0, 8),
               ),
-            ],
+            ]),
           ),
           child: Stack(
             fit: StackFit.expand,

@@ -14,6 +14,7 @@ import '../../../api/hosthub/hosthub_queries.dart';
 import '../../../api/hosthub/moderation_models.dart';
 import '../../../api/hosthub/profile_models.dart';
 import '../../../authscreen/helper/deep_links.dart';
+import '../../../component/c_alert.dart';
 import '../../../component/c_image.dart';
 import '../../../component/c_text.dart';
 import '../../../component/pressable.dart';
@@ -25,7 +26,9 @@ import '../../onboarding/widgets/step_body.dart';
 /// "Messages from the moderation team" on the ME tab: the team's notes and
 /// decisions, newest first, each with what it is about (the fields to
 /// change, the rejected photo) and a button to the screen the team linked,
-/// or to the step to fix. The same messages arrive as pushes.
+/// or to the step to fix. The same messages arrive as pushes. A plain
+/// message (no fix asked) has an X that closes it for good; the team can
+/// also resolve any message from the admin panel.
 class HostModerationMessagesCard extends HookWidget {
   const HostModerationMessagesCard({super.key, required this.open, this.host});
 
@@ -265,6 +268,26 @@ class _Message extends StatelessWidget {
                   weight: FontWeight.w800,
                   color: p.onAccent,
                 ),
+              ),
+            ),
+          ],
+          if (m.dismissible) ...[
+            SizedBox(width: 4.ms),
+            Pressable(
+              key: ValueKey('moderation-dismiss-${m.id}'),
+              semanticLabel: context.t('actions.close'),
+              hitPadding: EdgeInsets.all(8.ms),
+              onPressed: () {
+                HostEvents.moderationMessageTapped(action: 'dismiss');
+                unawaited(
+                  dismissModerationMessage(m).catchError((Object e) {
+                    unawaited(CAlert.error(e));
+                  }),
+                );
+              },
+              child: Padding(
+                padding: EdgeInsets.all(2.ms),
+                child: Icon(LucideIcons.x, size: 16.ms, color: p.muted),
               ),
             ),
           ],

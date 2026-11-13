@@ -19,4 +19,8 @@ abstract final class HostModerationApi {
         HostModerationMessage.from(row),
     ];
   }
+
+  /// The host's X on a plain message: closed for good, on every device.
+  static Future<void> dismiss(int id) =>
+      ApiClient.post('/me/moderation-notes/$id/dismiss');
 }

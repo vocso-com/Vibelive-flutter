@@ -414,7 +414,7 @@ Sub-screens: each step is `host_onboarding_<step>` on the route it is open on (`
 | host_moderation_banners_shown | moderation notices shown | count, kinds |
 | host_moderation_messages_shown | messages card shown (per count) | count |
 | host_moderation_messages_expanded | more / less | expanded |
-| host_moderation_message_tapped | message action | action (link/fix) |
+| host_moderation_message_tapped | message action | action (link/fix/dismiss) |
 
 ### Verification badge
 | event | when | params | Meta / Firebase |

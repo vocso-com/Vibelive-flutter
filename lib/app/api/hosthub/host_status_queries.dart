@@ -88,6 +88,34 @@ useHostModerationMessages(BuildContext context, {bool enabled = true}) {
   );
 }
 
+/// Closes [message] (the host's X): gone from the list at once, and back if
+/// the server says no. A message the server no longer has stays gone.
+Future<void> dismissModerationMessage(HostModerationMessage message) async {
+  const key = HostHubKeys.moderationMessages;
+  final before = queryCache.entry<List<HostModerationMessage>>(key)?.data;
+  if (before != null) {
+    queryCache.setQueryData<List<HostModerationMessage>, ApiException>(
+      key,
+      (_) => [
+        for (final m in before)
+          if (m.id != message.id) m,
+      ],
+    );
+  }
+  try {
+    await ApiClient.guard(() => HostModerationApi.dismiss(message.id));
+  } on ApiException catch (e) {
+    if (e.statusCode == 404) return;
+    if (before != null) {
+      queryCache.setQueryData<List<HostModerationMessage>, ApiException>(
+        key,
+        (_) => before,
+      );
+    }
+    rethrow;
+  }
+}
+
 // ── Approval ────────────────────────────────────────────────────────────────
 
 /// Latest approval request; combine with the profile through

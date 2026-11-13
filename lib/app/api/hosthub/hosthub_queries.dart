@@ -1,6 +1,7 @@
 import 'package:flutter/widgets.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 
+import '../../../core/network/api_client.dart';
 import '../../../core/network/strapi.dart';
 import '../../../core/query/query_hooks.dart';
 import '../../../core/query/query_persist.dart';

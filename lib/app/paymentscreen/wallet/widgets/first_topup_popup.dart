@@ -121,7 +121,7 @@ class _FirstTopupPopup extends HookWidget {
                 // Opaque in both themes (the dark surface is a tint).
                 color: Color.alphaBlend(p.cardBg, p.bg),
                 borderRadius: BorderRadius.circular(24.ms),
-                boxShadow: [
+                boxShadow: OfferColors.of(context).glow([
                   BoxShadow(
                     color: OfferColors.of(
                       context,
@@ -130,7 +130,7 @@ class _FirstTopupPopup extends HookWidget {
                     spreadRadius: -6,
                     offset: const Offset(0, 18),
                   ),
-                ],
+                ]),
               ),
               child: SingleChildScrollView(
                 child: Column(
@@ -280,13 +280,13 @@ class _Hero extends StatelessWidget {
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
                       color: Colors.white,
-                      boxShadow: [
+                      boxShadow: o.glow([
                         BoxShadow(
                           color: _gold.withValues(alpha: 0.75),
                           blurRadius: 20,
                           spreadRadius: 3,
                         ),
-                      ],
+                      ]),
                     ),
                     child: Icon(LucideIcons.gift, size: 27.ms, color: o.ink),
                   ),

@@ -20,7 +20,8 @@ class HostModerationMessage {
     this.audio,
     this.status,
     this.createdAt,
-  });
+    bool? dismissible,
+  }) : _dismissible = dismissible;
 
   factory HostModerationMessage.from(JsonMap m) => HostModerationMessage(
     id: J.integer(m['id']) ?? 0,
@@ -36,6 +37,7 @@ class HostModerationMessage {
     audio: J.str(m['audio']),
     status: J.str(m['status']),
     createdAt: J.date(m['createdAt']),
+    dismissible: m['dismissible'] is bool ? m['dismissible'] as bool : null,
   );
 
   final int id;
@@ -68,6 +70,13 @@ class HostModerationMessage {
   /// Something needs the host to act.
   bool get needsAction =>
       isTextRejection || photo != null || audio == 'rejected';
+
+  final bool? _dismissible;
+
+  /// Just a message (a note, an approval): the host may close it with the X.
+  /// A request to fix closes once fixed, or when the team resolves it. The
+  /// backend says (`dismissible`); an older one does not, so the same rule.
+  bool get dismissible => _dismissible ?? !needsAction;
 
   bool get isApproval =>
       kind == 'approved' || (kind == 'status_changed' && status == 'approved');

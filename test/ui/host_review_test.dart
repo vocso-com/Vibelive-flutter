@@ -455,6 +455,81 @@ void main() {
       );
     });
 
+    testWidgets('a plain message has an X that closes it for good; a '
+        'request to fix has none', (tester) async {
+      final backend = await resetHost(
+        expert: {'id': 50, 'documentId': 'exp50'},
+      );
+      backend.moderationNotes = [
+        {
+          'id': 3,
+          'kind': 'rejected',
+          'body': 'Please use your real name.',
+          'fields': ['name'],
+          'dismissible': false,
+        },
+        {
+          'id': 2,
+          'kind': 'note',
+          'body': 'Welcome aboard.',
+          'dismissible': true,
+        },
+        // An older backend says nothing: the same rule in the app.
+        {'id': 1, 'kind': 'approved', 'body': 'Your profile is live.'},
+      ];
+      phone(tester);
+      await pumpRoutes(
+        tester,
+        Scaffold(
+          body: ListView(
+            children: [HostModerationMessagesCard(open: (_) async {})],
+          ),
+        ),
+      );
+      await pumpFor(tester, 300);
+      expect(find.byKey(const ValueKey('moderation-dismiss-3')), findsNothing);
+      expect(
+        find.byKey(const ValueKey('moderation-dismiss-1')),
+        findsOneWidget,
+      );
+
+      await tester.tap(find.byKey(const ValueKey('moderation-dismiss-2')));
+      await pumpFor(tester, 300);
+      expect(find.text('Welcome aboard.'), findsNothing);
+      expect(
+        backend.sent('POST', '/me/moderation-notes/2/dismiss'),
+        hasLength(1),
+      );
+      expect(find.text('Please use your real name.'), findsOneWidget);
+      await finishHost(tester);
+    });
+
+    testWidgets('the X fails on the server: the message comes back', (
+      tester,
+    ) async {
+      final backend = await resetHost(
+        expert: {'id': 50, 'documentId': 'exp50'},
+      );
+      backend.moderationNotes = [
+        {'id': 2, 'kind': 'note', 'body': 'Welcome aboard.'},
+      ];
+      backend.failing.add('POST /api/me/moderation-notes/2/dismiss');
+      phone(tester);
+      await pumpRoutes(
+        tester,
+        Scaffold(
+          body: ListView(
+            children: [HostModerationMessagesCard(open: (_) async {})],
+          ),
+        ),
+      );
+      await pumpFor(tester, 300);
+      await tester.tap(find.byKey(const ValueKey('moderation-dismiss-2')));
+      await pumpFor(tester, 600);
+      expect(find.text('Welcome aboard.'), findsOneWidget);
+      await finishHost(tester);
+    });
+
     testWidgets('no messages, no card', (tester) async {
       await resetHost(expert: {'id': 50, 'documentId': 'exp50'});
       phone(tester);

@@ -420,13 +420,13 @@ class _BonusBanner extends StatelessWidget {
           colors: o.gradient,
         ),
         borderRadius: BorderRadius.circular(18.ms),
-        boxShadow: [
+        boxShadow: o.glow([
           BoxShadow(
             color: o.accent.withValues(alpha: 0.3),
             blurRadius: 16,
             offset: const Offset(0, 6),
           ),
-        ],
+        ]),
       ),
       child: Row(
         children: [
@@ -436,13 +436,13 @@ class _BonusBanner extends StatelessWidget {
             decoration: BoxDecoration(
               shape: BoxShape.circle,
               color: Colors.white,
-              boxShadow: [
+              boxShadow: o.glow([
                 BoxShadow(
                   color: OfferColors.gold.withValues(alpha: 0.7),
                   blurRadius: 14,
                   spreadRadius: 2,
                 ),
-              ],
+              ]),
             ),
             child: Icon(LucideIcons.gift, size: 21.ms, color: o.ink),
           ),
