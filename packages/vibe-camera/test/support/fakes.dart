@@ -7,8 +7,19 @@ import 'package:vibe_camera/vibe_camera.dart';
 import 'package:video_player_platform_interface/video_player_platform_interface.dart';
 
 /// A camera that "records" by writing a small file.
+///
+/// [hangStart] / [hangStop] make the next start or stop never answer, as the
+/// iOS plugin does when its one camera was closed under it; [failStop] makes
+/// it throw; [emptyFile] hands back an empty recording. [log] (shared between
+/// sessions, when given) records every call in order.
 class FakeSession implements VibeCaptureSession {
-  FakeSession({this.lens = VibeLens.front, this.fps = 120, this.mirrorRecording = false});
+  FakeSession({
+    this.lens = VibeLens.front,
+    this.fps = 120,
+    this.mirrorRecording = false,
+    List<String>? log,
+    this.name = 'cam',
+  }) : log = log ?? [];
 
   @override
   final VibeLens lens;
@@ -16,11 +27,17 @@ class FakeSession implements VibeCaptureSession {
   final int? fps;
   @override
   final bool mirrorRecording;
+  final List<String> log;
+  final String name;
   bool recording = false;
   double? light;
   bool? torch;
   int stops = 0;
   bool disposed = false;
+  bool hangStart = false;
+  bool hangStop = false;
+  bool failStop = false;
+  bool emptyFile = false;
 
   @override
   Widget preview() => const ColoredBox(key: ValueKey('fake-preview'), color: Color(0xFF335577));
@@ -41,18 +58,71 @@ class FakeSession implements VibeCaptureSession {
   @override
   Future<void> focusAt(Offset point) async {}
   @override
-  Future<void> startRecording() async => recording = true;
+  Future<void> startRecording() {
+    log.add('$name start');
+    if (hangStart) {
+      hangStart = false;
+      return Completer<void>().future;
+    }
+    recording = true;
+    return Future.value();
+  }
+
   @override
   Future<String> stopRecording() async {
+    log.add('$name stop');
+    if (hangStop) {
+      hangStop = false;
+      return Completer<String>().future;
+    }
+    if (failStop) {
+      failStop = false;
+      throw StateError('AVAssetWriter could not finish writing!');
+    }
     recording = false;
     stops++;
     final f = File('${Directory.systemTemp.path}/vibe_fake_${DateTime.now().microsecondsSinceEpoch}.mp4');
-    f.writeAsBytesSync([0, 0, 0, 1]);
+    f.writeAsBytesSync(emptyFile ? const [] : const [0, 0, 0, 1]);
     return f.path;
   }
 
   @override
-  Future<void> dispose() async => disposed = true;
+  Future<void> dispose() async {
+    log.add('$name dispose');
+    disposed = true;
+  }
+}
+
+/// Hands out a new [FakeSession] per open and keeps count, so a test can
+/// see how many cameras were open at once. [gate], while set, holds every
+/// open until it completes (a permission prompt waiting for an answer).
+class FakeCameras {
+  final log = <String>[];
+  final sessions = <FakeSession>[];
+  Completer<void>? gate;
+  int maxOpenAtOnce = 0;
+
+  /// Applied to each session as it opens (e.g. make the first start hang).
+  void Function(FakeSession session, int index)? setUp;
+
+  int get opens => sessions.length;
+  int get openNow => sessions.where((s) => !s.disposed).length;
+  FakeSession get last => sessions.last;
+
+  Future<VibeCaptureSession> open({
+    required VibeLens lens,
+    required int preferredFps,
+    required bool enableAudio,
+  }) async {
+    log.add('open ${lens.name}');
+    final wait = gate;
+    if (wait != null) await wait.future;
+    final s = FakeSession(lens: lens, log: log, name: 'cam${sessions.length + 1}');
+    setUp?.call(s, sessions.length);
+    sessions.add(s);
+    if (openNow > maxOpenAtOnce) maxOpenAtOnce = openNow;
+    return s;
+  }
 }
 
 /// Video work without native code: records what it was asked.

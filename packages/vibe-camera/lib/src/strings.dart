@@ -13,6 +13,7 @@ class VibeCameraStrings {
     this.tooShort = 'Record a little longer',
     this.cameraDenied = 'Allow camera and microphone access to record.',
     this.cameraFailed = "The camera couldn't start. Please try again.",
+    this.recordFailed = "The video didn't record. Please try again.",
     this.openSettings = 'Open settings',
     this.retry = 'Try again',
     this.retake = 'Retake',
@@ -53,6 +54,9 @@ class VibeCameraStrings {
   final String tooShort;
   final String cameraDenied;
   final String cameraFailed;
+
+  /// A recording that started but came back without a usable file.
+  final String recordFailed;
   final String openSettings;
   final String retry;
   final String retake;

@@ -98,6 +98,7 @@ VibeCameraStrings vibeCameraStrings(BuildContext context) {
     tooShort: t('too_short'),
     cameraDenied: t('camera_denied'),
     cameraFailed: t('camera_failed'),
+    recordFailed: t('record_failed'),
     openSettings: t('open_settings'),
     retry: t('retry'),
     retake: t('retake'),

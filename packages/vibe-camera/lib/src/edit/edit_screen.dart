@@ -87,11 +87,14 @@ class _VibeEditScreenState extends State<VibeEditScreen> {
   }
 
   Future<void> _load() async {
+    VideoPlayerController? opened;
     try {
       // Reading the file and opening the player are independent: side by
       // side, the clip shows sooner.
-      final player = VideoPlayerController.file(widget.file);
-      final (info, _) = await (_exporter.probe(widget.file), player.initialize()).wait;
+      final player = opened = VideoPlayerController.file(widget.file);
+      // A file that cannot be read can leave either waiting for good: past
+      // the limit it counts as failed, and the user can go back and retake.
+      final (info, _) = await (_exporter.probe(widget.file), player.initialize()).wait.timeout(const Duration(seconds: 20));
       await player.setLooping(false);
       player.addListener(_loop);
       if (!mounted) {
@@ -110,6 +113,7 @@ class _VibeEditScreenState extends State<VibeEditScreen> {
       final thumbs = await _exporter.thumbnails(widget.file, info.duration);
       if (mounted) setState(() => _thumbs = thumbs);
     } catch (_) {
+      if (opened != null && !identical(opened, _player)) unawaited(opened.dispose());
       if (mounted) setState(() => _failed = true);
     }
   }

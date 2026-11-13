@@ -105,6 +105,9 @@ class _Backend implements HttpClientAdapter {
 
   /// The admin lets this person (user 1, the paying side) turn it on.
   bool vanishCanTurnOn = true;
+
+  /// A slow first page of messages (the chat still loading).
+  int messagesDelayMs = 0;
   final vanishItems = <Map<String, Object?>>[];
   final vanishCalls = <String>[];
 
@@ -183,6 +186,11 @@ class _Backend implements HttpClientAdapter {
         o.path == '/api/chats/conversations/c1/vanish' &&
         vanishSwitchDelayMs > 0) {
       await Future<void>.delayed(Duration(milliseconds: vanishSwitchDelayMs));
+    }
+    if (o.method == 'GET' &&
+        o.path == '/api/chats/conversations/c1/messages' &&
+        messagesDelayMs > 0) {
+      await Future<void>.delayed(Duration(milliseconds: messagesDelayMs));
     }
     final status = _status(o); // before the body counts the failure down
     return _reply(_body(o), status);
@@ -1293,7 +1301,7 @@ void main() {
       expect(find.text('NEW'), findsOneWidget);
       expect(find.text('Swipe up to turn on vanish mode'), findsOneWidget);
       expect(backend.vanishCalls, isEmpty, reason: 'a tip never switches');
-      await _pump(tester, 2600);
+      await _pump(tester, 3600);
       expect(find.byKey(const ValueKey('chat-vanish-pull')), findsNothing);
       expect(AppPrefs.getString(ChatMessageList.vanishTipKey('1')), isNotNull);
       expect(tester.takeException(), isNull);
@@ -1304,13 +1312,45 @@ void main() {
       unawaited(appRouter.push(AppRoutes.chatWith('7')));
       await _pump(tester, 1800);
       expect(find.byKey(const ValueKey('chat-vanish-tip')), findsOneWidget);
-      await _pump(tester, 2600);
+      await _pump(tester, 3600);
       appRouter.pop();
       await _pump(tester, 600);
       unawaited(appRouter.push(AppRoutes.chatWith('7')));
       await _pump(tester, 2500);
       expect(find.byKey(const ValueKey('chat-vanish-pull')), findsNothing);
       expect(AppPrefs.getString(ChatMessageList.vanishTipKey('1')), '2');
+      await finish(tester);
+    });
+
+    testWidgets('it waits while the chat is still loading', (tester) async {
+      backend
+        ..messages.add(_Backend._message('m1', text: 'hello'))
+        ..messagesDelayMs = 2500;
+      await openApp(tester, location: AppRoutes.chatWith('7'));
+      await _pump(tester, 1200);
+      expect(find.byKey(const ValueKey('chat-vanish-tip')), findsNothing);
+      await _pump(tester, 1500); // loaded
+      await _pump(tester, 1400); // settled, risen
+      expect(find.byKey(const ValueKey('chat-vanish-tip')), findsOneWidget);
+      await _pump(tester, 3000);
+      await finish(tester);
+    });
+
+    testWidgets('left half way: not counted — it plays again next time', (
+      tester,
+    ) async {
+      backend.messages.add(_Backend._message('m1', text: 'hello'));
+      await openApp(tester, location: AppRoutes.chatWith('7'));
+      await _pump(tester, 1500);
+      expect(find.byKey(const ValueKey('chat-vanish-tip')), findsOneWidget);
+      appRouter.pop();
+      await _pump(tester, 800);
+      expect(AppPrefs.getString(ChatMessageList.vanishTipKey('1')), isNull);
+      unawaited(appRouter.push(AppRoutes.chatWith('7')));
+      await _pump(tester, 1800);
+      expect(find.byKey(const ValueKey('chat-vanish-tip')), findsOneWidget);
+      await _pump(tester, 3600);
+      expect(AppPrefs.getString(ChatMessageList.vanishTipKey('1')), '1');
       await finish(tester);
     });
 

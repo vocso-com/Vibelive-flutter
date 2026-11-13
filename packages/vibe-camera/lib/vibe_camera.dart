@@ -18,6 +18,7 @@ import 'src/capture/capture_screen.dart';
 import 'src/config.dart';
 import 'src/ui/theme.dart';
 
+export 'src/capture/camera_lane.dart' show VibeCameraLane;
 export 'src/capture/camera_session.dart'
     show VibeCaptureSession, VibeSessionOpener, VibeCameraDenied;
 export 'src/config.dart';

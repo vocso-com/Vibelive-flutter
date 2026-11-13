@@ -11,6 +11,7 @@ import '../edit/edit_screen.dart';
 import '../strings.dart';
 import '../ui/filter_thumb.dart';
 import '../ui/theme.dart';
+import 'camera_lane.dart';
 import 'camera_session.dart';
 
 /// The camera: live preview with the chosen look, light, zoom, torch and
@@ -32,8 +33,33 @@ enum _Status { opening, ready, denied, failed }
 
 class _VibeCaptureScreenState extends State<VibeCaptureScreen>
     with WidgetsBindingObserver, SingleTickerProviderStateMixin {
+  // How long each camera call may take before the screen gives up on it and
+  // starts the camera afresh. Generous: a slow phone answers well inside
+  // them. An open includes the first-time permission prompts.
+  static const _openTimeout = Duration(seconds: 20);
+  static const _startTimeout = Duration(seconds: 6);
+  static const _stopTimeout = Duration(seconds: 10);
+  static const _releaseTimeout = Duration(seconds: 5);
+
   VibeCaptureSession? _session;
   _Status _status = _Status.opening;
+
+  /// An open for this screen is on its way.
+  bool _opening = false;
+
+  /// Moves on whenever the camera wanted changes (flipped, let go): an open
+  /// asked for before it is closed again when it arrives.
+  int _gen = 0;
+
+  /// The app is on screen: not hidden or paused.
+  bool _foreground = true;
+
+  /// The editor is on top: the camera is not needed until a retake.
+  bool _away = false;
+
+  /// The gallery picker is open.
+  bool _picking = false;
+
   late VibeLens _lens = widget.config.lens;
   int _filter = 0;
   double _light = 0;
@@ -43,6 +69,8 @@ class _VibeCaptureScreenState extends State<VibeCaptureScreen>
   double _zoomAtStart = 1;
   double _swipe = 0;
   DateTime? _recordingSince;
+
+  /// A start or stop is under way: the record button waits for it.
   bool _busy = false;
   String? _flash; // a message shown for a moment (filter name, "too short")
   Timer? _flashTimer;
@@ -61,15 +89,21 @@ class _VibeCaptureScreenState extends State<VibeCaptureScreen>
     });
   final _seconds = ValueNotifier<int>(0);
 
+  VibeCameraLane get _lane => VibeCameraLane.shared;
   List<VibeFilter> get _filters => widget.config.looks;
   VibeFilter get _look => _filters[_filter];
   bool get _recording => _recordingSince != null;
+  bool get _wanted => mounted && _foreground && !_away;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    _open();
+    final now = WidgetsBinding.instance.lifecycleState;
+    _foreground = now != AppLifecycleState.hidden &&
+        now != AppLifecycleState.paused &&
+        now != AppLifecycleState.detached;
+    _settle();
   }
 
   @override
@@ -78,58 +112,150 @@ class _VibeCaptureScreenState extends State<VibeCaptureScreen>
     _flashTimer?.cancel();
     _progress.dispose();
     _seconds.dispose();
-    _session?.dispose();
+    _gen++;
+    final s = _session;
+    _session = null;
+    // Closed mid-recording: the recording is stopped (and dropped) before
+    // the camera closes, in turn with anything still under way.
+    if (s != null) unawaited(_letGo(s));
     super.dispose();
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    // The camera belongs to whoever is in front: let go when we are not.
-    if (state == AppLifecycleState.inactive || state == AppLifecycleState.paused) {
-      if (_recording) _stop();
-      final s = _session;
-      _session = null;
-      s?.dispose();
-    } else if (state == AppLifecycleState.resumed && _session == null) {
-      _open();
+    // Only leaving the app lets the camera go. "Inactive" is a permission
+    // prompt, the notification shade or Control Centre: the camera stays and
+    // a recording keeps going. (Letting go there opened a second camera
+    // behind every permission prompt, and closed the camera under a stop.)
+    if (state == AppLifecycleState.inactive) return;
+    final front = state == AppLifecycleState.resumed;
+    if (front == _foreground) return;
+    _foreground = front;
+    // Back from outside the app, perhaps from Settings with access now
+    // allowed: try again even after a refusal.
+    _settle(retry: front);
+  }
+
+  /// Brings the camera in line with what the screen needs right now: open
+  /// when wanted, a recording finished and the camera let go when not. Runs
+  /// after every change; a start or stop under way calls it when it ends.
+  void _settle({bool retry = false}) {
+    if (!mounted || _busy) return;
+    if (_wanted) {
+      final refused = _status == _Status.denied || _status == _Status.failed;
+      if (_session == null && !_opening && (retry || !refused)) _open();
+    } else if (_recording) {
+      // Left the app mid-recording: the clip is kept, the editor waits.
+      unawaited(_stop());
+    } else if (_session != null) {
+      unawaited(_release());
     }
   }
 
-  Future<void> _open() async {
-    setState(() => _status = _Status.opening);
-    final open = widget.opener ?? CameraSession.open;
+  void _open() {
+    _opening = true;
+    if (_status != _Status.opening) setState(() => _status = _Status.opening);
+    unawaited(_openFor(_gen));
+  }
+
+  Future<void> _openFor(int gen) async {
+    VibeCaptureSession? session;
+    Object? error;
     try {
-      final session = await open(
+      session = await _openSession(gen);
+    } catch (e) {
+      error = e;
+      _log('open failed: $e');
+    }
+    _opening = false;
+    if (session != null && !_take(session, gen)) unawaited(_letGo(session));
+    if (!mounted) return;
+    if (session == null && gen == _gen && _wanted) {
+      setState(() => _status = error is VibeCameraDenied ? _Status.denied : _Status.failed);
+      return;
+    }
+    // Flipped or left while it opened: open what is wanted now.
+    _settle();
+  }
+
+  /// One camera, in the lane. One that answers after the timeout (a
+  /// permission prompt left up a long time) is still used if the screen is
+  /// waiting for exactly that camera, and closed otherwise, unless a newer
+  /// camera has replaced it already.
+  Future<VibeCaptureSession> _openSession(int gen) {
+    final open = widget.opener ?? CameraSession.open;
+    final lane = _lane;
+    final ticket = lane.beginOpen();
+    return lane.run(() {
+      final pending = open(
         lens: _lens,
         preferredFps: widget.config.preferredFps,
         enableAudio: widget.config.enableAudio,
       );
-      if (!mounted) {
-        await session.dispose();
-        return;
-      }
-      _session = session;
-      _lens = session.lens;
-      _zoom = session.minZoom;
-      if (_light != 0) unawaited(session.setLight(_light));
-      setState(() => _status = _Status.ready);
-    } on VibeCameraDenied {
-      if (mounted) setState(() => _status = _Status.denied);
-    } catch (_) {
-      if (mounted) setState(() => _status = _Status.failed);
-    }
+      return pending.timeout(_openTimeout, onTimeout: () {
+        unawaited(pending.then((late) {
+          if (_take(late, gen)) return;
+          if (lane.isNewestOpen(ticket)) unawaited(_letGo(late));
+        }, onError: (Object _) {}));
+        throw TimeoutException('The camera did not open', _openTimeout);
+      });
+    });
   }
 
-  Future<void> _flip() async {
-    if (_recording || _busy) return;
-    HapticFeedback.selectionClick();
-    final old = _session;
+  /// Keeps [session] when it is still the camera this screen wants.
+  bool _take(VibeCaptureSession session, int gen) {
+    if (gen != _gen || !_wanted || _session != null || _opening) return false;
+    _session = session;
+    _lens = session.lens;
+    _zoom = session.minZoom;
+    _torch = false;
+    if (_light != 0) _quiet(session.setLight(_light));
+    setState(() => _status = _Status.ready);
+    return true;
+  }
+
+  /// Gives the camera back: the app left, the editor opened, the lens
+  /// changed, or a call never answered (a fresh camera clears a wedged one).
+  Future<void> _release({bool stopFirst = true}) async {
+    _gen++;
+    final s = _session;
     _session = null;
     _torch = false;
+    if (mounted && _status != _Status.opening) setState(() => _status = _Status.opening);
+    if (s != null) await _letGo(s, stopFirst: stopFirst);
+  }
+
+  /// Closes [s] in the lane, after whatever it is doing now. Still
+  /// recording: that recording is stopped first, and dropped (not after a
+  /// stop that just failed: asking again would only wait again).
+  Future<void> _letGo(VibeCaptureSession s, {bool stopFirst = true}) => _lane
+      .run<void>(() async {
+        if (stopFirst && s.isRecording) {
+          try {
+            _drop(File(await s.stopRecording().timeout(_stopTimeout)));
+          } catch (_) {
+            // Closing the camera ends it anyway.
+          }
+        }
+        await s.dispose().timeout(_releaseTimeout);
+      })
+      .catchError((Object e) => _log('release failed: $e'));
+
+  static void _log(String message) => debugPrint('VibeCamera: $message');
+
+  /// A camera setting changed in passing: nothing waits on it, and one that
+  /// fails (the camera closing under it) changes nothing.
+  static void _quiet(Future<void> f) => unawaited(f.catchError((Object _) {}));
+
+  static void _drop(File file) => unawaited(file.delete().catchError((Object _) => file));
+
+  Future<void> _flip() async {
+    if (_recording || _busy || _picking) return;
+    HapticFeedback.selectionClick();
     _lens = _lens == VibeLens.front ? VibeLens.back : VibeLens.front;
-    setState(() => _status = _Status.opening);
-    await old?.dispose();
-    await _open();
+    // The open waits in the lane until the old camera is closed.
+    await _release();
+    _settle();
   }
 
   void _say(String text) {
@@ -151,20 +277,30 @@ class _VibeCaptureScreenState extends State<VibeCaptureScreen>
   Future<void> _toggleRecord() async {
     if (_recording) return _stop();
     final session = _session;
-    if (session == null || _busy) return;
-    _busy = true;
+    if (session == null || _busy || _picking || _status != _Status.ready) return;
+    setState(() => _busy = true);
     try {
       HapticFeedback.mediumImpact();
-      await session.startRecording();
+      await _lane.run(session.startRecording, timeout: _startTimeout);
+      if (!mounted) return;
       _recordingSince = DateTime.now();
       _showLight = false;
       _seconds.value = 0;
       _progress.forward(from: 0);
-      if (mounted) setState(() {});
-    } catch (_) {
+    } catch (e) {
+      // Refused, or never answered: the button must not stay dead, and the
+      // camera may be wedged, so it is opened afresh.
+      _log('start failed: $e');
+      if (!mounted) return;
       _say(widget.config.strings.cameraFailed);
+      await _release();
     } finally {
       _busy = false;
+      if (mounted) {
+        setState(() {});
+        // Left the app while it started: stop again. Let go: reopen.
+        _settle();
+      }
     }
   }
 
@@ -172,66 +308,110 @@ class _VibeCaptureScreenState extends State<VibeCaptureScreen>
     final session = _session;
     final since = _recordingSince;
     if (session == null || since == null || _busy) return;
-    _busy = true;
+    setState(() => _busy = true);
     _progress.stop();
     // The ring's own clock: the same as the wall clock, and capped at the limit.
     final elapsed = widget.config.maxDuration * _progress.value;
-    String path;
+    String? path;
     try {
-      path = await session.stopRecording();
-    } catch (_) {
-      _recordingSince = null;
-      _busy = false;
-      if (mounted) setState(() {});
-      return;
+      path = await _lane.run(session.stopRecording, timeout: _stopTimeout);
+    } catch (e) {
+      _log('stop failed: $e');
     }
     _recordingSince = null;
+    if (path == null && mounted) {
+      // Nothing came back, and the camera may be wedged: a fresh one.
+      _say(widget.config.strings.recordFailed);
+      await _release(stopFirst: false);
+    }
     _busy = false;
-    HapticFeedback.lightImpact();
-    if (!mounted) return;
-    setState(() {});
-    final file = File(path);
-    if (elapsed < widget.config.minDuration) {
-      _say(widget.config.strings.tooShort);
-      unawaited(file.delete().catchError((Object _) => file));
+    if (!mounted) {
+      if (path != null) _drop(File(path));
       return;
     }
-    if (!widget.config.edit) {
+    setState(() {});
+    if (path == null) return _settle();
+    HapticFeedback.lightImpact();
+    await _useClip(File(path), elapsed: elapsed, since: since, fps: session.fps, mirror: session.mirrorRecording);
+  }
+
+  /// The finished recording: too short, unusable, straight back, or into
+  /// the editor.
+  Future<void> _useClip(
+    File file, {
+    required Duration elapsed,
+    required DateTime since,
+    required int? fps,
+    required bool mirror,
+  }) async {
+    final config = widget.config;
+    if (elapsed < config.minDuration) {
+      _say(config.strings.tooShort);
+      _drop(file);
+      return _settle();
+    }
+    // A recording that failed on the way can still come back with a path:
+    // to a file that is missing or empty.
+    if (!_hasVideo(file)) {
+      _drop(file);
+      _say(config.strings.recordFailed);
+      await _release();
+      return _settle();
+    }
+    if (!config.edit) {
+      // Out of the app (it stopped because the app left): the camera goes
+      // now. Closing the screen would wait for the app to come back, as no
+      // frames (so no route transitions) run in the background.
+      _settle();
       Navigator.of(context).pop(
-        VibeCameraResult(
-          file: file,
-          duration: elapsed,
-          recordedAt: since,
-          fps: session.fps,
-          filterId: _look.id,
-        ),
+        VibeCameraResult(file: file, duration: elapsed, recordedAt: since, fps: fps, filterId: _look.id),
       );
       return;
     }
+    final result = await _edit(
+      VibeEditScreen(
+        file: file,
+        config: config,
+        recordedAt: since,
+        fps: fps,
+        initialFilter: _look,
+        // Android's front camera: the file is the preview's mirror image.
+        mirror: mirror,
+      ),
+    );
+    // Retake: the recording is not needed any more.
+    if (result == null) _drop(file);
+  }
+
+  /// One stat call: quick enough to make on the spot.
+  static bool _hasVideo(File file) {
+    try {
+      return file.statSync().size > 0;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Opens the editor with the camera let go (it plays and renders video;
+  /// no camera is needed under it), then hands its clip back, or opens the
+  /// camera again for a retake. Null: retake.
+  Future<VibeCameraResult?> _edit(VibeEditScreen editor) async {
+    _away = true;
+    unawaited(_release());
     final result = await Navigator.of(context).push<VibeCameraResult>(
       PageRouteBuilder(
-        pageBuilder: (_, _, _) => VibeTheme.wrap(
-          widget.config.accent,
-          VibeEditScreen(
-            file: file,
-            config: widget.config,
-            recordedAt: since,
-            fps: session.fps,
-            initialFilter: _look,
-            // Android's front camera: the file is the preview's mirror image.
-            mirror: session.mirrorRecording,
-          ),
-        ),
+        pageBuilder: (_, _, _) => VibeTheme.wrap(widget.config.accent, editor),
         transitionsBuilder: (_, a, _, child) => FadeTransition(opacity: a, child: child),
       ),
     );
-    if (!mounted) return;
+    if (!mounted) return result;
     if (result != null) {
       Navigator.of(context).pop(result);
-    } else {
-      // Retake: the recording is not needed any more.
-      unawaited(file.delete().catchError((Object _) => file));
+      return result;
     }
+    _away = false;
+    _settle();
+    return null;
   }
 
   /// A video from the phone's gallery, through the same editor (trimmed to
@@ -239,35 +419,25 @@ class _VibeCaptureScreenState extends State<VibeCaptureScreen>
   /// picker.
   Future<void> _fromGallery() async {
     final pick = widget.config.pickFromGallery;
-    if (pick == null || _recording || _busy) return;
-    _busy = true;
+    if (pick == null || _recording || _busy || _picking) return;
+    _picking = true;
     File? file;
     try {
       file = await pick();
     } catch (_) {
       file = null;
     } finally {
-      _busy = false;
+      _picking = false;
     }
     if (file == null || !mounted) return;
-    final picked = file;
-    final result = await Navigator.of(context).push<VibeCameraResult>(
-      PageRouteBuilder(
-        pageBuilder: (_, _, _) => VibeTheme.wrap(
-          widget.config.accent,
-          VibeEditScreen(
-            file: picked,
-            config: widget.config,
-            recordedAt: DateTime.now(),
-            initialFilter: _look,
-          ),
-        ),
-        transitionsBuilder: (_, a, _, child) =>
-            FadeTransition(opacity: a, child: child),
+    await _edit(
+      VibeEditScreen(
+        file: file,
+        config: widget.config,
+        recordedAt: DateTime.now(),
+        initialFilter: _look,
       ),
     );
-    if (!mounted || result == null) return;
-    Navigator.of(context).pop(result);
   }
 
   @override
@@ -289,7 +459,7 @@ class _VibeCaptureScreenState extends State<VibeCaptureScreen>
                   final box = context.size;
                   if (box == null) return;
                   setState(() => _showLight = false);
-                  session.focusAt(Offset(d.localPosition.dx / box.width, d.localPosition.dy / box.height));
+                  _quiet(session.focusAt(Offset(d.localPosition.dx / box.width, d.localPosition.dy / box.height)));
                 },
                 onScaleStart: (_) {
                   _zoomAtStart = _zoom;
@@ -302,7 +472,7 @@ class _VibeCaptureScreenState extends State<VibeCaptureScreen>
                         .toDouble();
                     if ((z - _zoom).abs() > 0.01) {
                       _zoom = z;
-                      session.setZoom(z);
+                      _quiet(session.setZoom(z));
                     }
                   } else {
                     _swipe += d.focalPointDelta.dx;
@@ -326,7 +496,7 @@ class _VibeCaptureScreenState extends State<VibeCaptureScreen>
                 status: _status,
                 strings: strings,
                 accent: accent,
-                onRetry: _open,
+                onRetry: () => _settle(retry: true),
                 onSettings: widget.config.onOpenSettings,
               ),
             // Top: close, frame rate, torch, flip.
@@ -349,7 +519,7 @@ class _VibeCaptureScreenState extends State<VibeCaptureScreen>
                         active: _torch,
                         onTap: () {
                           setState(() => _torch = !_torch);
-                          session.setTorch(_torch);
+                          _quiet(session.setTorch(_torch));
                         },
                       ),
                     ],
@@ -384,7 +554,7 @@ class _VibeCaptureScreenState extends State<VibeCaptureScreen>
                     accent: accent,
                     onChanged: (v) {
                       setState(() => _light = v);
-                      session.setLight(v);
+                      _quiet(session.setLight(v));
                     },
                   ),
                 ),
@@ -467,7 +637,10 @@ class _VibeCaptureScreenState extends State<VibeCaptureScreen>
                                 recording: _recording,
                                 progress: _progress.value,
                                 accent: accent,
-                                enabled: _status == _Status.ready,
+                                // Waits while a start or stop is under way;
+                                // dimmed while there is no camera to use.
+                                enabled: session != null && _status == _Status.ready && !_busy && !_picking,
+                                ready: session != null && _status == _Status.ready,
                                 onTap: _toggleRecord,
                               ),
                             ),
@@ -769,6 +942,7 @@ class _RecordButton extends StatelessWidget {
     required this.progress,
     required this.accent,
     required this.enabled,
+    required this.ready,
     required this.onTap,
   });
 
@@ -776,26 +950,32 @@ class _RecordButton extends StatelessWidget {
   final double progress;
   final Color accent;
   final bool enabled;
+  final bool ready;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) => GestureDetector(
     key: const ValueKey('vibe-record'),
+    behavior: HitTestBehavior.opaque,
     onTap: enabled ? onTap : null,
-    child: SizedBox(
-      width: 76,
-      height: 76,
-      child: CustomPaint(
-        painter: _RingPainter(progress: recording ? progress : 0, accent: accent),
-        child: Center(
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 180),
-            curve: Curves.easeOut,
-            width: recording ? 28 : 58,
-            height: recording ? 28 : 58,
-            decoration: BoxDecoration(
-              color: recording ? const Color(0xFFE53935) : accent,
-              borderRadius: BorderRadius.circular(recording ? 8 : 29),
+    child: AnimatedOpacity(
+      opacity: ready ? 1 : 0.45,
+      duration: const Duration(milliseconds: 160),
+      child: SizedBox(
+        width: 76,
+        height: 76,
+        child: CustomPaint(
+          painter: _RingPainter(progress: recording ? progress : 0, accent: accent),
+          child: Center(
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 180),
+              curve: Curves.easeOut,
+              width: recording ? 28 : 58,
+              height: recording ? 28 : 58,
+              decoration: BoxDecoration(
+                color: recording ? const Color(0xFFE53935) : accent,
+                borderRadius: BorderRadius.circular(recording ? 8 : 29),
+              ),
             ),
           ),
         ),

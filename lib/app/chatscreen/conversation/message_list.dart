@@ -68,6 +68,9 @@ class _ChatMessageListState extends State<ChatMessageList>
   late final AnimationController _tip;
   Timer? _tipDelay;
   bool _tipDone = false;
+
+  /// How many times it has played before (saved once this one completes).
+  int _tipShown = 0;
   late final _pull = VanishPull(onRelease: () => widget.onVanishSwitch?.call());
   final _widgets = <String, (ChatRow, Widget)>{};
   var _rows = const <ChatRow>[];
@@ -81,12 +84,15 @@ class _ChatMessageListState extends State<ChatMessageList>
     _c.messages.addListener(_onMessages);
     _c.hasMore.addListener(_onMore);
     _c.vanish.addListener(_onMore);
+    // The tip waits for the chat to be loaded and on screen.
+    _c.ready.addListener(_onTipGate);
+    _c.onScreen.addListener(_onTipGate);
     _tip = AnimationController(
       vsync: this,
       duration: const Duration(seconds: 3),
     )..addListener(_onTip);
     _tip.addStatusListener((status) {
-      if (status == AnimationStatus.completed) _endTip();
+      if (status == AnimationStatus.completed) _endTip(seen: true);
     });
     _derive();
   }
@@ -96,6 +102,8 @@ class _ChatMessageListState extends State<ChatMessageList>
     _c.messages.removeListener(_onMessages);
     _c.hasMore.removeListener(_onMore);
     _c.vanish.removeListener(_onMore);
+    _c.ready.removeListener(_onTipGate);
+    _c.onScreen.removeListener(_onTipGate);
     _tipDelay?.cancel();
     _tip.dispose();
     _scroll.dispose();
@@ -121,13 +129,34 @@ class _ChatMessageListState extends State<ChatMessageList>
     setState(() {});
   }
 
+  /// Loaded / on screen changed: start the tip, or stop it unseen when the
+  /// chat went behind something (a sheet, another screen, the app closed) —
+  /// then it plays again next time instead of counting as seen.
+  void _onTipGate() {
+    if (!_c.onScreen.value && (_tip.isAnimating || _tipDelay != null)) {
+      _tipDelay?.cancel();
+      _tipDelay = null;
+      if (_tip.isAnimating) _tip.stop();
+      _pull.pull.value = 0;
+      if (mounted) setState(() {});
+      return;
+    }
+    _maybeTip();
+  }
+
   /// Plays the tip once the chat has settled, if this person never saw it.
   void _maybeTip() {
-    if (_tipDone || _tipDelay != null || !ChatMessageList.vanishTipEnabled) {
+    // Already done, waiting to start, or playing: never start it again.
+    if (_tipDone ||
+        _tipDelay != null ||
+        _tip.isAnimating ||
+        !ChatMessageList.vanishTipEnabled) {
       return;
     }
     if (widget.onVanishSwitch == null || _c.vanish.value.on) return;
     if (_c.conversationId == null || _rows.isEmpty) return;
+    // Not while the first read is still loading, nor behind anything.
+    if (!_c.ready.value || !_c.onScreen.value) return;
     final key = ChatMessageList.vanishTipKey(_c.me);
     final saved = AppPrefs.getString(key);
     final shown = int.tryParse(saved ?? '0') ?? ChatMessageList.vanishTipTimes;
@@ -136,18 +165,31 @@ class _ChatMessageListState extends State<ChatMessageList>
       _tipDone = true;
       return;
     }
-    _tipDelay = Timer(const Duration(milliseconds: 900), () {
-      if (!mounted || _tipDone || _c.vanish.value.on) return;
-      unawaited(AppPrefs.setString(key, '${shown + 1}'));
+    _tipShown = shown;
+    _tipDelay = Timer(const Duration(milliseconds: 700), () {
+      _tipDelay = null;
+      if (!mounted || _tipDone || _c.vanish.value.on || !_c.onScreen.value) {
+        return;
+      }
       unawaited(_tip.forward(from: 0));
     });
   }
 
-  void _endTip() {
+  /// [seen]: it played to the end, or they touched the list — counted.
+  void _endTip({required bool seen}) {
     _tipDone = true;
     _tipDelay?.cancel();
+    _tipDelay = null;
     if (_tip.isAnimating) _tip.stop();
     _pull.pull.value = 0;
+    if (seen) {
+      unawaited(
+        AppPrefs.setString(
+          ChatMessageList.vanishTipKey(_c.me),
+          '${_tipShown + 1}',
+        ),
+      );
+    }
     if (mounted) setState(() {});
   }
 
@@ -181,7 +223,7 @@ class _ChatMessageListState extends State<ChatMessageList>
     if (n is ScrollStartNotification &&
         n.dragDetails != null &&
         _tip.isAnimating) {
-      _endTip();
+      _endTip(seen: true);
     }
     // Reversed: "after" is towards the top, the older messages.
     if (n.metrics.extentAfter < 600) _c.loadOlder();

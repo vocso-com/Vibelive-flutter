@@ -130,6 +130,13 @@ class ChatRoomController {
   /// My free messages left (paying side); null until the server says.
   final freeLeft = ValueNotifier<int?>(null);
 
+  /// The first full read is done (who, messages, vanish): the chat has
+  /// settled, so a tip shown now is not hidden behind a loading list.
+  final ready = ValueNotifier<bool>(false);
+
+  /// The chat is on screen (top route, app in front) right now.
+  final onScreen = ValueNotifier<bool>(false);
+
   /// Every live switch of vanish mode (see [VanishSwitch]).
   final vanishSwitch = ValueNotifier<VanishSwitch>(
     const VanishSwitch(0, on: false, celebrate: false),
@@ -264,6 +271,7 @@ class ChatRoomController {
       if (_disposed) return;
       _vanishLoaded = true;
       error.value = null;
+      ready.value = true;
       _recompose();
       _afterRead();
     } on ApiException catch (e) {
@@ -543,6 +551,7 @@ class ChatRoomController {
   void setVisible(bool visible) {
     if (_disposed || visible == _visible) return;
     _visible = visible;
+    onScreen.value = visible;
     if (visible) {
       _announce();
       _markRead();
@@ -696,5 +705,7 @@ class ChatRoomController {
     vanish.dispose();
     freeLeft.dispose();
     vanishSwitch.dispose();
+    ready.dispose();
+    onScreen.dispose();
   }
 }

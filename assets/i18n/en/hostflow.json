@@ -560,6 +560,7 @@
     "too_short": "Record a little longer",
     "camera_denied": "Allow camera and microphone access to record.",
     "camera_failed": "The camera couldn't start. Please try again.",
+    "record_failed": "The video didn't record. Please try again.",
     "open_settings": "Open settings",
     "retry": "Try again",
     "retake": "Retake",

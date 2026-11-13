@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -13,6 +14,7 @@ void main() {
   late FakeExporter exporter;
 
   setUp(() {
+    VibeCameraLane.debugReset();
     session = FakeSession();
     exporter = FakeExporter();
     VideoPlayerPlatform.instance = FakeVideoPlatform();
@@ -97,6 +99,184 @@ void main() {
       expect(find.text('Allow camera and microphone access to record.'), findsOneWidget);
       await tester.tap(find.text('Open settings'));
       expect(settings, 1);
+    });
+  });
+
+  // The record button got stuck when a camera call never answered: the iOS
+  // plugin keeps one camera, closes it on any dispose, and then never
+  // answers a start or stop. These are the ways that happened.
+  group('the camera never sticks', () {
+    late FakeCameras cameras;
+    final record = find.byKey(const ValueKey('vibe-record'));
+    final preview = find.byKey(const ValueKey('fake-preview'));
+    const startFailed = "The camera couldn't start. Please try again.";
+    const recordFailed = "The video didn't record. Please try again.";
+
+    setUp(() => cameras = FakeCameras());
+
+    Future<LauncherState> openCameras(WidgetTester tester, [VibeCameraConfig? config]) {
+      // Lifecycle changes stay on the binding: put it back afterwards.
+      addTearDown(() {
+        final b = tester.binding;
+        if (b.lifecycleState != AppLifecycleState.resumed) {
+          for (final s in [AppLifecycleState.hidden, AppLifecycleState.inactive, AppLifecycleState.resumed]) {
+            b.handleAppLifecycleStateChanged(s);
+          }
+        }
+      });
+      return open(tester, config ?? VibeCameraConfig(exporter: exporter, edit: false), using: cameras.open);
+    }
+
+    void lifecycle(WidgetTester tester, List<AppLifecycleState> states) {
+      for (final s in states) {
+        tester.binding.handleAppLifecycleStateChanged(s);
+      }
+    }
+
+    Future<void> recordFor(WidgetTester tester, int ms) async {
+      await tester.tap(record);
+      await pumpFor(tester, ms);
+      await tester.tap(record);
+      await pumpFor(tester, 400);
+    }
+
+    testWidgets('a start that never answers frees the button and opens a fresh camera', (tester) async {
+      cameras.setUp = (s, i) => s.hangStart = i == 0;
+      final launcher = await openCameras(tester);
+      await tester.tap(record);
+      await pumpFor(tester, 6200);
+      expect(find.text(startFailed), findsOneWidget);
+      await pumpFor(tester, 1000);
+      expect(cameras.opens, 2);
+      expect(cameras.sessions.first.disposed, isTrue);
+      expect(cameras.maxOpenAtOnce, 1);
+      await recordFor(tester, 1300);
+      expect(launcher.result, isNotNull, reason: 'the button records again');
+    });
+
+    testWidgets('a stop that never answers says so, and a fresh camera records', (tester) async {
+      cameras.setUp = (s, i) => s.hangStop = i == 0;
+      final launcher = await openCameras(tester);
+      await recordFor(tester, 1300);
+      expect(launcher.closed, isFalse);
+      await pumpFor(tester, 10000);
+      expect(find.text(recordFailed), findsOneWidget);
+      await pumpFor(tester, 1000);
+      expect(cameras.opens, 2);
+      expect(cameras.sessions.first.disposed, isTrue);
+      expect(cameras.log.where((l) => l == 'cam1 stop'), hasLength(1), reason: 'not asked to stop twice');
+      await recordFor(tester, 1300);
+      expect(launcher.result, isNotNull);
+    });
+
+    testWidgets('a stop that fails, or an empty file, says so instead of handing it on', (tester) async {
+      cameras.setUp = (s, i) {
+        s.failStop = i == 0;
+        s.emptyFile = i == 1;
+      };
+      final launcher = await openCameras(tester);
+      await recordFor(tester, 1300);
+      expect(find.text(recordFailed), findsOneWidget);
+      await pumpFor(tester, 1000);
+      await recordFor(tester, 1300);
+      expect(find.text(recordFailed), findsOneWidget);
+      expect(launcher.closed, isFalse);
+      await pumpFor(tester, 1000);
+      expect(cameras.opens, 3);
+      await recordFor(tester, 1300);
+      expect(launcher.result, isNotNull);
+    });
+
+    testWidgets('a permission prompt while opening opens one camera, not two', (tester) async {
+      cameras.gate = Completer<void>();
+      await openCameras(tester);
+      lifecycle(tester, [AppLifecycleState.inactive]);
+      await pumpFor(tester, 300);
+      lifecycle(tester, [AppLifecycleState.resumed]);
+      cameras.gate!.complete();
+      cameras.gate = null;
+      await pumpFor(tester, 300);
+      expect(cameras.log.where((l) => l.startsWith('open')), hasLength(1));
+      expect(preview, findsOneWidget);
+    });
+
+    testWidgets('the notification shade does not stop a recording', (tester) async {
+      await openCameras(tester);
+      await tester.tap(record);
+      await pumpFor(tester, 600);
+      lifecycle(tester, [AppLifecycleState.inactive]);
+      await pumpFor(tester, 300);
+      lifecycle(tester, [AppLifecycleState.resumed]);
+      await pumpFor(tester, 300);
+      expect(cameras.last.recording, isTrue);
+      expect(cameras.opens, 1);
+    });
+
+    testWidgets('leaving mid-recording keeps the clip; the camera closes only after the stop', (tester) async {
+      final launcher = await openCameras(tester);
+      await tester.tap(record);
+      await pumpFor(tester, 1300);
+      lifecycle(tester, [AppLifecycleState.inactive, AppLifecycleState.hidden, AppLifecycleState.paused]);
+      await pumpFor(tester, 400);
+      expect(cameras.log, ['open front', 'cam1 start', 'cam1 stop', 'cam1 dispose']);
+      expect(launcher.result, isNotNull);
+    });
+
+    testWidgets('leaving lets the camera go; coming back opens a fresh one', (tester) async {
+      await openCameras(tester, VibeCameraConfig(exporter: exporter));
+      lifecycle(tester, [AppLifecycleState.inactive, AppLifecycleState.hidden, AppLifecycleState.paused]);
+      await pumpFor(tester, 200);
+      expect(cameras.sessions.single.disposed, isTrue);
+      lifecycle(tester, [AppLifecycleState.hidden, AppLifecycleState.inactive, AppLifecycleState.resumed]);
+      await pumpFor(tester, 300);
+      expect(cameras.opens, 2);
+      expect(cameras.maxOpenAtOnce, 1);
+      expect(preview, findsOneWidget);
+    });
+
+    testWidgets('switching lenses twice while it opens never holds two cameras', (tester) async {
+      await openCameras(tester);
+      final flip = find.byIcon(Icons.flip_camera_ios_rounded);
+      cameras.gate = Completer<void>();
+      await tester.tap(flip);
+      await pumpFor(tester, 100);
+      await tester.tap(flip);
+      await pumpFor(tester, 100);
+      cameras.gate!.complete();
+      cameras.gate = null;
+      await pumpFor(tester, 400);
+      expect(cameras.maxOpenAtOnce, 1);
+      expect(cameras.openNow, 1);
+      expect(cameras.last.lens, VibeLens.front, reason: 'flipped twice: back where it started');
+      expect(preview, findsOneWidget);
+    });
+
+    testWidgets('closing mid-recording stops the recording before the camera closes', (tester) async {
+      final launcher = await openCameras(tester);
+      await tester.tap(record);
+      await pumpFor(tester, 800);
+      await tester.tap(find.byIcon(Icons.close_rounded));
+      await pumpFor(tester, 600);
+      expect(launcher.closed, isTrue);
+      expect(launcher.result, isNull);
+      expect(cameras.log, ['open front', 'cam1 start', 'cam1 stop', 'cam1 dispose']);
+    });
+
+    testWidgets('no camera is held under the editor; a retake opens one again', (tester) async {
+      exporter = FakeExporter(info: const VibeVideoInfo(duration: Duration(seconds: 2), size: Size(720, 1280)));
+      await openCameras(tester, VibeCameraConfig(exporter: exporter, maxDuration: const Duration(seconds: 2)));
+      await tester.tap(record);
+      await pumpFor(tester, 3200);
+      expect(find.byKey(const ValueKey('vibe-done')), findsOneWidget, reason: 'the editor is open');
+      expect(cameras.sessions.single.disposed, isTrue);
+      await tester.tap(find.text('Retake'));
+      await pumpFor(tester, 600);
+      expect(cameras.opens, 2);
+      expect(preview, findsOneWidget);
+      await tester.tap(record);
+      await pumpFor(tester, 3200);
+      expect(find.byKey(const ValueKey('vibe-done')), findsOneWidget, reason: 'and records again');
+      expect(cameras.last.disposed, isTrue);
     });
   });
 
