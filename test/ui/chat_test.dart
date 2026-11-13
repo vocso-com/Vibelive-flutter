@@ -109,6 +109,10 @@ class _Backend implements HttpClientAdapter {
   /// A slow first page of messages (the chat still loading).
   int messagesDelayMs = 0;
   final vanishItems = <Map<String, Object?>>[];
+
+  /// The vanish switches the app asked for (reads left out).
+  List<String> get switches =>
+      vanishCalls.where((c) => c.startsWith('switch')).toList();
   final vanishCalls = <String>[];
 
   /// `freeMessagesLeft` in `/chats/with/7` (null: an older backend).
@@ -270,11 +274,15 @@ class _Backend implements HttpClientAdapter {
         final on = (o.data as Map)['on'] == true;
         vanishCalls.add('switch $on');
         vanishOn = on;
-        if (!on) vanishItems.clear();
+        // As the server: off removes what was read; what was not seen stays.
+        if (!on) vanishItems.removeWhere((m) => m['readAt'] != null);
         return _vanishState(byMe: true);
       case 'POST /api/chats/conversations/c1/vanish/leave':
         vanishCalls.add('leave');
-        vanishItems.removeWhere((m) => m['senderId'] == '7');
+        // As the server: what I (user 1) read goes.
+        vanishItems.removeWhere(
+          (m) => m['senderId'] != '1' && m['readAt'] != null,
+        );
         return {'ok': true, 'removed': 0};
       case 'GET /api/chats/with/8':
         return {
@@ -295,6 +303,12 @@ class _Backend implements HttpClientAdapter {
             : messages.takeWhile((m) => m['id'] != after).toList();
         return {'items': items, 'hasMore': false};
       case 'POST /api/chats/conversations/c1/read':
+        // As the server: the other person's vanish texts are read now (they
+        // stay until I leave).
+        final at = DateTime.now().toUtc().toIso8601String();
+        for (final m in vanishItems) {
+          if (m['senderId'] != '1') m['readAt'] ??= at;
+        }
         return {'ok': true};
       case 'POST /api/chats/messages':
         final body = Map<String, Object?>.from(o.data as Map);
@@ -393,7 +407,8 @@ class _Backend implements HttpClientAdapter {
     'on': vanishOn,
     'byMe': byMe,
     'canTurnOn': vanishCanTurnOn,
-    'items': vanishOn ? vanishItems : <Object>[],
+    // Off, the texts not seen when it was switched off are still listed.
+    'items': vanishItems,
   };
 
   static final _peer = {
@@ -1115,7 +1130,7 @@ void main() {
       const Offset(0, -40),
     );
     await _pump(tester, 600);
-    expect(backend.vanishCalls, isEmpty);
+    expect(backend.switches, isEmpty);
 
     await swipeUpForVanish(tester);
     expect(backend.vanishCalls, contains('switch true'));
@@ -1300,7 +1315,7 @@ void main() {
       expect(find.byKey(const ValueKey('chat-vanish-tip')), findsOneWidget);
       expect(find.text('NEW'), findsOneWidget);
       expect(find.text('Swipe up to turn on vanish mode'), findsOneWidget);
-      expect(backend.vanishCalls, isEmpty, reason: 'a tip never switches');
+      expect(backend.switches, isEmpty, reason: 'a tip never switches');
       await _pump(tester, 3600);
       expect(find.byKey(const ValueKey('chat-vanish-pull')), findsNothing);
       expect(AppPrefs.getString(ChatMessageList.vanishTipKey('1')), isNotNull);
@@ -1365,7 +1380,7 @@ void main() {
       );
       await _pump(tester, 600);
       expect(find.byKey(const ValueKey('chat-vanish-pull')), findsNothing);
-      expect(backend.vanishCalls, isEmpty);
+      expect(backend.switches, isEmpty);
       await finish(tester);
     });
 
@@ -1485,6 +1500,101 @@ void main() {
     appRouter.pop();
     await _pump(tester, 600);
     expect(backend.vanishCalls, contains('leave'));
+    await finish(tester);
+  });
+
+  testWidgets('vanish turned off with my text unseen: it stays between two '
+      'lines; once they saw it, coming back it is gone', (tester) async {
+    backend.messages.add(_Backend._message('m1', text: 'normal hello'));
+    backend.vanishOn = true;
+    await openApp(tester, location: AppRoutes.chatWith('7'));
+    await tester.enterText(
+      find.byKey(const ValueKey('chat-composer-field')),
+      'my secret',
+    );
+    await tester.pump();
+    await tester.tap(find.byKey(const ValueKey('chat-send')));
+    await _pump(tester, 600);
+    expect(find.text('my secret'), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('chat-vanish-turn-off')));
+    await _pump(tester, 900);
+    expect(backend.switches, ['switch false']);
+    // Not seen yet: still there, after the normal chat, between two lines.
+    expect(find.text('normal hello'), findsOneWidget);
+    expect(find.text('my secret'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('chat-vanish-leftover-top')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('chat-vanish-leftover-bottom')),
+      findsOneWidget,
+    );
+    expect(find.text('Vanish messages · gone once seen'), findsOneWidget);
+    final top = tester.getTopLeft(
+      find.byKey(const ValueKey('chat-vanish-leftover-top')),
+    );
+    final text = tester.getTopLeft(find.text('my secret'));
+    final bottom = tester.getTopLeft(
+      find.byKey(const ValueKey('chat-vanish-leftover-bottom')),
+    );
+    expect(top.dy, lessThan(text.dy));
+    expect(bottom.dy, greaterThan(text.dy));
+    // Back to normal: a new text is a normal one, below the lines.
+    expect(find.byKey(const ValueKey('chat-vanish-turn-off')), findsNothing);
+
+    // Leaving and coming back while they have not seen it: still there.
+    appRouter.pop();
+    await _pump(tester, 600);
+    unawaited(appRouter.push(AppRoutes.chatWith('7')));
+    await _pump(tester, 900);
+    expect(find.text('my secret'), findsOneWidget);
+
+    // They saw it and left the chat (the server removed it for both).
+    backend.vanishItems.clear();
+    appRouter.pop();
+    await _pump(tester, 600);
+    unawaited(appRouter.push(AppRoutes.chatWith('7')));
+    await _pump(tester, 900);
+    expect(find.text('my secret'), findsNothing);
+    expect(find.text('normal hello'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('chat-vanish-leftover-top')),
+      findsNothing,
+    );
+    await finish(tester);
+  });
+
+  testWidgets('their vanish text I had not seen when they turned it off: '
+      'shown between the lines, gone after I read it and leave', (
+    tester,
+  ) async {
+    backend.messages.add(_Backend._message('m1', text: 'normal hello'));
+    backend.vanishOn = false;
+    backend.vanishItems.add({
+      ..._Backend._message('v1', text: 'their secret'),
+      'vanish': true,
+    });
+    await openApp(tester, location: AppRoutes.chatWith('7'));
+    expect(find.text('their secret'), findsOneWidget);
+    expect(find.text('normal hello'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('chat-vanish-leftover-top')),
+      findsOneWidget,
+    );
+    // On screen: read now, but it stays until I leave.
+    await _pump(tester, 600);
+    expect(find.text('their secret'), findsOneWidget);
+
+    appRouter.pop();
+    await _pump(tester, 600);
+    expect(backend.vanishCalls, contains('leave'));
+    expect(backend.vanishItems, isEmpty, reason: 'read, then I left');
+    unawaited(appRouter.push(AppRoutes.chatWith('7')));
+    await _pump(tester, 900);
+    expect(find.text('their secret'), findsNothing);
+    expect(find.text('normal hello'), findsOneWidget);
     await finish(tester);
   });
 

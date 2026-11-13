@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'dart:io';
 import 'dart:ui' as ui;
 
@@ -8,7 +10,11 @@ import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:vibelive/app/paymentscreen/wallet/helper/first_topup_launch.dart';
+import 'package:vibelive/app/api/paymentscreen/checkout_models.dart';
 import 'package:vibelive/app/paymentscreen/wallet/helper/first_topup_offer.dart';
+import 'package:vibelive/app/paymentscreen/wallet/helper/quick_topup.dart';
+import 'package:vibelive/app/paymentscreen/wallet/helper/razorpay_gateway.dart';
+import 'package:vibelive/app/paymentscreen/wallet/helper/topup_checkout.dart';
 import 'package:vibelive/app/paymentscreen/wallet/widgets/first_topup_popup.dart';
 import 'package:vibelive/app/promo/popup/promo_popup_controller.dart';
 import 'package:vibelive/app/promo/popup/promo_popup_rules.dart';
@@ -85,12 +91,12 @@ void main() {
     expect(find.text('POPULAR'), findsOneWidget);
     expect(find.text('+50% EXTRA'), findsOneWidget);
     // 299 is picked for them: + ₹150 free.
-    expect(find.text('Add ₹299 & get ₹150'), findsOneWidget);
+    expect(find.text('Add ₹299 & get ₹449'), findsOneWidget);
 
     await tester.tap(find.byKey(const ValueKey('first-topup-amount-999')));
     await pumpFor(tester, 600);
-    expect(find.text('Add ₹999 & get ₹500'), findsOneWidget);
-    expect(find.text('+₹500 FREE'), findsOneWidget);
+    expect(find.text('Add ₹999 & get ₹1,499'), findsOneWidget);
+    expect(find.text('+₹500 BONUS'), findsOneWidget);
 
     await tester.tap(find.byKey(const ValueKey('first-topup-cta')));
     await pumpFor(tester, 600);
@@ -98,6 +104,28 @@ void main() {
     expect(find.byKey(const ValueKey('first-topup-popup')), findsNothing);
     await finishHost(tester);
   });
+
+  // Reported on a phone: it ran off the screen. Six amounts must fit a
+  // 360 × 640 phone (and a 320 × 568 one) whole, with no scrolling.
+  for (final size in const [Size(360, 640), Size(320, 568)]) {
+    testWidgets('fits a ${size.width.toInt()}×${size.height.toInt()} phone '
+        'without scrolling', (tester) async {
+      await resetHost();
+      phone(tester, size: size);
+      await openPopup(tester);
+      final popup = find.byKey(const ValueKey('first-topup-popup'));
+      final scroll = tester.state<ScrollableState>(
+        find.descendant(of: popup, matching: find.byType(Scrollable)),
+      );
+      expect(scroll.position.maxScrollExtent, 0);
+      expect(tester.getSize(popup).height, lessThan(size.height - 24));
+      expect(
+        find.byKey(const ValueKey('first-topup-later')).hitTestable(),
+        findsOneWidget,
+      );
+      await finishHost(tester);
+    });
+  }
 
   testWidgets('the X and "not now" both close it with nothing chosen', (
     tester,
@@ -205,13 +233,37 @@ void main() {
       };
     }
 
-    testWidgets('never paid in: it grows in on Home and opens the wallet', (
-      tester,
-    ) async {
+    testWidgets('never paid in: it grows in on Home; Pay opens the gateway '
+        'for the amount and GST it showed', (tester) async {
       final backend = await resetHost();
       serverSays(backend);
       PromoPopupController.firstTopup = FirstTopupLaunch.prepare;
-      final router = await openHome(tester);
+      // The real checkout pipeline, with the backend order and the native
+      // gateway faked: what is asked for, and what the gateway is opened with.
+      final requests = <RechargeRequest>[];
+      final gateway = _Gateway()..hold = Completer<CheckoutOutcome>();
+      QuickTopUp.newFlow = () => TopUpCheckout(
+        gateway: gateway,
+        start: (r) async {
+          requests.add(r);
+          return RazorpayCheckout(
+            baseAmount: r.amount,
+            txnId: 'RZP_TXN_1',
+            orderId: 'order_1',
+            keyId: 'rzp_test_key',
+            amountInPaise: (r.amount * (100 + r.gstPercent)).round(),
+            currency: 'INR',
+            description: r.description,
+            prefillName: '',
+            prefillEmail: '',
+            prefillContact: '',
+            notes: const {},
+            response: const {},
+          );
+        },
+      );
+      addTearDown(() => QuickTopUp.newFlow = TopUpCheckout.new);
+      await openHome(tester);
       await pumpFor(tester, 1800);
       expect(find.byKey(const ValueKey('first-topup-popup')), findsOneWidget);
       // The wallet's own amounts, all of them.
@@ -224,15 +276,36 @@ void main() {
       expect(asked.single[r'filters[paymentStatus][$eq]'], 'success');
       expect(asked.single[r'filters[method][$in][0]'], 'Razorpay');
 
+      // ₹299 + 18% GST, as the order will be made; the wallet gets ₹449.
+      String textOf(String key) => tester
+          .widget<Text>(
+            find.descendant(
+              of: find.byKey(ValueKey(key)),
+              matching: find.byType(Text),
+            ),
+          )
+          .data!;
+      expect(textOf('first-topup-pay'), '₹352.82');
+      expect(find.text('incl. ₹53.82 GST'), findsOneWidget);
+      expect(find.text('incl. ₹150 bonus'), findsOneWidget);
+      expect(find.text('Add ₹299 & get ₹449'), findsOneWidget);
+
       await tester.tap(find.byKey(const ValueKey('first-topup-cta')));
+      await pumpFor(tester, 1200);
+      // No wallet screen: the order and the gateway, straight away.
+      expect(find.text('ROUTE /wallet'), findsNothing);
+      expect(requests.single.amount, 299);
+      expect(requests.single.gstPercent, 18);
+      expect(gateway.opened.single['amount'], 35282, reason: 'what was shown');
+      // While the native checkout is up, a solid backdrop hides Discover:
+      // its see-through bottom strip must not show host photos.
+      final backdrop = find.byKey(const ValueKey('quick-topup-backdrop'));
+      expect(backdrop, findsOneWidget);
+      final fill = tester.widget<AnimatedContainer>(backdrop).decoration;
+      expect((fill! as BoxDecoration).color!.a, 1.0);
+      gateway.hold!.complete(const CheckoutCancelled());
       await pumpFor(tester, 800);
-      expect(find.text('ROUTE /wallet'), findsOneWidget);
-      final top = router.routerDelegate.currentConfiguration.last;
-      expect(top.matchedLocation, '/wallet');
-      // A pushed route keeps its own address, query and all.
-      final at = (top as ImperativeRouteMatch).matches.uri;
-      expect(at.queryParameters['amount'], '299');
-      expect(at.queryParameters['reason'], 'first_topup_offer');
+      expect(backdrop, findsNothing);
       await finishHost(tester);
     });
 
@@ -283,6 +356,49 @@ void main() {
     });
   });
 
+  testWidgets(
+    'the demo shows it now, even with the bonus off, counting nothing',
+    (tester) async {
+      final backend = await resetHost();
+      backend.replies['GET /api/app-config'] = (_) => {
+        'data': {
+          'bonus': {
+            'firstTopupBonusEnabled': false,
+            'firstTopupBonusPercent': 0,
+          },
+          'presetAmounts': [100, 300, 500],
+        },
+      };
+      phone(tester);
+      await pumpRoutes(
+        tester,
+        Builder(
+          builder: (context) => Scaffold(
+            body: Center(
+              child: TextButton(
+                onPressed: () => FirstTopupLaunch.demo(context),
+                child: const Text('DEMO'),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.text('DEMO'));
+      await pumpFor(tester, 900);
+      expect(find.byKey(const ValueKey('first-topup-popup')), findsOneWidget);
+      expect(find.text('+50% EXTRA'), findsOneWidget, reason: 'bonus off: 50%');
+      for (final a in [100, 300, 500]) {
+        expect(find.byKey(ValueKey('first-topup-amount-$a')), findsOneWidget);
+      }
+      expect(find.textContaining("real users won't see this"), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('first-topup-close')));
+      await pumpFor(tester, 600);
+      // Nothing counted: the real offer may still show on an app open.
+      expect(FirstTopupOffer.mayShow(percent: 50), isTrue);
+      await finishHost(tester);
+    },
+  );
+
   // FIRST_TOPUP_RENDER_DIR=<dir> flutter test test/ui/first_topup_popup_test.dart
   final renderDir = Platform.environment['FIRST_TOPUP_RENDER_DIR'];
   group('renders', skip: renderDir == null, () {
@@ -312,7 +428,7 @@ void main() {
     for (final dark in [false, true]) {
       testWidgets('popup ${dark ? 'dark' : 'light'}', (tester) async {
         await resetHost();
-        phone(tester, size: const Size(375, 812));
+        phone(tester, size: const Size(360, 640));
         await openPopup(tester, theme: dark ? ThemeMode.dark : ThemeMode.light);
         await pumpFor(tester, 900);
         final view = tester.binding.renderViews.first;
@@ -341,4 +457,18 @@ void main() {
     expect(FirstTopupOffer.suggested(const []), isNull);
     expect(FirstTopupOffer.suggested([1, 2, 3, 4, 5, 6]), 3);
   });
+}
+
+/// The native checkout, closed by the person (nothing paid).
+class _Gateway implements RazorpayGateway {
+  final opened = <Map<String, dynamic>>[];
+
+  /// Set: the checkout stays open until it is completed.
+  Completer<CheckoutOutcome>? hold;
+
+  @override
+  Future<CheckoutOutcome> open(Map<String, dynamic> options) async {
+    opened.add(options);
+    return hold?.future ?? const CheckoutCancelled();
+  }
 }

@@ -80,6 +80,9 @@ class _Backend implements HttpClientAdapter {
   };
   int verifyCode = 200;
   int transferCode = 200;
+
+  /// The first-top-up bonus % in app-config (0: off).
+  double firstTopupPercent = 0;
   final requests = <String>[];
   final pages = <int>[];
   final posted = <String, Object?>{};
@@ -130,6 +133,15 @@ class _Backend implements HttpClientAdapter {
       case 'GET /api/gst':
         return {
           'data': {'IGST': 18},
+        };
+      case 'GET /api/app-config':
+        return {
+          'data': {
+            'bonus': {
+              'firstTopupBonusEnabled': firstTopupPercent > 0,
+              'firstTopupBonusPercent': firstTopupPercent,
+            },
+          },
         };
       case 'GET /api/payment-gateway/selection':
         return {
@@ -315,14 +327,14 @@ void main() {
     await tester.pump(const Duration(minutes: 6));
   }
 
-  /// Add Money → ₹500 preset → ADD MONEY.
+  /// Add Money → ₹500 → Pay.
   Future<void> startTopUp(WidgetTester tester) async {
     await tester.tap(find.text('Add money'));
     await _pump(tester, 400);
     expect(find.text('Add Money'), findsOneWidget);
-    await tester.tap(find.text('₹500').first);
+    await tester.tap(find.byKey(const ValueKey('add-money-amount-500')));
     await _pump(tester, 100);
-    await _tap(tester, find.text('ADD MONEY'));
+    await _tap(tester, find.byKey(const ValueKey('add-money-pay')));
     await _pump(tester, 600);
   }
 
@@ -499,27 +511,78 @@ void main() {
     await finish(tester);
   });
 
-  testWidgets('add money: cards only, pinned button once one is picked', (
+  testWidgets('add money: one amount always picked, Pay shows the total', (
     tester,
   ) async {
     await open(tester);
     await tester.tap(find.text('Add money'));
     await _pump(tester, 400);
-    // No manual amount box; the button waits for a card.
+    // No manual amount box: the admin's amounts, lowest first, the middle
+    // one popular and picked, so the total and Pay are there at once.
     expect(find.byType(TextField), findsNothing);
-    expect(find.text('ADD MONEY'), findsNothing);
+    expect(find.text('CHOOSE AN AMOUNT'), findsOneWidget);
+    expect(find.text('POPULAR'), findsOneWidget);
+    expect(find.text('Balance ₹1,000.0'), findsOneWidget);
+    expect(find.text('Pay ₹590'), findsOneWidget);
+    expect(find.text('incl. ₹90 GST'), findsOneWidget);
+    // "You pay → Wallet gets" sits with the button, pinned, not in the
+    // scrolling amounts.
+    expect(
+      find.descendant(
+        of: find.byKey(const ValueKey('add-money-bar')),
+        matching: find.byKey(const ValueKey('add-money-summary')),
+      ),
+      findsOneWidget,
+    );
+    String gets() => tester
+        .widget<Text>(
+          find.descendant(
+            of: find.byKey(const ValueKey('add-money-gets')),
+            matching: find.byType(Text),
+          ),
+        )
+        .data!;
+    expect(gets(), '₹500');
 
-    await tester.tap(find.text('₹1,000').first);
-    await _pump(tester, 300);
-    expect(find.text('ADD MONEY'), findsOneWidget);
-    expect(find.text('₹180.00'), findsOneWidget);
-    expect(find.text('₹1180.00'), findsOneWidget);
-    expect(find.text('₹1000.00 will be added to your wallet'), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('add-money-amount-1000')));
+    await _pump(tester, 600);
+    expect(find.text('Pay ₹1,180'), findsOneWidget);
+    expect(find.text('incl. ₹180 GST'), findsOneWidget);
+    expect(gets(), '₹1,000');
+    expect(
+      find.textContaining('Your full ₹1,000 goes into your wallet'),
+      findsOneWidget,
+    );
 
-    // Tapping it again clears the pick: the button goes away.
-    await tester.tap(find.text('₹1,000').first);
+    // Tapping it again keeps it: there is always one amount to pay.
+    await tester.tap(find.byKey(const ValueKey('add-money-amount-1000')));
     await _pump(tester, 300);
-    expect(find.text('ADD MONEY'), findsNothing);
+    expect(find.text('Pay ₹1,180'), findsOneWidget);
+    await finish(tester);
+  });
+
+  testWidgets('add money, first top-up: the bonus banner and FREE extras', (
+    tester,
+  ) async {
+    backend
+      ..firstTopupPercent = 50
+      ..totalTx = 0; // never paid in
+    await open(tester);
+    await tester.tap(find.text('Add money'));
+    await _pump(tester, 400);
+    expect(find.byKey(const ValueKey('add-money-bonus')), findsOneWidget);
+    expect(find.text('+50% EXTRA'), findsOneWidget);
+    expect(find.text('+₹250 BONUS'), findsOneWidget); // on ₹500
+    expect(find.textContaining('FREE'), findsNothing, reason: 'a bonus, not free');
+    expect(find.text('incl. ₹250 bonus'), findsOneWidget); // in the summary
+    expect(find.text('Pay ₹590'), findsOneWidget, reason: 'GST on ₹500 only');
+    final gets = tester.widget<Text>(
+      find.descendant(
+        of: find.byKey(const ValueKey('add-money-gets')),
+        matching: find.byType(Text),
+      ),
+    );
+    expect(gets.data, '₹750');
     await finish(tester);
   });
 
@@ -723,8 +786,17 @@ void main() {
     await tester.tap(find.text('Add money'));
     await _pump(tester, 400);
     await tester.tap(find.text('₹1,500').first);
-    await _pump(tester, 200);
-    expect(find.text('₹1770.00'), findsOneWidget);
+    await _pump(tester, 600);
+    expect(find.text('Pay ₹1,770'), findsOneWidget);
+    // On the smallest phone the summary and the button are still in view.
+    expect(
+      find.byKey(const ValueKey('add-money-summary')).hitTestable(),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('add-money-pay')).hitTestable(),
+      findsOneWidget,
+    );
     expect(tester.takeException(), isNull);
     await finish(tester);
   });
@@ -735,6 +807,19 @@ void main() {
     setUpAll(_loadFonts);
     for (final dark in [true, false]) {
       final mode = dark ? 'dark' : 'light';
+      testWidgets('add money with a bonus $mode', (tester) async {
+        backend
+          ..firstTopupPercent = 50
+          ..totalTx = 0;
+        await open(tester, size: const Size(375, 812), dark: dark);
+        await tester.tap(find.text('Add money'));
+        await _pump(tester, 900);
+        await _save(tester, renderDir!, 'add_money_bonus_$mode');
+        await finish(tester);
+      });
+    }
+    for (final dark in [true, false]) {
+      final mode = dark ? 'dark' : 'light';
       testWidgets('wallet $mode', (tester) async {
         await open(tester, size: const Size(375, 812), dark: dark);
         await _save(tester, renderDir!, 'wallet_$mode');
@@ -742,7 +827,7 @@ void main() {
         await tester.tap(find.text('Add money'));
         await _pump(tester, 500);
         await tester.tap(find.text('₹500').first);
-        await _pump(tester, 200);
+        await _pump(tester, 600);
         await _save(tester, renderDir, 'add_money_$mode');
         await tester.tap(find.bySemanticsLabel('Close'));
         await _pump(tester, 500);

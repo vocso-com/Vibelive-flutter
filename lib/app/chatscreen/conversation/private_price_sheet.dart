@@ -42,7 +42,6 @@ class _PriceSheet extends HookWidget {
     );
     final custom = useTextEditingController();
     final valid = ChatPricing.privatePriceAllowed(price.value, rules);
-    final buyerPaise = valid ? ChatPricing.buyerPricePaise(price.value!, rules) : 0;
     final range = {
       'min': ChatPricing.money(rules.minPrice),
       'max': ChatPricing.money(rules.maxPrice),
@@ -129,24 +128,8 @@ class _PriceSheet extends HookWidget {
                     onChanged: (v) => price.value = double.tryParse(v.trim()),
                   ),
                 ),
-                SizedBox(height: 10.ms),
-                if (valid) ...[
-                  CText(
-                    'chat:private.price_earn',
-                    variables: {'earn': ChatPricing.money(price.value!)},
-                    size: 14,
-                    weight: FontWeight.w800,
-                    color: StatusColors.success,
-                  ),
-                  SizedBox(height: 3.ms),
-                  CText(
-                    'chat:private.price_buyer',
-                    variables: {'buyer': ChatPricing.moneyPaise(buyerPaise)},
-                    size: 12,
-                    weight: FontWeight.w600,
-                    color: c.textMuted,
-                  ),
-                ],
+                // What they earn is on the button; what the buyer pays is
+                // never shown to the host.
                 SizedBox(height: 14.ms),
                 CButton(
                   key: const ValueKey('chat-private-send'),

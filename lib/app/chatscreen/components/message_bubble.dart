@@ -14,6 +14,7 @@ import 'date_separator.dart';
 import 'message_ticks.dart';
 import 'photo_bubble.dart';
 import 'private_photo_bubble.dart';
+import 'vanish_mode.dart';
 import 'voice_player.dart';
 
 /// What a bubble can ask the screen to do. One object for the whole list
@@ -111,19 +112,24 @@ class ChatMessageRow extends StatelessWidget {
     );
 
     final day = row.dayBreak;
+    final framed = day != null || row.vanishTop || row.vanishBottom;
     return Padding(
       padding: EdgeInsetsDirectional.only(
         top: row.joinOlder ? 2.ms : 8.ms,
         start: 12.ms,
         end: 12.ms,
       ),
-      child: day == null
+      child: !framed
           ? aligned
           : Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                ChatDateSeparator(day: day),
+                if (day != null) ChatDateSeparator(day: day),
+                // Vanish texts not seen yet, after vanish mode was turned
+                // off: a line above and below the run.
+                if (row.vanishTop) const VanishLeftoverLine(top: true),
                 aligned,
+                if (row.vanishBottom) const VanishLeftoverLine(top: false),
               ],
             ),
     );

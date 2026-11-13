@@ -211,6 +211,11 @@
       "share": "Share Profile",
       "become_host": "Become a Host",
       "logout": "Logout Session"
+    },
+    "first_topup_demo": {
+      "title": "Preview first top-up offer",
+      "subtitle": "SEE THE APP-OPEN OFFER POPUP",
+      "off": "Demo: the first top-up bonus is OFF in admin, so real users won't see this. Shown at 50%."
     }
   },
   "referral": {

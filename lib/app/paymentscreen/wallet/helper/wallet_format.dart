@@ -18,6 +18,13 @@ abstract final class WalletFormat {
   /// Preset chips (`₹1,500`).
   static String whole(num value) => _whole.format(value);
 
+  /// Rupees as the gateway shows them: grouped, paise only when there are
+  /// any (`1,180`, `352.82`, `1,180.50`).
+  static String rupees(num value) {
+    final v = num.parse(_finite(value).toStringAsFixed(2));
+    return v == v.truncate() ? _whole.format(v) : _twoDecimals.format(v);
+  }
+
   /// RN `toFixed(2)` (no grouping): the add-money GST card.
   static String fixed2(num value) => _finite(value).toStringAsFixed(2);
 

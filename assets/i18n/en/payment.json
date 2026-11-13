@@ -170,7 +170,18 @@
     "bonus_first": "First top-up bonus: get {{percent}}% extra on this recharge 🎁",
     "bonus_comeback": "Your {{percent}}% extra is still waiting. Finish this top-up to claim it 🎁",
     "will_be_added_bonus": "₹{{amount}} will be added to your wallet (incl. ₹{{bonus}} bonus)",
-    "cards_legend": "\"You get\" is added to your wallet. GST ({{percent}}%) is added at checkout."
+    "cards_legend": "\"You get\" is added to your wallet. GST ({{percent}}%) is added at checkout.",
+    "pick": "CHOOSE AN AMOUNT",
+    "balance": "Balance ₹{{amount}}",
+    "you_pay": "You pay",
+    "wallet_gets": "Wallet gets",
+    "bonus_row": "Bonus ({{percent}}%)",
+    "gst_note": "GST ({{percent}}%) is a government tax added on top of the recharge. Your full ₹{{amount}} goes into your wallet.",
+    "pay": "Pay ₹{{total}}",
+    "secure": "100% secure payment",
+    "bonus_instant": "Added to your wallet instantly with this recharge.",
+    "incl_gst": "incl. ₹{{gst}} GST",
+    "incl_bonus": "incl. ₹{{bonus}} bonus"
   },
   "status": {
     "success_title": "Payment Successful",
@@ -216,7 +227,7 @@
     "transfer_earnings": "Transfer ₹{{amount}} earnings to wallet"
   },
   "offer": {
-    "cta": "Add ₹{{amount}} & get ₹{{bonus}}"
+    "cta": "Add ₹{{amount}} & get ₹{{total}}"
   },
   "first_topup": {
     "title": "Your first top-up gets {{percent}}% extra",
@@ -228,7 +239,7 @@
     "extra": "+{{percent}}% EXTRA",
     "hero": "Recharge for the first time and get {{percent}}% extra in your wallet, instantly.",
     "pick": "PICK AN AMOUNT",
-    "free_extra": "+₹{{bonus}} FREE",
+    "bonus_extra": "+₹{{bonus}} BONUS",
     "popular": "POPULAR",
     "you_pay": "You pay",
     "you_get": "You get"
@@ -243,7 +254,7 @@
     "later": "Maybe later",
     "expired_title": "Offer expired",
     "expired_subtitle": "The {{percent}}% bonus has ended, but you can still add money.",
-    "free": "+₹{{bonus}} FREE",
+    "free": "+₹{{bonus}} BONUS",
     "on_topup": "on your ₹{{amount}} top-up",
     "you_pay": "YOU PAY",
     "wallet_gets": "WALLET GETS",

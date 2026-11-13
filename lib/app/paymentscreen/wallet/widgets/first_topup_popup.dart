@@ -12,9 +12,12 @@ import '../../../api/promo_banner/promo_content.dart';
 import '../../../component/c_text.dart';
 import '../../../component/pressable.dart';
 import '../../../promo/promo_effects.dart';
+import '../../../api/paymentscreen/billing_models.dart';
 import '../helper/first_topup_offer.dart';
+import '../helper/wallet_amounts.dart';
 import '../helper/wallet_format.dart';
 import '../helper/wallet_palette.dart';
+import 'offer_parts.dart';
 
 /// What the first-top-up popup offers: the bonus percent and every amount
 /// the wallet sells (the admin's presets).
@@ -24,10 +27,15 @@ class FirstTopupPlan {
     required this.percent,
     required this.amounts,
     this.voiceRate = 0,
+    this.gstPercent = GstConfig.defaultIgstRate,
   });
 
   final double percent;
   final List<int> amounts;
+
+  /// The top-up GST (runtime config): what is paid on top of the amount,
+  /// exactly as the order is made (the Add Money sheet's maths).
+  final double gstPercent;
 
   /// Per-minute floor, for "about N minutes of talking" (0: not shown).
   final double voiceRate;
@@ -67,10 +75,8 @@ Future<int?> showFirstTopupPopup(BuildContext context, FirstTopupPlan plan) {
   );
 }
 
-/// Hot pink → orange: the offer reads as a celebration in both themes.
-const _hero = [Color(0xFFFF2D87), Color(0xFFFF5E3A), Color(0xFFFFA726)];
-const _gold = Color(0xFFFFD54F);
-const _green = Color(0xFF16C784);
+const _gold = OfferColors.gold;
+const _green = OfferColors.green;
 
 class _FirstTopupPopup extends HookWidget {
   const _FirstTopupPopup({required this.plan});
@@ -96,17 +102,17 @@ class _FirstTopupPopup extends HookWidget {
         ? (preview.total / plan.voiceRate).floor()
         : 0;
     final size = MediaQuery.sizeOf(context);
-    final width = math.min(size.width - 32.ms, 380.0);
+    final width = math.min(size.width - 32.ms, 350.0);
 
     return Center(
       child: Padding(
-        padding: EdgeInsets.symmetric(vertical: 24.ms),
+        padding: EdgeInsets.symmetric(vertical: 16.ms),
         child: Material(
           type: MaterialType.transparency,
           child: ConstrainedBox(
             constraints: BoxConstraints(
               maxWidth: width,
-              maxHeight: size.height - 48.ms,
+              maxHeight: size.height - 32.ms,
             ),
             child: Container(
               key: const ValueKey('first-topup-popup'),
@@ -114,10 +120,12 @@ class _FirstTopupPopup extends HookWidget {
               decoration: BoxDecoration(
                 // Opaque in both themes (the dark surface is a tint).
                 color: Color.alphaBlend(p.cardBg, p.bg),
-                borderRadius: BorderRadius.circular(28.ms),
+                borderRadius: BorderRadius.circular(24.ms),
                 boxShadow: [
                   BoxShadow(
-                    color: _hero.first.withValues(alpha: 0.45),
+                    color: OfferColors.of(
+                      context,
+                    ).accent.withValues(alpha: 0.4),
                     blurRadius: 40,
                     spreadRadius: -6,
                     offset: const Offset(0, 18),
@@ -135,22 +143,24 @@ class _FirstTopupPopup extends HookWidget {
                       onClose: () => Navigator.of(context).pop(),
                     ),
                     Padding(
-                      padding: EdgeInsets.fromLTRB(16.ms, 16.ms, 16.ms, 10.ms),
+                      padding: EdgeInsets.fromLTRB(14.ms, 12.ms, 14.ms, 4.ms),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
                           CText(
                             'payment:first_topup.pick',
-                            size: 13,
+                            size: 11,
                             weight: FontWeight.w800,
                             color: p.muted,
                             align: TextAlign.center,
                             letterSpacing: 0.4,
                           ),
-                          SizedBox(height: 12.ms),
-                          _AmountGrid(
+                          SizedBox(height: 10.ms),
+                          OfferAmountGrid(
+                            keyPrefix: 'first-topup-amount',
                             amounts: plan.amounts,
-                            percent: plan.percent,
+                            bonusOf: (a) =>
+                                BonusPreview.of(a, plan.percent).bonus,
                             chosen: chosen,
                             popular: plan.suggested,
                             onPick: (value) {
@@ -161,30 +171,42 @@ class _FirstTopupPopup extends HookWidget {
                               );
                             },
                           ),
-                          SizedBox(height: 14.ms),
-                          _Becomes(preview: preview, minutes: minutes),
-                          SizedBox(height: 14.ms),
-                          _ShineButton(
+                          SizedBox(height: 10.ms),
+                          _Becomes(
+                            preview: preview,
+                            gst: TopUpAmount.breakdown(
+                              preview.amount,
+                              plan.gstPercent,
+                            ),
+                            minutes: minutes,
+                          ),
+                          SizedBox(height: 10.ms),
+                          OfferShineButton(
+                            key: const ValueKey('first-topup-cta'),
                             loop: loop,
                             label: context.t(
+                              // What the wallet gets, bonus included
+                              // ("Add ₹1,000 & get ₹2,000").
                               'payment:offer.cta',
                               variables: {
-                                'amount': WalletFormat.js(preview.amount),
-                                'bonus': '${preview.bonus}',
+                                'amount': WalletFormat.whole(preview.amount),
+                                'total': WalletFormat.whole(
+                                  preview.total.round(),
+                                ),
                               },
                             ),
                             enabled: chosen > 0,
                             onTap: () => Navigator.of(context).pop(chosen),
                           ),
-                          SizedBox(height: 4.ms),
+                          SizedBox(height: 2.ms),
                           Pressable(
                             key: const ValueKey('first-topup-later'),
                             onPressed: () => Navigator.of(context).pop(),
                             child: Padding(
-                              padding: EdgeInsets.symmetric(vertical: 10.ms),
+                              padding: EdgeInsets.symmetric(vertical: 8.ms),
                               child: CText(
                                 'payment:first_topup.not_now',
-                                size: 13,
+                                size: 12.5,
                                 weight: FontWeight.w700,
                                 color: p.muted,
                                 align: TextAlign.center,
@@ -220,12 +242,13 @@ class _Hero extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final o = OfferColors.of(context);
     return DecoratedBox(
-      decoration: const BoxDecoration(
+      decoration: BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: _hero,
+          colors: o.gradient,
         ),
       ),
       child: Stack(
@@ -239,7 +262,7 @@ class _Hero extends StatelessWidget {
             ),
           ),
           Padding(
-            padding: EdgeInsets.fromLTRB(20.ms, 22.ms, 20.ms, 20.ms),
+            padding: EdgeInsets.fromLTRB(18.ms, 14.ms, 18.ms, 14.ms),
             child: Column(
               children: [
                 AnimatedBuilder(
@@ -252,68 +275,69 @@ class _Hero extends StatelessWidget {
                     );
                   },
                   child: Container(
-                    width: 74.ms,
-                    height: 74.ms,
+                    width: 54.ms,
+                    height: 54.ms,
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
                       color: Colors.white,
                       boxShadow: [
                         BoxShadow(
                           color: _gold.withValues(alpha: 0.75),
-                          blurRadius: 26,
-                          spreadRadius: 4,
+                          blurRadius: 20,
+                          spreadRadius: 3,
                         ),
                       ],
                     ),
-                    child: Icon(
-                      LucideIcons.gift,
-                      size: 36.ms,
-                      color: _hero.first,
-                    ),
+                    child: Icon(LucideIcons.gift, size: 27.ms, color: o.ink),
                   ),
                 ),
-                SizedBox(height: 14.ms),
+                SizedBox(height: 9.ms),
                 Container(
                   padding: EdgeInsets.symmetric(
-                    horizontal: 12.ms,
-                    vertical: 5.ms,
+                    horizontal: 10.ms,
+                    vertical: 3.ms,
                   ),
                   decoration: BoxDecoration(
                     color: Colors.black.withValues(alpha: 0.18),
                     borderRadius: BorderRadius.circular(999),
                   ),
-                  child: const CText(
+                  child: CText(
                     'payment:first_topup.badge',
-                    size: 11,
+                    size: 10,
                     weight: FontWeight.w900,
-                    color: Colors.white,
+                    color: o.onAccent,
                     letterSpacing: 1.2,
                     maxLines: 1,
                   ),
                 ),
-                SizedBox(height: 8.ms),
-                CText(
-                  'payment:first_topup.extra',
-                  variables: {'percent': percent},
-                  size: 40,
-                  weight: FontWeight.w900,
-                  color: Colors.white,
-                  height: 46,
-                  maxLines: 1,
-                  align: TextAlign.center,
-                  style: const TextStyle(
-                    shadows: [
-                      Shadow(color: Color(0x55000000), blurRadius: 12),
-                    ],
+                SizedBox(height: 5.ms),
+                // A long language shrinks to fit rather than being cut.
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: CText(
+                    'payment:first_topup.extra',
+                    variables: {'percent': percent},
+                    size: 31,
+                    weight: FontWeight.w900,
+                    color: o.onAccent,
+                    height: 36,
+                    maxLines: 1,
+                    align: TextAlign.center,
+                    style: const TextStyle(
+                      shadows: [
+                        Shadow(color: Color(0x55000000), blurRadius: 10),
+                      ],
+                    ),
                   ),
                 ),
-                SizedBox(height: 6.ms),
+                SizedBox(height: 3.ms),
                 CText(
                   'payment:first_topup.hero',
                   variables: {'percent': percent},
-                  size: 13.5,
+                  maxLines: 2,
+                  size: 12,
                   weight: FontWeight.w600,
-                  color: Colors.white.withValues(alpha: 0.95),
+                  color: o.onAccent.withValues(alpha: 0.92),
                   align: TextAlign.center,
                 ),
               ],
@@ -326,13 +350,13 @@ class _Hero extends StatelessWidget {
               key: const ValueKey('first-topup-close'),
               onPressed: onClose,
               child: Container(
-                width: 34.ms,
-                height: 34.ms,
+                width: 30.ms,
+                height: 30.ms,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
                   color: Colors.black.withValues(alpha: 0.2),
                 ),
-                child: Icon(LucideIcons.x, size: 18.ms, color: Colors.white),
+                child: Icon(LucideIcons.x, size: 16.ms, color: o.onAccent),
               ),
             ),
           ),
@@ -342,243 +366,77 @@ class _Hero extends StatelessWidget {
   }
 }
 
-/// Every amount, three to a row, each with its free extra.
-class _AmountGrid extends StatelessWidget {
-  const _AmountGrid({
-    required this.amounts,
-    required this.percent,
-    required this.chosen,
-    required this.popular,
-    required this.onPick,
-  });
-
-  final List<int> amounts;
-  final double percent;
-  final int chosen;
-  final int? popular;
-  final ValueChanged<int> onPick;
-
-  @override
-  Widget build(BuildContext context) {
-    final perRow = amounts.length == 4 ? 2 : math.min(3, amounts.length);
-    final rows = <List<int>>[
-      for (var i = 0; i < amounts.length; i += perRow)
-        amounts.sublist(i, math.min(i + perRow, amounts.length)),
-    ];
-    return Column(
-      children: [
-        for (final (r, row) in rows.indexed) ...[
-          if (r > 0) SizedBox(height: 12.ms),
-          Row(
-            children: [
-              for (final (i, value) in row.indexed) ...[
-                if (i > 0) SizedBox(width: 10.ms),
-                Expanded(
-                  child: _AmountTile(
-                    amount: value,
-                    bonus: BonusPreview.of(value, percent).bonus,
-                    active: value == chosen,
-                    popular: value == popular,
-                    onTap: () => onPick(value),
-                  ),
-                ),
-              ],
-              // A short last row keeps the tiles the same width.
-              for (var i = row.length; i < perRow; i++) ...[
-                SizedBox(width: 10.ms),
-                const Expanded(child: SizedBox.shrink()),
-              ],
-            ],
-          ),
-        ],
-      ],
-    );
-  }
-}
-
-class _AmountTile extends StatelessWidget {
-  const _AmountTile({
-    required this.amount,
-    required this.bonus,
-    required this.active,
-    required this.popular,
-    required this.onTap,
-  });
-
-  final int amount;
-  final int bonus;
-  final bool active;
-  final bool popular;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final p = WalletPalette.of(context);
-    final tile = AnimatedScale(
-      scale: active ? 1.04 : 1,
-      duration: const Duration(milliseconds: 180),
-      curve: Curves.easeOutBack,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 180),
-        // The tile fills its column: every tile the same width.
-        width: double.infinity,
-        padding: EdgeInsets.fromLTRB(6.ms, 16.ms, 6.ms, 10.ms),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(16.ms),
-          gradient: active
-              ? LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [
-                    _hero.first.withValues(alpha: 0.14),
-                    _hero.last.withValues(alpha: 0.14),
-                  ],
-                )
-              : null,
-          color: active ? null : p.soft,
-          border: Border.all(
-            color: active ? _hero[1] : p.cardBorder,
-            width: active ? 2 : 1.2,
-          ),
-          boxShadow: active
-              ? [
-                  BoxShadow(
-                    color: _hero[1].withValues(alpha: 0.28),
-                    blurRadius: 14,
-                    offset: const Offset(0, 6),
-                  ),
-                ]
-              : null,
-        ),
-        child: Column(
-          children: [
-            FittedBox(
-              fit: BoxFit.scaleDown,
-              child: CText.raw(
-                '₹${WalletFormat.whole(amount)}',
-                size: 20,
-                weight: FontWeight.w900,
-                color: p.text,
-                maxLines: 1,
-              ),
-            ),
-            SizedBox(height: 6.ms),
-            if (bonus > 0)
-              Container(
-                padding: EdgeInsets.symmetric(
-                  horizontal: 7.ms,
-                  vertical: 3.ms,
-                ),
-                decoration: BoxDecoration(
-                  color: _green.withValues(alpha: 0.14),
-                  borderRadius: BorderRadius.circular(999),
-                ),
-                child: FittedBox(
-                  fit: BoxFit.scaleDown,
-                  child: CText(
-                    'payment:first_topup.free_extra',
-                    variables: {'bonus': WalletFormat.whole(bonus)},
-                    size: 11,
-                    weight: FontWeight.w900,
-                    color: _green,
-                    maxLines: 1,
-                  ),
-                ),
-              ),
-          ],
-        ),
-      ),
-    );
-    return Pressable(
-      key: ValueKey('first-topup-amount-$amount'),
-      onPressed: onTap,
-      child: Stack(
-        clipBehavior: Clip.none,
-        children: [
-          tile,
-          if (popular)
-            Positioned(
-              top: -9.ms,
-              left: 0,
-              right: 0,
-              child: Center(
-                child: Container(
-                  padding: EdgeInsets.symmetric(
-                    horizontal: 8.ms,
-                    vertical: 2.ms,
-                  ),
-                  decoration: BoxDecoration(
-                    gradient: const LinearGradient(colors: _hero),
-                    borderRadius: BorderRadius.circular(999),
-                  ),
-                  child: const CText(
-                    'payment:first_topup.popular',
-                    size: 9.5,
-                    weight: FontWeight.w900,
-                    color: Colors.white,
-                    letterSpacing: 0.8,
-                    maxLines: 1,
-                  ),
-                ),
-              ),
-            ),
-          if (active)
-            Positioned(
-              top: 6.ms,
-              right: 6.ms,
-              child: Icon(
-                Icons.check_circle_rounded,
-                size: 16.ms,
-                color: _hero[1],
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-}
-
-/// "You pay ₹199 → You get ₹299", the total counting up as it changes.
+/// "You pay ₹1,180 (incl. ₹180 GST) → You get ₹2,000 (incl. ₹1,000 bonus)":
+/// what the gateway charges and what lands in the wallet, the total counting
+/// up as the pick changes.
 class _Becomes extends StatelessWidget {
-  const _Becomes({required this.preview, required this.minutes});
+  const _Becomes({
+    required this.preview,
+    required this.gst,
+    required this.minutes,
+  });
 
   final BonusPreview preview;
+  final GstBreakdown gst;
   final int minutes;
 
   @override
   Widget build(BuildContext context) {
     final p = WalletPalette.of(context);
-    Widget side(String label, Widget value) => Expanded(
+    Widget side(String label, Widget value, Widget? note) => Expanded(
       child: Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          CText(label, size: 11, weight: FontWeight.w700, color: p.muted),
-          SizedBox(height: 2.ms),
-          value,
+          CText(
+            label,
+            size: 10,
+            weight: FontWeight.w700,
+            color: p.muted,
+            maxLines: 1,
+          ),
+          SizedBox(height: 1.ms),
+          FittedBox(fit: BoxFit.scaleDown, child: value),
+          if (note != null) FittedBox(fit: BoxFit.scaleDown, child: note),
         ],
       ),
     );
     return Container(
-      padding: EdgeInsets.symmetric(vertical: 12.ms, horizontal: 10.ms),
+      padding: EdgeInsets.symmetric(vertical: 8.ms, horizontal: 10.ms),
       decoration: BoxDecoration(
         color: _green.withValues(alpha: p.dark ? 0.12 : 0.07),
-        borderRadius: BorderRadius.circular(16.ms),
+        borderRadius: BorderRadius.circular(14.ms),
         border: Border.all(color: _green.withValues(alpha: 0.35)),
       ),
       child: Column(
         children: [
           Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               side(
                 'payment:first_topup.you_pay',
                 CText.raw(
-                  '₹${WalletFormat.js(preview.amount)}',
-                  size: 18,
+                  '₹${WalletFormat.rupees(gst.total)}',
+                  key: const ValueKey('first-topup-pay'),
+                  size: 15,
                   weight: FontWeight.w800,
                   color: p.text,
                   maxLines: 1,
                 ),
+                gst.gst > 0
+                    ? CText(
+                        'payment:add_money.incl_gst',
+                        variables: {'gst': WalletFormat.rupees(gst.gst)},
+                        size: 9.5,
+                        weight: FontWeight.w600,
+                        color: p.muted,
+                        maxLines: 1,
+                      )
+                    : null,
               ),
-              Icon(LucideIcons.arrowRight, size: 20.ms, color: _green),
+              Padding(
+                padding: EdgeInsets.only(top: 14.ms),
+                child: Icon(LucideIcons.arrowRight, size: 17.ms, color: _green),
+              ),
               side(
                 'payment:first_topup.you_get',
                 TweenAnimationBuilder<double>(
@@ -588,113 +446,36 @@ class _Becomes extends StatelessWidget {
                   builder: (_, value, _) => CText.raw(
                     '₹${WalletFormat.whole(value.round())}',
                     key: const ValueKey('first-topup-total'),
-                    size: 22,
+                    size: 18,
                     weight: FontWeight.w900,
                     color: _green,
                     maxLines: 1,
                   ),
                 ),
+                preview.bonus > 0
+                    ? CText(
+                        'payment:add_money.incl_bonus',
+                        variables: {'bonus': WalletFormat.whole(preview.bonus)},
+                        size: 9.5,
+                        weight: FontWeight.w700,
+                        color: _green,
+                        maxLines: 1,
+                      )
+                    : null,
               ),
             ],
           ),
           if (minutes > 0) ...[
-            SizedBox(height: 6.ms),
+            SizedBox(height: 3.ms),
             CText(
               'payment:first_topup.minutes',
               variables: {'minutes': '$minutes'},
-              size: 11.5,
+              size: 10.5,
               color: p.muted,
               align: TextAlign.center,
             ),
           ],
         ],
-      ),
-    );
-  }
-}
-
-/// The hot-gradient button with a light sweeping across it on a loop.
-class _ShineButton extends StatelessWidget {
-  const _ShineButton({
-    required this.loop,
-    required this.label,
-    required this.enabled,
-    required this.onTap,
-  });
-
-  final Animation<double> loop;
-  final String label;
-  final bool enabled;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Opacity(
-      opacity: enabled ? 1 : 0.5,
-      child: Pressable(
-        key: const ValueKey('first-topup-cta'),
-        onPressed: enabled ? onTap : null,
-        activeOpacity: 0.9,
-        child: Container(
-          height: 54.ms,
-          clipBehavior: Clip.antiAlias,
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(18.ms),
-            gradient: const LinearGradient(colors: _hero),
-            boxShadow: [
-              BoxShadow(
-                color: _hero[1].withValues(alpha: 0.4),
-                blurRadius: 16,
-                offset: const Offset(0, 8),
-              ),
-            ],
-          ),
-          child: Stack(
-            fit: StackFit.expand,
-            children: [
-              AnimatedBuilder(
-                animation: loop,
-                builder: (_, _) => FractionallySizedBox(
-                  widthFactor: 0.35,
-                  alignment: Alignment(-2.2 + 4.4 * loop.value, 0),
-                  child: DecoratedBox(
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: [
-                          Colors.white.withValues(alpha: 0),
-                          Colors.white.withValues(alpha: 0.35),
-                          Colors.white.withValues(alpha: 0),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-              Center(
-                child: Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 12.ms),
-                  child: FittedBox(
-                    fit: BoxFit.scaleDown,
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(LucideIcons.zap, size: 18.ms, color: Colors.white),
-                        SizedBox(width: 6.ms),
-                        CText.raw(
-                          label,
-                          size: 15.5,
-                          weight: FontWeight.w900,
-                          color: Colors.white,
-                          maxLines: 1,
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
       ),
     );
   }

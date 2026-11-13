@@ -83,7 +83,7 @@ class _ChatMessageListState extends State<ChatMessageList>
     super.initState();
     _c.messages.addListener(_onMessages);
     _c.hasMore.addListener(_onMore);
-    _c.vanish.addListener(_onMore);
+    _c.vanish.addListener(_onVanish);
     // The tip waits for the chat to be loaded and on screen.
     _c.ready.addListener(_onTipGate);
     _c.onScreen.addListener(_onTipGate);
@@ -101,7 +101,7 @@ class _ChatMessageListState extends State<ChatMessageList>
   void dispose() {
     _c.messages.removeListener(_onMessages);
     _c.hasMore.removeListener(_onMore);
-    _c.vanish.removeListener(_onMore);
+    _c.vanish.removeListener(_onVanish);
     _c.ready.removeListener(_onTipGate);
     _c.onScreen.removeListener(_onTipGate);
     _tipDelay?.cancel();
@@ -197,8 +197,15 @@ class _ChatMessageListState extends State<ChatMessageList>
 
   void _onMore() => setState(() {});
 
+  /// The lines around vanish texts still shown depend on the mode.
+  void _onVanish() => setState(_derive);
+
   void _derive() {
-    _rows = ChatRows.build(_c.messages.value, widget.me);
+    _rows = ChatRows.build(
+      _c.messages.value,
+      widget.me,
+      markVanish: !_c.vanish.value.on,
+    );
     _index = {for (var i = 0; i < _rows.length; i++) _rows[i].key: i};
     _widgets.removeWhere((key, _) => !_index.containsKey(key));
   }

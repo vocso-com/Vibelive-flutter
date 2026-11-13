@@ -105,7 +105,8 @@
     "on_by_peer": "{{name}} turned on vanish mode",
     "explain": "Seen messages disappear when you close the chat.",
     "needs_chat": "Send a message first, then turn on vanish mode.",
-    "new": "NEW"
+    "new": "NEW",
+    "leftover": "Vanish messages · gone once seen"
   },
   "recharge": {
     "title": "Add money to keep chatting",

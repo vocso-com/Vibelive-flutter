@@ -415,11 +415,8 @@ class _VanishBurstState extends State<VanishBurst>
               return const SizedBox.shrink();
             }
             return LayoutBuilder(
-              builder: (context, box) => Stack(
-                children: [
-                  for (final d in _drops) _drop(d, box),
-                ],
-              ),
+              builder: (context, box) =>
+                  Stack(children: [for (final d in _drops) _drop(d, box)]),
             );
           },
         ),
@@ -460,4 +457,54 @@ class _Drop {
   final double size;
   final double drift;
   final double spin;
+}
+
+/// A line above (with a small label) and below a run of vanish texts still
+/// shown after vanish mode was turned off: the ones the other person had not
+/// seen yet. They go once read and the reader leaves the chat.
+class VanishLeftoverLine extends StatelessWidget {
+  const VanishLeftoverLine({super.key, required this.top});
+
+  /// Above the run (with the label); below it (a plain line).
+  final bool top;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = ChatPalette.of(context);
+    final line = Expanded(
+      child: Container(height: 1, color: p.muted.withValues(alpha: 0.45)),
+    );
+    return Padding(
+      key: ValueKey(
+        top ? 'chat-vanish-leftover-top' : 'chat-vanish-leftover-bottom',
+      ),
+      padding: EdgeInsets.only(
+        top: top ? 6.ms : 10.ms,
+        bottom: top ? 8.ms : 4.ms,
+      ),
+      child: Row(
+        children: [
+          line,
+          if (top) ...[
+            SizedBox(width: 8.ms),
+            Text('🤫', style: TextStyle(fontSize: 11.ms)),
+            SizedBox(width: 4.ms),
+            Flexible(
+              flex: 3,
+              child: CText(
+                'chat:vanish.leftover',
+                size: 10.5,
+                weight: FontWeight.w700,
+                color: p.muted,
+                maxLines: 2,
+                align: TextAlign.center,
+              ),
+            ),
+            SizedBox(width: 8.ms),
+            line,
+          ],
+        ],
+      ),
+    );
+  }
 }

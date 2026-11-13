@@ -17,10 +17,17 @@ class ChatRow {
     this.dayBreak,
     this.joinOlder = false,
     this.joinNewer = false,
+    this.vanishTop = false,
+    this.vanishBottom = false,
   });
 
   final ChatMessage message;
   final bool mine;
+
+  /// With vanish mode off, the oldest / newest of a run of vanish texts not
+  /// seen yet: a line above / below it marks the run off from the chat.
+  final bool vanishTop;
+  final bool vanishBottom;
 
   /// A date separator above this message (its first on that day).
   final DateTime? dayBreak;
@@ -42,11 +49,20 @@ class ChatRow {
       other.mine == mine &&
       other.dayBreak == dayBreak &&
       other.joinOlder == joinOlder &&
-      other.joinNewer == joinNewer;
+      other.joinNewer == joinNewer &&
+      other.vanishTop == vanishTop &&
+      other.vanishBottom == vanishBottom;
 
   @override
-  int get hashCode =>
-      Object.hash(message, mine, dayBreak, joinOlder, joinNewer);
+  int get hashCode => Object.hash(
+    message,
+    mine,
+    dayBreak,
+    joinOlder,
+    joinNewer,
+    vanishTop,
+    vanishBottom,
+  );
 }
 
 /// Pure list rules: date separators, grouping, ticks, merge.
@@ -54,14 +70,21 @@ abstract final class ChatRows {
   /// Consecutive messages of one person closer than this are grouped.
   static const groupGap = Duration(minutes: 5);
 
-  /// Rows for [newestFirst] (index 0 is drawn at the bottom).
-  static List<ChatRow> build(List<ChatMessage> newestFirst, String? me) {
+  /// Rows for [newestFirst] (index 0 is drawn at the bottom). [markVanish]
+  /// (vanish mode off): a run of vanish texts still shown gets a line above
+  /// and below it.
+  static List<ChatRow> build(
+    List<ChatMessage> newestFirst,
+    String? me, {
+    bool markVanish = false,
+  }) {
     final rows = <ChatRow>[];
     for (var i = 0; i < newestFirst.length; i++) {
       final m = newestFirst[i];
       final older = i + 1 < newestFirst.length ? newestFirst[i + 1] : null;
       final newer = i > 0 ? newestFirst[i - 1] : null;
       final day = localDay(m.createdAt);
+      final vanishRun = markVanish && m.vanish;
       rows.add(
         ChatRow(
           message: m,
@@ -69,8 +92,17 @@ abstract final class ChatRows {
           dayBreak: older == null || !sameDay(older.createdAt, m.createdAt)
               ? day
               : null,
-          joinOlder: older != null && _joined(older, m),
-          joinNewer: newer != null && _joined(m, newer),
+          // Never grouped across a vanish line.
+          joinOlder:
+              older != null &&
+              _joined(older, m) &&
+              !(markVanish && older.vanish != m.vanish),
+          joinNewer:
+              newer != null &&
+              _joined(m, newer) &&
+              !(markVanish && newer.vanish != m.vanish),
+          vanishTop: vanishRun && !(older?.vanish ?? false),
+          vanishBottom: vanishRun && !(newer?.vanish ?? false),
         ),
       );
     }

@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
@@ -6,6 +7,7 @@ import '../../../../core/analytics/events/me_events.dart';
 import '../../../../core/app_scope.dart';
 import '../../../../core/i18n/i18n.dart';
 import '../../../../core/router/app_router.dart';
+import '../../../../core/session/session_store.dart';
 import '../../../../core/theme/vibe_colors.dart';
 import '../../../../core/utils/scale.dart';
 import '../../../component/c_alert.dart';
@@ -18,6 +20,7 @@ import '../../../hosthub/hub/hub_list.dart';
 import '../../../hosthub/onboarding/helper/host_palette.dart';
 import '../../../hosthub/onboarding/helper/intro_image.dart';
 import '../../../hosthub/onboarding/widgets/sheet_frame.dart';
+import '../../../paymentscreen/wallet/helper/first_topup_launch.dart';
 import '../helper/host_unlock_promo.dart';
 import '../helper/me_actions.dart';
 import '../helper/me_data.dart';
@@ -221,6 +224,23 @@ class MeSettingsList extends HookWidget {
             ),
           ],
         ),
+        // Testers only (debug builds, company accounts), last so it moves
+        // nothing: the app-open first-top-up offer, shown now, as users see
+        // it.
+        if (kDebugMode || SessionStore.instance.value.isCompanyAccount) ...[
+          gap,
+          HubListCard(
+            rows: [
+              HubListRow(
+                key: const ValueKey('me-first-topup-demo'),
+                icon: LucideIcons.gift,
+                label: 'client:me.first_topup_demo.title',
+                subtitle: 'client:me.first_topup_demo.subtitle',
+                onTap: () => FirstTopupLaunch.demo(context),
+              ),
+            ],
+          ),
+        ],
       ],
     );
   }

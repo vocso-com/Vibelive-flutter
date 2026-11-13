@@ -154,7 +154,9 @@ class ChatRoomController {
   List<ChatMessage> _server = const [];
 
   /// The vanish texts the server holds for this chat, newest first. Memory
-  /// only, never cached across screens.
+  /// only, never cached across screens. With vanish mode off, the ones the
+  /// other person had not seen when it was switched off (shown between two
+  /// lines until they are read and the reader leaves).
   List<ChatMessage> _vanishItems = const [];
   bool _vanishEntered = false;
 
@@ -267,7 +269,13 @@ class ChatRoomController {
           _apply(page, first: true);
         }
       }
-      if (id != null && vanish.value.on) await _readVanish(id);
+      // Vanish texts: while it is on, and on the first read too (texts not
+      // seen when it was switched off are still there), and while any are.
+      if (id != null &&
+          vanish.value.available &&
+          (vanish.value.on || !_vanishLoaded || _vanishItems.isNotEmpty)) {
+        await _readVanish(id);
+      }
       if (_disposed) return;
       _vanishLoaded = true;
       error.value = null;
@@ -383,10 +391,11 @@ class ChatRoomController {
   }
 
   /// I left the chat (screen closed, app in the background): the vanish
-  /// texts I read go, here at once and on the server for both of us.
+  /// texts I read go, here at once and on the server for both of us — also
+  /// the ones still shown after vanish mode was turned off.
   void leaveVanish() {
     final id = conversationId;
-    if (id == null || !vanish.value.on) return;
+    if (id == null || (!vanish.value.on && _vanishItems.isEmpty)) return;
     final mine = me;
     final kept = [
       for (final m in _vanishItems)
@@ -444,7 +453,17 @@ class ChatRoomController {
   }) {
     final wasOn = vanish.value.on;
     vanish.value = info;
-    if (!info.on && _vanishItems.isNotEmpty) _vanishItems = const [];
+    // Switched off: what was read goes (as on the server); what the other
+    // person had not seen stays, between two lines, until it is read and
+    // they leave. The admin switching vanish off removes everything.
+    if (!info.available && _vanishItems.isNotEmpty) {
+      _vanishItems = const [];
+    } else if (wasOn && !info.on && _vanishItems.isNotEmpty) {
+      _vanishItems = [
+        for (final m in _vanishItems)
+          if (m.readAt == null) m,
+      ];
+    }
     if (wasOn == info.on) return;
     _recompose();
     if (live) {
@@ -535,13 +554,18 @@ class ChatRoomController {
     if (_disposed) return;
     _stash();
     // Vanish mode shows only its own texts; normal history comes back when it
-    // is turned off.
+    // is turned off, with any vanish texts not yet seen in their place.
     final inVanish = vanish.value.on;
     final local = [
       for (final e in _outbox.forPeer(peer))
         if (e.vanish == inVanish) e.toMessage(),
     ];
-    final next = ChatRows.compose(inVanish ? _vanishItems : _server, local);
+    final shown = inVanish
+        ? _vanishItems
+        : _vanishItems.isEmpty
+        ? _server
+        : ChatRows.merge(_server, _vanishItems);
+    final next = ChatRows.compose(shown, local);
     if (!listEquals(next, messages.value)) messages.value = next;
   }
 

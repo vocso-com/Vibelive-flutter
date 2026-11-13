@@ -93,8 +93,10 @@ abstract final class FirstTopupOffer {
 
   /// Every amount the wallet offers (the admin's `wallet_preset_amounts`),
   /// lowest first, each once.
-  static List<int> amounts(List<int> presets) =>
-      ({for (final n in presets) if (n > 0) n}.toList()..sort());
+  static List<int> amounts(List<int> presets) => ({
+    for (final n in presets)
+      if (n > 0) n,
+  }.toList()..sort());
 
   /// The amount picked for them at first: the middle one (most people pick
   /// the middle of three), marked "popular".
