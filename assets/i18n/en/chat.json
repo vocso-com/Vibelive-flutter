@@ -36,6 +36,8 @@
   },
   "menu": {
     "prices": "Prices",
+    "vanish_on": "Turn on vanish mode",
+    "vanish_off": "Turn off vanish mode",
     "report": "Report",
     "block": "Block"
   },
@@ -102,7 +104,8 @@
     "on_by_me": "You turned on vanish mode",
     "on_by_peer": "{{name}} turned on vanish mode",
     "explain": "Seen messages disappear when you close the chat.",
-    "needs_chat": "Send a message first, then turn on vanish mode."
+    "needs_chat": "Send a message first, then turn on vanish mode.",
+    "new": "NEW"
   },
   "recharge": {
     "title": "Add money to keep chatting",
@@ -251,7 +254,8 @@
     "CHAT_VANISH_DISABLED": "Vanish mode isn't available right now.",
     "CHAT_VANISH_FULL": "Too many unread vanish messages. Wait until they're seen.",
     "vanish_text_only": "Only text can be sent in vanish mode.",
-    "voice_too_long": "This voice note is too long."
+    "voice_too_long": "This voice note is too long.",
+    "CHAT_VANISH_NOT_ALLOWED": "Only the other person can turn on vanish mode in this chat."
   },
   "push": {
     "photo": "Photo",

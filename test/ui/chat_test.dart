@@ -19,12 +19,15 @@ import 'package:vibelive/app/callscreen/helper/push/push_envelope.dart';
 import 'package:vibelive/app/callscreen/helper/call_permissions.dart';
 import 'package:vibelive/app/callscreen/helper/push/notification_tap_router.dart';
 import 'package:vibelive/app/chatscreen/components/chat_composer.dart';
+import 'package:vibelive/app/chatscreen/components/chat_palette.dart';
 import 'package:vibelive/app/chatscreen/components/message_bubble.dart';
 import 'package:vibelive/app/chatscreen/conversation/chat_screen.dart';
+import 'package:vibelive/app/chatscreen/conversation/message_list.dart';
 import 'package:vibelive/app/chatscreen/conversation/private_photo_viewer.dart';
 import 'package:vibelive/app/chatscreen/helper/chat_outbox.dart';
 import 'package:vibelive/app/chatscreen/helper/chat_room_controller.dart';
 import 'package:vibelive/app/chatscreen/helper/chat_screen_guard.dart';
+import 'package:vibelive/app/chatscreen/helper/chat_sync.dart';
 import 'package:vibelive/app/chatscreen/list/chat_tab.dart';
 import 'package:vibelive/app/chatscreen/list/chats_view.dart';
 import 'package:vibelive/app/component/pressable.dart';
@@ -95,6 +98,13 @@ class _Backend implements HttpClientAdapter {
   /// and every vanish request seen.
   bool vanishOn = false;
   bool failVanishSwitch = false;
+
+  /// A slow server: the switch is answered (and only then takes effect)
+  /// after this long.
+  int vanishSwitchDelayMs = 0;
+
+  /// The admin lets this person (user 1, the paying side) turn it on.
+  bool vanishCanTurnOn = true;
   final vanishItems = <Map<String, Object?>>[];
   final vanishCalls = <String>[];
 
@@ -169,6 +179,11 @@ class _Backend implements HttpClientAdapter {
         },
       );
     }
+    if (o.method == 'POST' &&
+        o.path == '/api/chats/conversations/c1/vanish' &&
+        vanishSwitchDelayMs > 0) {
+      await Future<void>.delayed(Duration(milliseconds: vanishSwitchDelayMs));
+    }
     final status = _status(o); // before the body counts the failure down
     return _reply(_body(o), status);
   }
@@ -228,7 +243,12 @@ class _Backend implements HttpClientAdapter {
           'imagePrice': 3,
           'balance': 100,
           'freeMessagesLeft': freeLeft,
-          'vanish': {'available': true, 'on': vanishOn, 'byMe': false},
+          'vanish': {
+            'available': true,
+            'on': vanishOn,
+            'byMe': false,
+            'canTurnOn': vanishCanTurnOn,
+          },
         };
       case 'GET /api/chats/conversations/c1/vanish':
         vanishCalls.add('state${q['enter'] == '1' ? ' enter' : ''}');
@@ -364,6 +384,7 @@ class _Backend implements HttpClientAdapter {
     'available': true,
     'on': vanishOn,
     'byMe': byMe,
+    'canTurnOn': vanishCanTurnOn,
     'items': vanishOn ? vanishItems : <Object>[],
   };
 
@@ -482,6 +503,8 @@ void main() {
     ChatOutbox.instance.debugReset();
     ChatScreenGuard.instance.debugReset();
     ChatRoomController.clearCache();
+    // The first-time vanish tip has its own tests.
+    ChatMessageList.vanishTipEnabled = false;
     NotificationTapRouter.debugReset();
     NetworkStatus.instance.value = true;
     ApiClient.dio.httpClientAdapter = backend = _Backend();
@@ -1110,6 +1133,210 @@ void main() {
     expect(find.text('just between us'), findsOneWidget);
     expect(tester.takeException(), isNull);
     await finish(tester);
+  });
+
+  /// A real swipe: finger down on the newest message, up in steps, lifted.
+  Future<void> realSwipeUp(WidgetTester tester) async {
+    final list = find.byKey(const ValueKey('chat-message-list'));
+    final g = await tester.startGesture(tester.getCenter(list));
+    for (var i = 0; i < 16; i++) {
+      await g.moveBy(const Offset(0, -28));
+      await tester.pump(const Duration(milliseconds: 16));
+    }
+    await g.up();
+    // Spring back, the list swap, the server: two seconds of frames.
+    await _pump(tester, 2000);
+  }
+
+  testWidgets('a chat already in vanish mode opens dark at once — no fade, '
+      'no 🤫 fall (nothing looks like it just came on)', (tester) async {
+    backend.vanishOn = true;
+    await openApp(tester, location: AppRoutes.chatWith('7'));
+    expect(
+      tester.widget<ChatVanishScope>(find.byType(ChatVanishScope)).t,
+      1,
+    );
+    // The notice's and the "Turn off" pill's 🤫 only — no falling ones.
+    expect(find.text('🤫'), findsNWidgets(2));
+    await finish(tester);
+  });
+
+  testWidgets('one swipe is one switch: spring back, list swap and a slow '
+      'server never make a second', (tester) async {
+    backend.messages.add(_Backend._message('m1', text: 'hello'));
+    backend.vanishSwitchDelayMs = 700;
+    await openApp(tester, location: AppRoutes.chatWith('7'));
+    await realSwipeUp(tester);
+    expect(
+      backend.vanishCalls.where((c) => c.startsWith('switch')).toList(),
+      ['switch true'],
+    );
+    expect(find.byKey(const ValueKey('chat-vanish-notice')), findsOneWidget);
+    // An immediate second swipe (the same intent, twice) is ignored.
+    await realSwipeUp(tester);
+    expect(
+      backend.vanishCalls.where((c) => c.startsWith('switch')).toList(),
+      ['switch true'],
+    );
+    await finish(tester);
+  });
+
+  testWidgets('no flicker: a read that started before the switch landed '
+      'cannot flip it back', (tester) async {
+    backend.messages.add(_Backend._message('m1', text: 'hello'));
+    backend.vanishSwitchDelayMs = 700;
+    await openApp(tester, location: AppRoutes.chatWith('7'));
+    final controller = tester
+        .widget<ChatMessageList>(find.byType(ChatMessageList))
+        .controller;
+    final seen = <bool>[];
+    void record() => seen.add(controller.vanish.value.on);
+    controller.vanish.addListener(record);
+    addTearDown(() => controller.vanish.removeListener(record));
+
+    await tester.drag(
+      find.byKey(const ValueKey('chat-message-list')),
+      const Offset(0, -420),
+    );
+    // Until the switch request is out (the server takes 700 ms to answer).
+    for (var i = 0;
+        i < 40 &&
+            !backend.paths.contains('POST /api/chats/conversations/c1/vanish');
+        i++) {
+      await tester.pump(const Duration(milliseconds: 20));
+    }
+    expect(backend.paths, contains('POST /api/chats/conversations/c1/vanish'));
+    expect(backend.vanishOn, isFalse, reason: 'still on its way');
+    // While it is on its way, pushes make the chat read again: the server
+    // still says "off" for those reads.
+    ChatSync.instance.onPush(const ChatHint(conversationId: 'c1', event: 'read'));
+    ChatSync.instance.onPush(
+      const ChatHint(conversationId: 'c1', event: 'vanish_on'),
+    );
+    await _pump(tester, 2000);
+    expect(seen.first, isTrue);
+    expect(seen.where((on) => !on), isEmpty, reason: 'it never went back: $seen');
+    expect(controller.vanish.value.on, isTrue);
+    await finish(tester);
+  });
+
+  testWidgets('the ⋮ menu always offers vanish mode — on, then off', (
+    tester,
+  ) async {
+    await openApp(tester, location: AppRoutes.chatWith('7'));
+    await tester.tap(find.byIcon(LucideIcons.ellipsisVertical));
+    await _pump(tester, 500);
+    expect(find.text('Turn on vanish mode'), findsOneWidget);
+    await tester.tap(find.text('Turn on vanish mode'));
+    await _pump(tester, 800);
+    expect(backend.vanishCalls, contains('switch true'));
+    expect(find.byKey(const ValueKey('chat-vanish-notice')), findsOneWidget);
+    // The tip is done for good once they used it.
+    expect(AppPrefs.getString(ChatMessageList.vanishTipKey('1')), 'used');
+
+    await tester.tap(find.byIcon(LucideIcons.ellipsisVertical));
+    await _pump(tester, 500);
+    await tester.tap(find.text('Turn off vanish mode'));
+    await _pump(tester, 800);
+    expect(backend.vanishCalls, contains('switch false'));
+    expect(find.byKey(const ValueKey('chat-vanish-notice')), findsNothing);
+    await finish(tester);
+  });
+
+  testWidgets('only hosts may turn it on: the user gets no swipe, no menu row, '
+      'no tip — but can still turn it off', (tester) async {
+    backend
+      ..messages.add(_Backend._message('m1', text: 'hello'))
+      ..vanishCanTurnOn = false;
+    ChatMessageList.vanishTipEnabled = true;
+    await AppPrefs.remove(ChatMessageList.vanishTipKey('1'));
+    await openApp(tester, location: AppRoutes.chatWith('7'));
+    await _pump(tester, 1800);
+    expect(find.byKey(const ValueKey('chat-vanish-tip')), findsNothing);
+    await swipeUpForVanish(tester);
+    expect(backend.vanishCalls.where((c) => c.startsWith('switch')), isEmpty);
+    await tester.tap(find.byIcon(LucideIcons.ellipsisVertical));
+    await _pump(tester, 500);
+    expect(find.text('Turn on vanish mode'), findsNothing);
+    Navigator.of(tester.element(find.text('Report'))).pop();
+    await _pump(tester, 500);
+
+    // The host turned it on: the user may turn it off.
+    backend.vanishOn = true;
+    ChatSync.instance.onPush(
+      const ChatHint(conversationId: 'c1', event: 'vanish_on'),
+    );
+    await _pump(tester, 900);
+    expect(find.byKey(const ValueKey('chat-vanish-turn-off')), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('chat-vanish-turn-off')));
+    await _pump(tester, 800);
+    expect(backend.vanishCalls, contains('switch false'));
+    ChatMessageList.vanishTipEnabled = false;
+    await finish(tester);
+  });
+
+  group('the first-time vanish tip', () {
+    setUp(() async {
+      ChatMessageList.vanishTipEnabled = true;
+      await AppPrefs.remove(ChatMessageList.vanishTipKey('1'));
+    });
+    tearDown(() => ChatMessageList.vanishTipEnabled = false);
+
+    testWidgets('first two visits: about three seconds of "swipe up", then '
+        'it settles — and not a third time', (tester) async {
+      backend.messages.add(_Backend._message('m1', text: 'hello'));
+      await openApp(tester, location: AppRoutes.chatWith('7'));
+      await _pump(tester, 900); // it waits for the chat to settle
+      await _pump(tester, 900); // risen and held
+      expect(find.byKey(const ValueKey('chat-vanish-pull')), findsOneWidget);
+      expect(find.byKey(const ValueKey('chat-vanish-tip')), findsOneWidget);
+      expect(find.text('NEW'), findsOneWidget);
+      expect(find.text('Swipe up to turn on vanish mode'), findsOneWidget);
+      expect(backend.vanishCalls, isEmpty, reason: 'a tip never switches');
+      await _pump(tester, 2600);
+      expect(find.byKey(const ValueKey('chat-vanish-pull')), findsNothing);
+      expect(AppPrefs.getString(ChatMessageList.vanishTipKey('1')), isNotNull);
+      expect(tester.takeException(), isNull);
+
+      // A second visit plays it once more; a third does not.
+      appRouter.pop();
+      await _pump(tester, 600);
+      unawaited(appRouter.push(AppRoutes.chatWith('7')));
+      await _pump(tester, 1800);
+      expect(find.byKey(const ValueKey('chat-vanish-tip')), findsOneWidget);
+      await _pump(tester, 2600);
+      appRouter.pop();
+      await _pump(tester, 600);
+      unawaited(appRouter.push(AppRoutes.chatWith('7')));
+      await _pump(tester, 2500);
+      expect(find.byKey(const ValueKey('chat-vanish-pull')), findsNothing);
+      expect(AppPrefs.getString(ChatMessageList.vanishTipKey('1')), '2');
+      await finish(tester);
+    });
+
+    testWidgets('a touch ends it at once', (tester) async {
+      backend.messages.add(_Backend._message('m1', text: 'hello'));
+      await openApp(tester, location: AppRoutes.chatWith('7'));
+      await _pump(tester, 1500);
+      expect(find.byKey(const ValueKey('chat-vanish-pull')), findsOneWidget);
+      await tester.drag(
+        find.byKey(const ValueKey('chat-message-list')),
+        const Offset(0, 60), // towards older messages: not a pull
+      );
+      await _pump(tester, 600);
+      expect(find.byKey(const ValueKey('chat-vanish-pull')), findsNothing);
+      expect(backend.vanishCalls, isEmpty);
+      await finish(tester);
+    });
+
+    testWidgets('not in a chat already in vanish mode, nor before a first '
+        'message', (tester) async {
+      backend.vanishOn = true;
+      await openApp(tester, location: AppRoutes.chatWith('7'));
+      await _pump(tester, 2000);
+      expect(find.text('Swipe up to turn off vanish mode'), findsNothing);
+      await finish(tester);
+    });
   });
 
   testWidgets('vanish mode: the keyboard stays up while it switches', (

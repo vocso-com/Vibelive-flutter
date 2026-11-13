@@ -514,6 +514,7 @@ class ChatVanishInfo {
     this.on = false,
     this.since,
     this.byMe = false,
+    this.canTurnOn = false,
   });
 
   static const off = ChatVanishInfo();
@@ -527,6 +528,8 @@ class ChatVanishInfo {
       on: available && _flag(j['on'], false),
       since: _date(j['since']),
       byMe: _flag(j['byMe'], false),
+      // A server from before the admin's "who can turn it on" lets both.
+      canTurnOn: available && _flag(j['canTurnOn'], true),
     );
   }
 
@@ -538,16 +541,24 @@ class ChatVanishInfo {
   /// I turned it on (else the other person did).
   final bool byMe;
 
+  /// I may turn it on here (the admin may allow only hosts, or only users).
+  /// Turning it off is always open to both.
+  final bool canTurnOn;
+
+  /// I may switch it now: off always, on when [canTurnOn].
+  bool get canSwitch => available && (on || canTurnOn);
+
   @override
   bool operator ==(Object other) =>
       other is ChatVanishInfo &&
       other.available == available &&
       other.on == on &&
       other.since == since &&
-      other.byMe == byMe;
+      other.byMe == byMe &&
+      other.canTurnOn == canTurnOn;
 
   @override
-  int get hashCode => Object.hash(available, on, since, byMe);
+  int get hashCode => Object.hash(available, on, since, byMe, canTurnOn);
 }
 
 /// `GET|POST /chats/conversations/:id/vanish`: the mode and its waiting texts.

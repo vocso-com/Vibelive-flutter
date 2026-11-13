@@ -671,6 +671,6 @@ File: `lib/core/analytics/events/chat_events.dart` (ChatEvents). Ids, counts and
 | chat_call_tapped | a call button in the chat header | call_type (`audio` / `video`); then the usual call funnel (`call_button_tapped` source `chat`) |
 | chat_push | a chat push reached the app | event (`chat_message` / `chat_sync`), action (`drawn` / `suppressed_on_screen` / `suppressed_silent` / `suppressed_call`), background |
 | chat_setting_changed | Me → Settings chat switches | setting (`notify` / `accept_chats`), on |
-| chat_vanish_switched | vanish mode turned on/off in a chat | on, source (`swipe` = pulling the conversation up past its newest message / `header` = "Turn off" in the header), result (`done` / `failed`) |
+| chat_vanish_switched | vanish mode turned on/off in a chat | on, source (`swipe` = pulling the conversation up past its newest message / `header` = "Turn off" in the header / `menu` = the ⋮ menu), result (`done` / `failed`) |
 
 Sheets named (screen views): `chat_menu_sheet`, `chat_attach_sheet`, `chat_photo_confirm_sheet`, `chat_unlock_sheet`, `chat_failed_sheet`, `chat_prices_sheet`, `chat_private_price_sheet`, `chat_report_sheet`; viewers `private_photo_viewer`, `chat_photo_viewer`.

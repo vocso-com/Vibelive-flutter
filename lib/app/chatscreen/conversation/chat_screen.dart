@@ -82,6 +82,7 @@ class ChatScreen extends HookWidget {
     final open = useValueListenable(controller.open);
     final vanish = useValueListenable(controller.vanish);
     final switching = useState(false);
+    final lastSwitch = useRef<DateTime?>(null);
     final host = useChatHost(open?.peer);
     // The app's block flow (it refreshes every list the person is in).
     final block = useBlockUser(
@@ -107,28 +108,44 @@ class ChatScreen extends HookWidget {
       initialValue: vanish.on ? 1 : 0,
     );
     final burst = useMemoized(() => ValueNotifier<int>(0));
-    final wasOn = useRef(vanish.on);
+    useEffect(() => burst.dispose, [burst]);
+    // A live switch (mine, theirs, or a refused one going back): the room
+    // fades, and the 🤫 fall when it came on.
     useEffect(() {
-      unawaited(
-        look.animateTo(vanish.on ? 1 : 0, curve: Curves.easeInOutCubic),
-      );
-      // Coming on (by me or by them): the 🤫 fall.
-      if (vanish.on && !wasOn.value) burst.value++;
-      wasOn.value = vanish.on;
+      void onSwitch() {
+        final s = controller.vanishSwitch.value;
+        unawaited(look.animateTo(s.on ? 1 : 0, curve: Curves.easeInOutCubic));
+        if (s.celebrate) burst.value++;
+      }
+
+      controller.vanishSwitch.addListener(onSwitch);
+      return () => controller.vanishSwitch.removeListener(onSwitch);
+    }, [controller]);
+    // Anything else (a chat that was already in vanish mode when it opened):
+    // shown as it is, at once — no fade, no 🤫, nothing that looks like it
+    // just came on.
+    useEffect(() {
+      if (!look.isAnimating) look.value = vanish.on ? 1 : 0;
       return null;
     }, [vanish.on]);
-    useEffect(() => burst.dispose, [burst]);
 
     // Where the gesture exists: vanish mode is on the server, and the chat
     // is one I can write in.
     final canSwitch =
         open != null &&
-        (vanish.available || config.vanishEnabled) &&
+        vanish.canSwitch &&
         config.enabled &&
         !open.peer.deleted &&
         !open.notAvailable;
     void switchVanish(String source) => unawaited(
-      _switchVanish(context, controller, switching, !vanish.on, source),
+      _switchVanish(
+        context,
+        controller,
+        switching,
+        lastSwitch,
+        !vanish.on,
+        source,
+      ),
     );
 
     return ChatSecureZone(
@@ -147,8 +164,18 @@ class ChatScreen extends HookWidget {
         child: _Frame(
           header: ChatHeader(
             open: controller.open,
-            onMenu: () =>
-                unawaited(_menu(context, controller, host, block.mutate)),
+            onMenu: () => unawaited(
+              _menu(
+                context,
+                controller,
+                host,
+                block.mutate,
+                vanish: canSwitch ? vanish.on : null,
+                onVanish: () => open?.conversationId == null
+                    ? CToast.show('chat:vanish.needs_chat')
+                    : switchVanish('menu'),
+              ),
+            ),
             onPeer: host == null
                 ? null
                 : () => showHostProfile(context, host, source: 'chat'),
@@ -248,20 +275,33 @@ class ChatScreen extends HookWidget {
     BuildContext context,
     ChatRoomController controller,
     ValueNotifier<bool> busy,
+    ObjectRef<DateTime?> lastSwitch,
     bool on,
     String source,
   ) async {
-    if (busy.value) return;
+    // One switch at a time, and no swipe right after one finished: a second
+    // swipe within a second is almost always the same intent, twice. A tap on
+    // "Turn off" or the ⋮ menu is deliberate and always goes.
+    final last = lastSwitch.value;
+    if (busy.value ||
+        (source == 'swipe' &&
+            last != null &&
+            DateTime.now().difference(last) < const Duration(seconds: 1))) {
+      return;
+    }
     busy.value = true;
     try {
       await controller.setVanish(on);
       // No toast: the banner appearing / going says it, and a toast would sit
       // over the composer right when they start typing.
       ChatEvents.vanishSwitched(on: on, source: source, result: 'done');
+      // They know vanish mode now: the first-time tip never shows again.
+      ChatMessageList.markVanishTipUsed(controller.me);
     } on ApiException catch (e) {
       ChatEvents.vanishSwitched(on: on, source: source, result: 'failed');
       CToast.error(e);
     } finally {
+      lastSwitch.value = DateTime.now();
       if (context.mounted) busy.value = false;
     }
   }
@@ -323,14 +363,22 @@ class ChatScreen extends HookWidget {
     BuildContext context,
     ChatRoomController controller,
     HostCard? host,
-    Future<void> Function(BlockUserInput input) block,
-  ) async {
+    Future<void> Function(BlockUserInput input) block, {
+    bool? vanish,
+    VoidCallback? onVanish,
+  }) async {
     final open = controller.open.value;
     if (open == null) return;
-    final action = await showChatMenu(context, prices: open.paying);
+    final action = await showChatMenu(
+      context,
+      prices: open.paying,
+      vanish: vanish,
+    );
     ChatEvents.menuAction(action?.name ?? 'dismissed');
     if (action == null || !context.mounted) return;
     switch (action) {
+      case ChatMenuAction.vanish:
+        onVanish?.call();
       case ChatMenuAction.prices:
         final add = await showChatPrices(
           context,

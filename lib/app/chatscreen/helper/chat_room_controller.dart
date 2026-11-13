@@ -43,6 +43,20 @@ class ChatReceiptMarks {
   int get hashCode => Object.hash(delivered, read);
 }
 
+/// Vanish mode switched while the chat was open (mine, theirs, or a refused
+/// switch going back). The screen animates only these; a state that arrives
+/// with the first read is simply shown.
+@immutable
+class VanishSwitch {
+  const VanishSwitch(this.seq, {required this.on, required this.celebrate});
+
+  final int seq;
+  final bool on;
+
+  /// It came on (not a refusal undone): the 🤫 fall plays.
+  final bool celebrate;
+}
+
 /// The last state of one open conversation, kept in memory so reopening it
 /// paints the messages at once instead of a blank skeleton while the newest
 /// page loads again (docs/chat_api.md). Per app session only.
@@ -116,6 +130,11 @@ class ChatRoomController {
   /// My free messages left (paying side); null until the server says.
   final freeLeft = ValueNotifier<int?>(null);
 
+  /// Every live switch of vanish mode (see [VanishSwitch]).
+  final vanishSwitch = ValueNotifier<VanishSwitch>(
+    const VanishSwitch(0, on: false, celebrate: false),
+  );
+
   final _refusals = StreamController<OutboxRefused>.broadcast();
 
   /// My message was refused (402 low balance, or another refusal): the
@@ -131,6 +150,17 @@ class ChatRoomController {
   /// only, never cached across screens.
   List<ChatMessage> _vanishItems = const [];
   bool _vanishEntered = false;
+
+  /// After the first read, a change of vanish mode is a live switch.
+  bool _vanishLoaded = false;
+
+  /// Bumped when I switch vanish mode. A read that started before the switch
+  /// (or while it is on its way) carries the old state: its vanish part is
+  /// dropped, or the screen would flip back and forth (the flicker).
+  int _vanishEpoch = 0;
+  bool _switchingVanish = false;
+
+  bool _fresh(int epoch) => !_switchingVanish && epoch == _vanishEpoch;
   bool _visible = false;
   bool _disposed = false;
   bool _spent = false;
@@ -209,9 +239,10 @@ class ChatRoomController {
       // message went), or a full read whose who/prices are still only the
       // ones seeded from the cache: read them fresh.
       if (info == null || info.conversationId == null || (full && !_openFresh)) {
+        final epoch = _vanishEpoch;
         info = await ChatApi.openWith(peer);
         if (_disposed) return;
-        _setOpen(info);
+        _setOpen(info, epoch: epoch);
         _openFresh = true;
       }
       final id = info.conversationId;
@@ -231,6 +262,7 @@ class ChatRoomController {
       }
       if (id != null && vanish.value.on) await _readVanish(id);
       if (_disposed) return;
+      _vanishLoaded = true;
       error.value = null;
       _recompose();
       _afterRead();
@@ -246,8 +278,9 @@ class ChatRoomController {
   /// host turned chats off, a block, chat switched off).
   Future<void> refreshOpen() async {
     try {
+      final epoch = _vanishEpoch;
       final info = await ChatApi.openWith(peer);
-      if (!_disposed) _setOpen(info);
+      if (!_disposed) _setOpen(info, epoch: epoch);
     } on ApiException catch (e) {
       Log.d(_tag, 'reopen failed: $e');
     }
@@ -260,9 +293,10 @@ class ChatRoomController {
   Future<void> _readVanish(String id) async {
     final enter = !_vanishEntered;
     _vanishEntered = true;
+    final epoch = _vanishEpoch;
     try {
       final state = await ChatApi.fetchVanish(id, enter: enter);
-      if (_disposed) return;
+      if (_disposed || !_fresh(epoch)) return;
       _applyVanish(state);
     } on ApiException catch (e) {
       Log.d(_tag, 'vanish read failed: $e');
@@ -275,7 +309,8 @@ class ChatRoomController {
     if (info != null && info.vanish != state.info) {
       open.value = info.copyWith(vanish: state.info);
     }
-    _setVanish(state.info);
+    // Read after the first load: a change here is the other person's switch.
+    _setVanish(state.info, live: _vanishLoaded, celebrate: _vanishLoaded);
     _recompose();
   }
 
@@ -300,6 +335,8 @@ class ChatRoomController {
     }
     final before = vanish.value;
     final beforeItems = _vanishItems;
+    _vanishEpoch++;
+    _switchingVanish = true;
     _showVanish(
       ChatVanishInfo(
         available: true,
@@ -307,25 +344,33 @@ class ChatRoomController {
         since: on ? DateTime.now() : null,
         byMe: true,
       ),
+      celebrate: true,
     );
     try {
       final state = await ApiClient.guard(() => ChatApi.setVanish(id, on: on));
       if (_disposed) return;
       _vanishEntered = true;
-      _applyVanish(state);
+      _switchingVanish = false;
+      // The server's answer is the truth; it matches what is shown, so this
+      // only fills in its time and texts (no second animation).
+      _vanishItems = state.items.reversed.toList();
+      _showVanish(state.info, celebrate: false);
     } on ApiException {
       if (_disposed) rethrow;
+      _switchingVanish = false;
       _vanishItems = beforeItems;
-      _showVanish(before);
+      _showVanish(before, celebrate: false);
       rethrow;
+    } finally {
+      _switchingVanish = false;
     }
   }
 
-  /// Shows [info] now, in the switch and in [open].
-  void _showVanish(ChatVanishInfo info) {
+  /// Shows [info] now, in the switch and in [open] (a live switch).
+  void _showVanish(ChatVanishInfo info, {required bool celebrate}) {
     final o = open.value;
     if (o != null && o.vanish != info) open.value = o.copyWith(vanish: info);
-    _setVanish(info);
+    _setVanish(info, live: true, celebrate: celebrate);
     _recompose();
   }
 
@@ -369,20 +414,38 @@ class ChatRoomController {
 
   static const _catchUpPages = 5;
 
-  void _setOpen(ChatOpen info) {
-    open.value = info;
+  /// [epoch]: the [_vanishEpoch] when the read started; a stale read keeps
+  /// the vanish state already shown.
+  void _setOpen(ChatOpen info, {int? epoch}) {
+    final staleVanish = epoch != null && !_fresh(epoch);
+    open.value = staleVanish ? info.copyWith(vanish: vanish.value) : info;
     if (info.balance != null) balance.value = info.balance;
     if (info.earnings != null) earnings.value = info.earnings;
     if (info.freeMessagesLeft != null) freeLeft.value = info.freeMessagesLeft;
-    _setVanish(info.vanish);
+    if (!staleVanish) {
+      // After the first load, a change here is the other person's switch.
+      _setVanish(info.vanish, live: _vanishLoaded, celebrate: _vanishLoaded);
+    }
     if (_visible) _announce();
   }
 
-  void _setVanish(ChatVanishInfo info) {
+  void _setVanish(
+    ChatVanishInfo info, {
+    bool live = false,
+    bool celebrate = false,
+  }) {
     final wasOn = vanish.value.on;
     vanish.value = info;
     if (!info.on && _vanishItems.isNotEmpty) _vanishItems = const [];
-    if (wasOn != info.on) _recompose();
+    if (wasOn == info.on) return;
+    _recompose();
+    if (live) {
+      vanishSwitch.value = VanishSwitch(
+        vanishSwitch.value.seq + 1,
+        on: info.on,
+        celebrate: celebrate && info.on,
+      );
+    }
   }
 
   void _apply(ChatMessagesPage page, {required bool first}) {
@@ -632,5 +695,6 @@ class ChatRoomController {
     earnings.dispose();
     vanish.dispose();
     freeLeft.dispose();
+    vanishSwitch.dispose();
   }
 }

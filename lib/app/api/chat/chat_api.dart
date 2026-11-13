@@ -40,6 +40,9 @@ abstract final class ChatCodes {
   /// Too many unread vanish texts waiting in this chat.
   static const vanishFull = 'CHAT_VANISH_FULL';
 
+  /// The admin lets only the other side turn vanish mode on.
+  static const vanishNotAllowed = 'CHAT_VANISH_NOT_ALLOWED';
+
   /// Codes with their own copy in `chat:errors.*`.
   static const _known = {
     invalidTarget,
@@ -62,6 +65,7 @@ abstract final class ChatCodes {
     vanishOff,
     vanishDisabled,
     vanishFull,
+    vanishNotAllowed,
   };
 
   /// `chat:errors.<code>` for a known code, else null.

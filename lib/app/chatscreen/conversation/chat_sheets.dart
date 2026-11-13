@@ -19,12 +19,14 @@ import '../helper/chat_pricing.dart';
 // The chat's small sheets. Each returns what was picked; the screen acts
 // once it has closed.
 
-enum ChatMenuAction { prices, report, block }
+enum ChatMenuAction { prices, vanish, report, block }
 
-/// ⋮: Prices (paying side), Report, Block.
+/// ⋮: Prices (paying side), vanish mode, Report, Block. [vanish]: null when
+/// I can't switch it here, else whether it is on (the row turns it off).
 Future<ChatMenuAction?> showChatMenu(
   BuildContext context, {
   required bool prices,
+  bool? vanish,
 }) => showProfileSheet<ChatMenuAction>(context, (sheet) {
   final redBg = StatusColors.dangerRed.withValues(alpha: 0.12);
   final accent = sheet.colors.accent;
@@ -42,6 +44,16 @@ Future<ChatMenuAction?> showChatMenu(
               tint: accent,
               label: 'chat:menu.prices',
               onTap: () => pick(ChatMenuAction.prices),
+            ),
+          // Always here, so vanish mode can be found without knowing the swipe.
+          if (vanish != null)
+            SheetActionRow(
+              key: const ValueKey('chat-menu-vanish'),
+              icon: LucideIcons.flame,
+              tint: const Color(0xFF8B5CF6),
+              iconBg: const Color(0xFF8B5CF6).withValues(alpha: 0.14),
+              label: vanish ? 'chat:menu.vanish_off' : 'chat:menu.vanish_on',
+              onTap: () => pick(ChatMenuAction.vanish),
             ),
           SheetActionRow(
             icon: LucideIcons.flag,

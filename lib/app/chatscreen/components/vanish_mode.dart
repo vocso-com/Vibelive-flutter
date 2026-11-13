@@ -26,13 +26,32 @@ const double kVanishPullThreshold = 72;
 
 /// Reads pulls past the newest message of a reversed list and reports how
 /// far ([pull]) and when one was released far enough ([onRelease]).
+///
+/// One swipe is one switch, never two: a pull only counts when the drag
+/// STARTED at the newest message (a fast scroll down that overshoots is not
+/// a pull), it fires once, on the finger leaving, and nothing fires again
+/// for [cooldown] — the list springing back, being swapped for the vanish
+/// one, or the keyboard closing cannot count as another pull.
 class VanishPull {
-  VanishPull({required this.onRelease});
+  VanishPull({
+    required this.onRelease,
+    this.cooldown = const Duration(milliseconds: 1500),
+    DateTime Function()? now,
+  }) : _now = now ?? DateTime.now;
 
   final VoidCallback onRelease;
+  final Duration cooldown;
+  final DateTime Function() _now;
   final pull = ValueNotifier<double>(0);
   bool _dragging = false;
+  bool _fromEdge = false;
   bool _armed = false;
+  DateTime? _quietUntil;
+
+  bool get _quiet {
+    final until = _quietUntil;
+    return until != null && _now().isBefore(until);
+  }
 
   /// From the list's [NotificationListener]. Never consumes.
   bool onNotification(ScrollNotification n) {
@@ -41,12 +60,16 @@ class VanishPull {
     // Reversed list: the newest message is at the minimum extent; a user
     // pulling up past it drives the offset below it (rubber band).
     final past = math.max(0.0, m.minScrollExtent - m.pixels);
-    if (n is ScrollStartNotification && n.dragDetails != null) {
-      _dragging = true;
+    if (n is ScrollStartNotification) {
+      if (n.dragDetails != null) {
+        _dragging = true;
+        _armed = false;
+        _fromEdge = m.pixels <= m.minScrollExtent + 8;
+      }
     } else if (n is ScrollUpdateNotification) {
       if (n.dragDetails != null) {
         _dragging = true;
-        _set(past);
+        if (_fromEdge) _set(past);
       } else if (_dragging) {
         _release();
       } else {
@@ -56,7 +79,9 @@ class VanishPull {
     } else if (n is OverscrollNotification && n.dragDetails != null) {
       // A clamping list (no rubber band): add up what it refused.
       _dragging = true;
-      if (n.overscroll < 0) _set(pull.value - n.overscroll * 0.5);
+      if (_fromEdge && n.overscroll < 0) {
+        _set(pull.value - n.overscroll * 0.5);
+      }
     } else if (n is ScrollEndNotification) {
       if (_dragging) _release();
       pull.value = 0;
@@ -69,6 +94,10 @@ class VanishPull {
   }
 
   void _set(double value) {
+    if (_quiet) {
+      pull.value = 0;
+      return;
+    }
     pull.value = value;
     final armed = value >= kVanishPullThreshold;
     if (armed && !_armed) HapticFeedback.selectionClick();
@@ -77,12 +106,13 @@ class VanishPull {
 
   void _release() {
     _dragging = false;
-    final fire = _armed;
+    _fromEdge = false;
+    final fire = _armed && !_quiet;
     _armed = false;
-    if (fire) {
-      HapticFeedback.mediumImpact();
-      onRelease();
-    }
+    if (!fire) return;
+    _quietUntil = _now().add(cooldown);
+    HapticFeedback.mediumImpact();
+    onRelease();
   }
 
   void dispose() => pull.dispose();
@@ -91,12 +121,20 @@ class VanishPull {
 /// The ring under the newest message while it is being pulled. Positioned by
 /// the list, over the content (no height of its own).
 class VanishPullIndicator extends StatelessWidget {
-  const VanishPullIndicator({super.key, required this.pull, required this.on});
+  const VanishPullIndicator({
+    super.key,
+    required this.pull,
+    required this.on,
+    this.tip = false,
+  });
 
   final ValueListenable<double> pull;
 
   /// Vanish mode is on now (the pull turns it off).
   final bool on;
+
+  /// Played as the first-time tip: the label sits in a pill with "NEW".
+  final bool tip;
 
   @override
   Widget build(BuildContext context) {
@@ -145,22 +183,79 @@ class VanishPullIndicator extends StatelessWidget {
                   ),
                   SizedBox(height: 6.ms),
                   Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 24.ms),
-                    child: CText(
-                      label,
-                      size: 12,
-                      weight: FontWeight.w700,
-                      color: armed ? p.text : p.muted,
-                      align: TextAlign.center,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
+                    padding: EdgeInsets.symmetric(horizontal: 20.ms),
+                    child: tip
+                        ? _TipPill(label: label)
+                        : CText(
+                            label,
+                            size: 12,
+                            weight: FontWeight.w700,
+                            color: armed ? p.text : p.muted,
+                            align: TextAlign.center,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
                   ),
                 ],
               ),
             ),
           );
         },
+      ),
+    );
+  }
+}
+
+/// The first-time tip's label: "NEW" and the hint, in a soft pill.
+class _TipPill extends StatelessWidget {
+  const _TipPill({required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = ChatPalette.of(context);
+    const violet = Color(0xFF8B5CF6);
+    return Container(
+      key: const ValueKey('chat-vanish-tip'),
+      padding: EdgeInsetsDirectional.fromSTEB(5.ms, 4.ms, 11.ms, 4.ms),
+      decoration: BoxDecoration(
+        color: p.bar,
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: violet.withValues(alpha: 0.45)),
+        boxShadow: [
+          BoxShadow(color: violet.withValues(alpha: 0.18), blurRadius: 12),
+        ],
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            padding: EdgeInsets.symmetric(horizontal: 7.ms, vertical: 2.ms),
+            decoration: BoxDecoration(
+              color: violet,
+              borderRadius: BorderRadius.circular(999),
+            ),
+            child: const CText(
+              'chat:vanish.new',
+              size: 10,
+              weight: FontWeight.w900,
+              color: Color(0xFFFFFFFF),
+              maxLines: 1,
+            ),
+          ),
+          SizedBox(width: 7.ms),
+          Flexible(
+            child: CText(
+              label,
+              size: 12,
+              weight: FontWeight.w700,
+              color: p.text,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
       ),
     );
   }
