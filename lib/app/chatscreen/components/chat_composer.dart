@@ -48,7 +48,9 @@ class ChatComposer extends StatefulWidget {
 class _ChatComposerState extends State<ChatComposer> {
   final _focus = FocusNode();
   late final _hasText = ValueNotifier(widget.controller.text.trim().isNotEmpty);
-  late final _voice = VoiceRecording(
+  late VoiceRecording _voice = _recorder();
+
+  VoiceRecording _recorder() => VoiceRecording(
     maxSeconds: widget.voiceMaxSeconds,
     onDone: (path, seconds) => widget.onVoice(path, seconds),
   );
@@ -65,6 +67,14 @@ class _ChatComposerState extends State<ChatComposer> {
     if (old.controller != widget.controller) {
       old.controller.removeListener(_onText);
       widget.controller.addListener(_onText);
+    }
+    // A new limit (a host's own, once the chat is read): a new recorder, but
+    // never in the middle of a recording. The field, its text and the
+    // keyboard stay as they are.
+    if (old.voiceMaxSeconds != widget.voiceMaxSeconds &&
+        _voice.since.value == null) {
+      _voice.dispose();
+      _voice = _recorder();
     }
   }
 
@@ -110,15 +120,26 @@ class _ChatComposerState extends State<ChatComposer> {
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
                     if (since == null) ...[
-                      if (!widget.textOnly) ...[
-                        _RoundButton(
-                          icon: LucideIcons.imagePlus,
-                          label: 'chat:composer.attach',
-                          onTap: widget.onAttach,
-                          filled: false,
-                        ),
-                        SizedBox(width: 6.ms),
-                      ],
+                      // The photo button folds away in vanish mode (text
+                      // only) instead of jumping out.
+                      AnimatedSize(
+                        duration: const Duration(milliseconds: 220),
+                        curve: Curves.easeOutCubic,
+                        alignment: AlignmentDirectional.centerStart,
+                        child: widget.textOnly
+                            ? const SizedBox(height: 0)
+                            : Padding(
+                                padding: EdgeInsetsDirectional.only(
+                                  end: 6.ms,
+                                ),
+                                child: _RoundButton(
+                                  icon: LucideIcons.imagePlus,
+                                  label: 'chat:composer.attach',
+                                  onTap: widget.onAttach,
+                                  filled: false,
+                                ),
+                              ),
+                      ),
                       Expanded(child: field!),
                     ] else
                       Expanded(child: _RecordingStrip(voice: _voice)),
@@ -253,11 +274,16 @@ class _SendOrMic extends StatelessWidget {
       valueListenable: hasText,
       builder: (context, has, _) {
         if (has || textOnly) {
-          return _RoundButton(
-            key: const ValueKey('chat-send'),
-            icon: LucideIcons.send,
-            label: 'chat:composer.send',
-            onTap: onSend,
+          // Text only (vanish mode): send stays, dimmed until there is text.
+          return AnimatedOpacity(
+            opacity: has ? 1 : 0.4,
+            duration: const Duration(milliseconds: 150),
+            child: _RoundButton(
+              key: const ValueKey('chat-send'),
+              icon: LucideIcons.send,
+              label: 'chat:composer.send',
+              onTap: onSend,
+            ),
           );
         }
         return Semantics(

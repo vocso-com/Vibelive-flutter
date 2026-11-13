@@ -18,6 +18,7 @@ import 'package:vibelive/app/callscreen/helper/push/chat_push.dart';
 import 'package:vibelive/app/callscreen/helper/push/push_envelope.dart';
 import 'package:vibelive/app/callscreen/helper/call_permissions.dart';
 import 'package:vibelive/app/callscreen/helper/push/notification_tap_router.dart';
+import 'package:vibelive/app/chatscreen/components/chat_composer.dart';
 import 'package:vibelive/app/chatscreen/components/message_bubble.dart';
 import 'package:vibelive/app/chatscreen/conversation/chat_screen.dart';
 import 'package:vibelive/app/chatscreen/conversation/private_photo_viewer.dart';
@@ -93,11 +94,15 @@ class _Backend implements HttpClientAdapter {
   /// Vanish mode (2026-11-12): the server's switch, its texts (oldest first)
   /// and every vanish request seen.
   bool vanishOn = false;
+  bool failVanishSwitch = false;
   final vanishItems = <Map<String, Object?>>[];
   final vanishCalls = <String>[];
 
   /// `freeMessagesLeft` in `/chats/with/7` (null: an older backend).
   int? freeLeft;
+
+  /// The other person has a very long name.
+  bool longName = false;
 
   /// The cash wallet (`GET /api/wallets`): the call's balance gate.
   double wallet = 100;
@@ -169,6 +174,11 @@ class _Backend implements HttpClientAdapter {
   }
 
   int _status(RequestOptions o) {
+    if (o.method == 'POST' &&
+        o.path == '/api/chats/conversations/c1/vanish' &&
+        failVanishSwitch) {
+      return 500;
+    }
     if (o.method == 'POST' && o.path == '/api/chats/messages') {
       final data = o.data;
       if (data is Map && data['vanish'] == true && !vanishOn) return 409;
@@ -209,7 +219,9 @@ class _Backend implements HttpClientAdapter {
         return {
           'conversationId': 'c1',
           'mySide': 'payer',
-          'peer': _peer,
+          'peer': longName
+              ? {..._peer, 'name': 'Priyadarshini Venkataraman Subramanian'}
+              : _peer,
           'chatEnabled': hostTakesChats && !notAvailable,
           'reason': notAvailable ? 'CHAT_NOT_AVAILABLE' : null,
           'pricePerMessage': 2,
@@ -222,6 +234,11 @@ class _Backend implements HttpClientAdapter {
         vanishCalls.add('state${q['enter'] == '1' ? ' enter' : ''}');
         return _vanishState();
       case 'POST /api/chats/conversations/c1/vanish':
+        if (failVanishSwitch) {
+          return {
+            'error': {'status': 500, 'message': 'Internal Server Error'},
+          };
+        }
         final on = (o.data as Map)['on'] == true;
         vanishCalls.add('switch $on');
         vanishOn = on;
@@ -1045,31 +1062,41 @@ void main() {
 
   // ── 2026-11-12: vanish mode, free messages, the host's voice limit ─────────
 
+  /// Instagram's gesture: pull the conversation up past its newest message
+  /// and let go.
   Future<void> swipeUpForVanish(WidgetTester tester) async {
     await tester.drag(
-      find.byKey(const ValueKey('chat-vanish-handle')),
-      const Offset(0, -140),
+      find.byKey(const ValueKey('chat-message-list')),
+      const Offset(0, -420),
     );
-    await _pump(tester, 600);
+    await _pump(tester, 900);
   }
 
-  testWidgets('vanish mode: swipe up turns it on — banner, no calls, text '
-      'only, and texts go as vanish', (tester) async {
+  testWidgets('vanish mode: pulling the chat up turns it on at once — the '
+      'room goes dark, no calls, text only, texts go as vanish', (tester) async {
     await openApp(tester, location: AppRoutes.chatWith('7'));
     expect(find.byKey(const ValueKey('chat-call-audio')), findsOneWidget);
     expect(find.byIcon(LucideIcons.imagePlus), findsOneWidget);
 
+    // A short pull does nothing.
+    await tester.drag(
+      find.byKey(const ValueKey('chat-message-list')),
+      const Offset(0, -40),
+    );
+    await _pump(tester, 600);
+    expect(backend.vanishCalls, isEmpty);
+
     await swipeUpForVanish(tester);
     expect(backend.vanishCalls, contains('switch true'));
-    expect(find.byKey(const ValueKey('chat-vanish-banner')), findsOneWidget);
-    expect(find.text('Vanish mode is on'), findsOneWidget, reason: 'banner only, no toast over the composer');
-    // No calls and no attachments in vanish mode.
+    expect(find.byKey(const ValueKey('chat-vanish-notice')), findsOneWidget);
+    expect(find.text('You turned on vanish mode'), findsOneWidget);
+    // "Turn off" sits where the calls were; no attachments, no mic.
+    expect(find.byKey(const ValueKey('chat-vanish-turn-off')), findsOneWidget);
     expect(find.byKey(const ValueKey('chat-call-audio')), findsNothing);
     expect(find.byKey(const ValueKey('chat-call-video')), findsNothing);
-    expect(find.byIcon(LucideIcons.imagePlus), findsNothing);
     expect(find.byKey(const ValueKey('chat-mic')), findsNothing);
-    // Nothing waits yet.
-    expect(find.text("You're in vanish mode"), findsOneWidget);
+    await _pump(tester, 400); // the attach button folds away
+    expect(find.byIcon(LucideIcons.imagePlus), findsNothing);
 
     await tester.enterText(
       find.byKey(const ValueKey('chat-composer-field')),
@@ -1081,6 +1108,75 @@ void main() {
     expect(backend.sent.last['vanish'], true);
     expect(backend.sent.last['text'], 'just between us');
     expect(find.text('just between us'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    await finish(tester);
+  });
+
+  testWidgets('vanish mode: the keyboard stays up while it switches', (
+    tester,
+  ) async {
+    await openApp(tester, location: AppRoutes.chatWith('7'));
+    await tester.tap(find.byKey(const ValueKey('chat-composer-field')));
+    await tester.enterText(
+      find.byKey(const ValueKey('chat-composer-field')),
+      'half typed',
+    );
+    await tester.pump();
+    final before = tester.state(find.byType(ChatComposer));
+    await swipeUpForVanish(tester);
+    // The same composer (not rebuilt), with its text.
+    expect(tester.state(find.byType(ChatComposer)), same(before));
+    final field = tester.widget<TextField>(
+      find.byKey(const ValueKey('chat-composer-field')),
+    );
+    expect(field.controller!.text, 'half typed');
+    await finish(tester);
+  });
+
+  testWidgets('vanish mode: a refused switch goes back to normal', (
+    tester,
+  ) async {
+    await openApp(tester, location: AppRoutes.chatWith('7'));
+    backend.failVanishSwitch = true;
+    await swipeUpForVanish(tester);
+    expect(find.byKey(const ValueKey('chat-vanish-notice')), findsNothing);
+    expect(find.byKey(const ValueKey('chat-call-audio')), findsOneWidget);
+    await finish(tester);
+  });
+
+  testWidgets('vanish mode on a small phone, large text, Urdu, keyboard up: '
+      'nothing overflows', (tester) async {
+    backend.vanishOn = true;
+    for (var i = 0; i < 6; i++) {
+      backend.vanishItems.add({
+        ..._Backend._message('v$i', text: 'B' * 120),
+        'vanish': true,
+      });
+    }
+    tester.platformDispatcher.textScaleFactorTestValue = 2;
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+    tester.view
+      ..physicalSize = const Size(320, 568) * 3
+      ..devicePixelRatio = 3
+      ..viewInsets = const FakeViewPadding(bottom: 260 * 3);
+    addTearDown(tester.view.reset);
+    Scale.update(const Size(320, 568));
+    await tester.pumpWidget(
+      VibeLiveApp(
+        themeController: ThemeController(ThemeMode.light),
+        localeController: LocaleController(const Locale('ur')),
+      ),
+    );
+    appRouter.go(AppRoutes.home);
+    await _pump(tester, 600);
+    unawaited(appRouter.push(AppRoutes.chatWith('7')));
+    await _pump(tester, 900);
+    expect(find.byKey(const ValueKey('chat-vanish-turn-off')), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    // And an empty vanish chat on the same phone.
+    await tester.tap(find.byKey(const ValueKey('chat-vanish-turn-off')));
+    await _pump(tester, 900);
+    expect(tester.takeException(), isNull);
     await finish(tester);
   });
 
@@ -1102,7 +1198,7 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('chat-vanish-turn-off')));
     await _pump(tester, 600);
     expect(backend.vanishCalls, contains('switch false'));
-    expect(find.byKey(const ValueKey('chat-vanish-banner')), findsNothing);
+    expect(find.byKey(const ValueKey('chat-vanish-notice')), findsNothing);
     expect(find.text('secret one'), findsNothing);
     expect(find.text('normal hello'), findsOneWidget);
     expect(find.byKey(const ValueKey('chat-call-audio')), findsOneWidget);
@@ -1143,7 +1239,7 @@ void main() {
       find.byKey(const ValueKey('chat-composer-field')),
     );
     expect(field.controller!.text, 'meant to vanish');
-    expect(find.byKey(const ValueKey('chat-vanish-banner')), findsNothing);
+    expect(find.byKey(const ValueKey('chat-vanish-turn-off')), findsNothing);
     await finish(tester);
   });
 
@@ -1155,5 +1251,64 @@ void main() {
     expect(find.text('2 free messages left'), findsOneWidget);
     expect(find.textContaining('₹'), findsNothing);
     await finish(tester);
+  });
+
+  // Every language, large text, a small phone with the keyboard up, a long
+  // name and long messages, in and out of vanish mode: nothing may overflow.
+  group('no overflow anywhere in a chat', () {
+    for (final lang in const ['en', 'hi', 'bn', 'mr', 'ta', 'gu', 'ur', 'kn', 'or']) {
+      for (final on in const [false, true]) {
+        testWidgets('$lang, vanish ${on ? 'on' : 'off'}', (tester) async {
+          backend
+            ..vanishOn = on
+            ..freeLeft = on ? null : 3
+            ..longName = true;
+          backend.messages.add(_Backend._message('m1', text: 'C' * 400));
+          if (on) {
+            backend.vanishItems.add({
+              ..._Backend._message('v1', text: 'D' * 400),
+              'vanish': true,
+            });
+          }
+          tester.platformDispatcher.textScaleFactorTestValue = 1.6;
+          addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+          tester.view
+            ..physicalSize = const Size(320, 600) * 3
+            ..devicePixelRatio = 3
+            ..viewInsets = const FakeViewPadding(bottom: 250 * 3);
+          addTearDown(tester.view.reset);
+          Scale.update(const Size(320, 600));
+          await tester.pumpWidget(
+            VibeLiveApp(
+              themeController: ThemeController(ThemeMode.dark),
+              localeController: LocaleController(Locale(lang)),
+            ),
+          );
+          // The language's files load from disk (real time, not the test
+          // clock), as in me_view_test.
+          await tester.runAsync(
+            () => Future<void>.delayed(const Duration(milliseconds: 300)),
+          );
+          appRouter.go(AppRoutes.home);
+          await _pump(tester, 500);
+          unawaited(appRouter.push(AppRoutes.chatWith('7')));
+          await _pump(tester, 900);
+          expect(find.byType(ChatScreen), findsOneWidget, reason: lang);
+          expect(tester.takeException(), isNull, reason: lang);
+          // The pull ring and its label, half way and armed.
+          final list = find.byKey(const ValueKey('chat-message-list'));
+          final g = await tester.startGesture(tester.getCenter(list));
+          for (var i = 0; i < 12; i++) {
+            await g.moveBy(const Offset(0, -30));
+            await tester.pump(const Duration(milliseconds: 16));
+            expect(tester.takeException(), isNull);
+          }
+          await g.cancel();
+          await _pump(tester, 600);
+          expect(tester.takeException(), isNull);
+          await finish(tester);
+        });
+      }
+    }
   });
 }

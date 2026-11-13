@@ -4,8 +4,25 @@ import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/vibe_colors.dart';
 import '../../../core/utils/scale.dart';
 
+/// How far the chat is into vanish mode's look: 0 normal, 1 vanish. Animated
+/// by the chat screen, so every part of the chat (header, bubbles, composer)
+/// fades into the dark room together, like Instagram's.
+class ChatVanishScope extends InheritedWidget {
+  const ChatVanishScope({super.key, required this.t, required super.child});
+
+  final double t;
+
+  static double of(BuildContext context) =>
+      context.dependOnInheritedWidgetOfExactType<ChatVanishScope>()?.t ?? 0;
+
+  @override
+  bool updateShouldNotify(ChatVanishScope old) => old.t != t;
+}
+
 /// The chat's colours and sizes, read once per build (`ChatPalette.of`).
 /// Mine: the accent (lime in dark, purple in light); theirs: a quiet card.
+/// Inside a [ChatVanishScope] they blend into vanish mode's own palette —
+/// the same in light and dark theme, so vanish mode always looks different.
 @immutable
 class ChatPalette {
   const ChatPalette._({
@@ -32,6 +49,63 @@ class ChatPalette {
   });
 
   factory ChatPalette.of(BuildContext context) {
+    final base = ChatPalette._base(context);
+    final t = ChatVanishScope.of(context);
+    if (t <= 0) return base;
+    return t >= 1 ? vanish : lerp(base, vanish, t);
+  }
+
+  /// Vanish mode: a near-black room, violet for my messages.
+  static const vanish = ChatPalette._(
+    dark: true,
+    screen: Color(0xFF000000),
+    mine: Color(0xFF7C3AED),
+    onMine: Color(0xFFFFFFFF),
+    mineMeta: Color(0xA6FFFFFF),
+    theirs: Color(0xFF1C1B22),
+    onTheirs: Color(0xFFF2F2F7),
+    theirsMeta: Color(0x73FFFFFF),
+    theirsBorder: Color(0x0FFFFFFF),
+    read: Color(0xFFC4B5FD),
+    failed: StatusColors.dangerRed,
+    chip: Color(0x14FFFFFF),
+    onChip: Color(0xB3FFFFFF),
+    bar: Color(0xFF0B0A10),
+    barBorder: Color(0x14FFFFFF),
+    field: Color(0x17FFFFFF),
+    muted: Color(0x80FFFFFF),
+    accent: Color(0xFF8B5CF6),
+    onAccent: Color(0xFFFFFFFF),
+    text: Color(0xFFF2F2F7),
+  );
+
+  static ChatPalette lerp(ChatPalette a, ChatPalette b, double t) {
+    Color c(Color x, Color y) => Color.lerp(x, y, t)!;
+    return ChatPalette._(
+      dark: t < 0.5 ? a.dark : b.dark,
+      screen: c(a.screen, b.screen),
+      mine: c(a.mine, b.mine),
+      onMine: c(a.onMine, b.onMine),
+      mineMeta: c(a.mineMeta, b.mineMeta),
+      theirs: c(a.theirs, b.theirs),
+      onTheirs: c(a.onTheirs, b.onTheirs),
+      theirsMeta: c(a.theirsMeta, b.theirsMeta),
+      theirsBorder: c(a.theirsBorder, b.theirsBorder),
+      read: c(a.read, b.read),
+      failed: c(a.failed, b.failed),
+      chip: c(a.chip, b.chip),
+      onChip: c(a.onChip, b.onChip),
+      bar: c(a.bar, b.bar),
+      barBorder: c(a.barBorder, b.barBorder),
+      field: c(a.field, b.field),
+      muted: c(a.muted, b.muted),
+      accent: c(a.accent, b.accent),
+      onAccent: c(a.onAccent, b.onAccent),
+      text: c(a.text, b.text),
+    );
+  }
+
+  factory ChatPalette._base(BuildContext context) {
     final c = context.colors;
     final dark = c.isDark;
     return ChatPalette._(

@@ -93,16 +93,15 @@
     "free_left_plural": "{{count}} free messages left"
   },
   "vanish": {
-    "swipe_on": "Swipe up for vanish mode",
+    "swipe_on": "Swipe up to turn on vanish mode",
     "swipe_off": "Swipe up to turn off vanish mode",
-    "release": "Release to switch",
+    "release_on": "Release to turn on vanish mode",
+    "release_off": "Release to turn off vanish mode",
     "turn_on": "Turn on vanish mode",
     "turn_off": "Turn off",
-    "on_by_me": "Vanish mode is on",
+    "on_by_me": "You turned on vanish mode",
     "on_by_peer": "{{name}} turned on vanish mode",
-    "explain": "Seen messages disappear when the chat is closed. Text only, no calls.",
-    "empty_title": "You're in vanish mode",
-    "empty": "Messages disappear once they've been seen and the chat is closed.",
+    "explain": "Seen messages disappear when you close the chat.",
     "needs_chat": "Send a message first, then turn on vanish mode."
   },
   "recharge": {

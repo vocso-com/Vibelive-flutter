@@ -287,7 +287,9 @@ class ChatRoomController {
     if (!_disposed) _recompose();
   }
 
-  /// Turns vanish mode on or off for this chat. Throws [ApiException].
+  /// Turns vanish mode on or off for this chat. The screen switches at once
+  /// (as Instagram's does on release); the server confirms, and a refusal
+  /// puts it back. Throws [ApiException].
   Future<void> setVanish(bool on) async {
     final id = conversationId;
     if (id == null) {
@@ -296,10 +298,35 @@ class ChatRoomController {
         messageKey: 'chat:vanish.needs_chat',
       );
     }
-    final state = await ApiClient.guard(() => ChatApi.setVanish(id, on: on));
-    if (_disposed) return;
-    _vanishEntered = true;
-    _applyVanish(state);
+    final before = vanish.value;
+    final beforeItems = _vanishItems;
+    _showVanish(
+      ChatVanishInfo(
+        available: true,
+        on: on,
+        since: on ? DateTime.now() : null,
+        byMe: true,
+      ),
+    );
+    try {
+      final state = await ApiClient.guard(() => ChatApi.setVanish(id, on: on));
+      if (_disposed) return;
+      _vanishEntered = true;
+      _applyVanish(state);
+    } on ApiException {
+      if (_disposed) rethrow;
+      _vanishItems = beforeItems;
+      _showVanish(before);
+      rethrow;
+    }
+  }
+
+  /// Shows [info] now, in the switch and in [open].
+  void _showVanish(ChatVanishInfo info) {
+    final o = open.value;
+    if (o != null && o.vanish != info) open.value = o.copyWith(vanish: info);
+    _setVanish(info);
+    _recompose();
   }
 
   /// I left the chat (screen closed, app in the background): the vanish

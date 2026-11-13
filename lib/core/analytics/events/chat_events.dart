@@ -155,7 +155,7 @@ abstract final class ChatEvents {
   static void settingChanged({required String setting, required bool on}) =>
       Analytics.log('chat_setting_changed', {'setting': setting, 'on': on});
 
-  /// Vanish mode switched: [on]; [source] `swipe` / `banner`; [result]
+  /// Vanish mode switched: [on]; [source] `swipe` / `header`; [result]
   /// `done` / `failed`.
   static void vanishSwitched({
     required bool on,

@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
@@ -99,78 +100,97 @@ class ChatScreen extends HookWidget {
         CAlert.error(e, title: 'chat:block.failed_title');
       },
     );
-    final p = ChatPalette.of(context);
+
+    // Vanish mode's look fades in and out over the whole chat at once.
+    final look = useAnimationController(
+      duration: const Duration(milliseconds: 380),
+      initialValue: vanish.on ? 1 : 0,
+    );
+    final burst = useMemoized(() => ValueNotifier<int>(0));
+    final wasOn = useRef(vanish.on);
+    useEffect(() {
+      unawaited(
+        look.animateTo(vanish.on ? 1 : 0, curve: Curves.easeInOutCubic),
+      );
+      // Coming on (by me or by them): the 🤫 fall.
+      if (vanish.on && !wasOn.value) burst.value++;
+      wasOn.value = vanish.on;
+      return null;
+    }, [vanish.on]);
+    useEffect(() => burst.dispose, [burst]);
+
+    // Where the gesture exists: vanish mode is on the server, and the chat
+    // is one I can write in.
+    final canSwitch =
+        open != null &&
+        (vanish.available || config.vanishEnabled) &&
+        config.enabled &&
+        !open.peer.deleted &&
+        !open.notAvailable;
+    void switchVanish(String source) => unawaited(
+      _switchVanish(context, controller, switching, !vanish.on, source),
+    );
 
     return ChatSecureZone(
       active: config.screenshotProtection,
-      child: Scaffold(
-        backgroundColor: p.screen,
-        resizeToAvoidBottomInset: true,
-        body: Column(
-          children: [
-            ChatHeader(
-              open: controller.open,
-              onMenu: () =>
-                  unawaited(_menu(context, controller, host, block.mutate)),
-              onPeer: host == null
-                  ? null
-                  : () => showHostProfile(context, host, source: 'chat'),
-              // No calls in vanish mode.
-              calls:
-                  open != null && open.paying && host != null && !vanish.on
-                  ? ChatCallButtons(host: host)
-                  : null,
-            ),
-            if (open != null && vanish.on)
-              VanishBanner(
-                info: vanish,
-                peerName: open.peer.name,
-                busy: switching.value,
-                onTurnOff: () => unawaited(
-                  _switchVanish(context, controller, switching, false, 'banner'),
+      child: AnimatedBuilder(
+        animation: look,
+        builder: (context, child) => ChatVanishScope(
+          t: look.value,
+          child: AnnotatedRegion<SystemUiOverlayStyle>(
+            value: look.value >= 0.5 || ChatPalette.of(context).dark
+                ? SystemUiOverlayStyle.light
+                : SystemUiOverlayStyle.dark,
+            child: child!,
+          ),
+        ),
+        child: _Frame(
+          header: ChatHeader(
+            open: controller.open,
+            onMenu: () =>
+                unawaited(_menu(context, controller, host, block.mutate)),
+            onPeer: host == null
+                ? null
+                : () => showHostProfile(context, host, source: 'chat'),
+            // No calls in vanish mode: "Turn off" sits where they were.
+            calls: open == null
+                ? null
+                : vanish.on
+                ? VanishOffPill(
+                    busy: switching.value,
+                    onTap: () => switchVanish('header'),
+                  )
+                : open.paying && host != null
+                ? ChatCallButtons(host: host)
+                : null,
+          ),
+          body: Stack(
+            children: [
+              Positioned.fill(
+                child: _Body(
+                  controller: controller,
+                  actions: actions,
+                  me: me,
+                  onVanishSwitch: canSwitch
+                      ? () => open.conversationId == null
+                            ? CToast.show('chat:vanish.needs_chat')
+                            : switchVanish('swipe')
+                      : null,
                 ),
               ),
-            Expanded(
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 250),
-                color: vanish.on ? VanishLook.backdrop : p.screen,
-                child: Stack(
-                  children: [
-                    Positioned.fill(
-                      child: _Body(
-                        controller: controller,
-                        actions: actions,
-                        me: me,
-                      ),
-                    ),
-                    if (vanish.on)
-                      Positioned.fill(
-                        child: IgnorePointer(
-                          child: ValueListenableBuilder<List<ChatMessage>>(
-                            valueListenable: controller.messages,
-                            builder: (_, list, _) => list.isEmpty
-                                ? const VanishEmpty()
-                                : const SizedBox.shrink(),
-                          ),
-                        ),
-                      ),
-                  ],
+              Positioned.fill(child: VanishBurst(trigger: burst)),
+            ],
+          ),
+          bottom: open == null
+              ? null
+              : _Bottom(
+                  open: open,
+                  config: config,
+                  controller: controller,
+                  actions: actions,
+                  text: text,
+                  vanish: vanish,
                 ),
-              ),
-            ),
-            if (open != null)
-              _Bottom(
-                open: open,
-                config: config,
-                controller: controller,
-                actions: actions,
-                text: text,
-                vanish: vanish,
-                onSwitchVanish: (on) => unawaited(
-                  _switchVanish(context, controller, switching, on, 'swipe'),
-                ),
-              ),
-          ],
         ),
       ),
     );
@@ -365,11 +385,13 @@ class _Body extends StatelessWidget {
     required this.controller,
     required this.actions,
     required this.me,
+    this.onVanishSwitch,
   });
 
   final ChatRoomController controller;
   final ChatScreenActions actions;
   final String? me;
+  final VoidCallback? onVanishSwitch;
 
   @override
   Widget build(BuildContext context) {
@@ -381,6 +403,7 @@ class _Body extends StatelessWidget {
             controller: controller,
             actions: actions,
             me: me,
+            onVanishSwitch: onVanishSwitch,
           );
         }
         return ValueListenableBuilder<ApiException?>(
@@ -430,7 +453,6 @@ class _Bottom extends StatelessWidget {
     required this.actions,
     required this.text,
     required this.vanish,
-    required this.onSwitchVanish,
   });
 
   final ChatOpen open;
@@ -439,7 +461,6 @@ class _Bottom extends StatelessWidget {
   final ChatScreenActions actions;
   final TextEditingController text;
   final ChatVanishInfo vanish;
-  final ValueChanged<bool> onSwitchVanish;
 
   @override
   Widget build(BuildContext context) {
@@ -460,13 +481,6 @@ class _Bottom extends StatelessWidget {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        // Drag up (from the bottom towards the top) to switch vanish mode.
-        if (vanish.available || config.vanishEnabled)
-          VanishSwipeHandle(
-            on: vanish.on,
-            enabled: open.conversationId != null,
-            onSwitch: () => onSwitchVanish(!vanish.on),
-          ),
         LowBalanceBar(
           balance: controller.balance,
           textPrice: open.pricePerMessage,
@@ -485,9 +499,6 @@ class _Bottom extends StatelessWidget {
           },
         ),
         ChatComposer(
-          // Rebuilt when the recorder limit or vanish mode changes (the
-          // recorder is made once per composer); the text survives.
-          key: ValueKey('chat-composer-${vanish.on}-$voiceMax'),
           controller: text,
           maxLength: config.maxMessageLength,
           voiceMaxSeconds: voiceMax,
@@ -497,6 +508,32 @@ class _Bottom extends StatelessWidget {
           onVoice: actions.sendVoice,
         ),
       ],
+    );
+  }
+}
+
+/// The screen itself, painted from the chat palette inside the vanish scope
+/// (so its background fades with everything else).
+class _Frame extends StatelessWidget {
+  const _Frame({required this.header, required this.body, this.bottom});
+
+  final Widget header;
+  final Widget body;
+  final Widget? bottom;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = ChatPalette.of(context);
+    return Scaffold(
+      backgroundColor: p.screen,
+      resizeToAvoidBottomInset: true,
+      body: Column(
+        children: [
+          header,
+          Expanded(child: body),
+          ?bottom,
+        ],
+      ),
     );
   }
 }
