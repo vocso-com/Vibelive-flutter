@@ -433,6 +433,7 @@ Future<GoRouter> pumpRoutes(
         AppRoutes.hostRates,
         AppRoutes.hostOnboarding,
         AppRoutes.professionalDetails,
+        AppRoutes.wallet,
       ])
         GoRoute(
           path: r,

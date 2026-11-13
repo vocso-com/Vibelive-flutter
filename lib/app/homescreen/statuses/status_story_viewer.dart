@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:video_player/video_player.dart';
 
@@ -11,6 +12,8 @@ import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/vibe_colors.dart';
 import '../../../core/utils/log.dart';
 import '../../../core/utils/scale.dart';
+import '../../api/free_call/free_call_models.dart';
+import '../../api/free_call/free_call_queries.dart';
 import '../../api/host_status/host_status_api.dart';
 import '../../api/host_status/host_status_models.dart';
 import '../../api/host_status/host_status_queries.dart';
@@ -722,7 +725,7 @@ enum StatusViewerAction { audio, video, profile }
 /// Under someone else's Vibe: the profile's own Audio / Video Call buttons
 /// (rates and all), and a ↗ to the profile. Drawn in the dark theme: they
 /// sit on the video.
-class _Actions extends StatelessWidget {
+class _Actions extends HookWidget {
   const _Actions({
     required this.card,
     required this.showCall,
@@ -744,6 +747,8 @@ class _Actions extends StatelessWidget {
     );
     final audioRate = (host?.aPrice ?? 0) > 0;
     final videoRate = (host?.vPrice ?? 0) > 0;
+    // A free call shows as one, as on the profile (docs/free_calls.md).
+    final free = useFreeCallStatus(context).data ?? FreeCallStatus.off;
     final showAudio = audioRate || (isCompany && !videoRate);
     final showVideo = videoRate;
     final calls = <Widget>[
@@ -761,6 +766,7 @@ class _Actions extends StatelessWidget {
               enabled: true,
               label: isCompany ? 'host:call.audio' : null,
               price: host.aPrice,
+              free: ProfileCallButton.freeOf(free, video: false),
               onTap: () => onExit(StatusViewerAction.audio),
             ),
           ),
@@ -775,6 +781,7 @@ class _Actions extends StatelessWidget {
               enabled: true,
               label: isCompany ? 'host:call.video' : null,
               price: host.vPrice,
+              free: ProfileCallButton.freeOf(free, video: true),
               onTap: () => onExit(StatusViewerAction.video),
             ),
           ),

@@ -40,7 +40,8 @@
   "card": {
     "price": "₹ {{price}}/நிமி",
     "call_now": "அழைக்கவும்",
-    "city_rating": "{{city}}  •  {{rating}} ஸ்டார்"
+    "city_rating": "{{city}}  •  {{rating}} ஸ்டார்",
+    "free": "இலவச அழைப்பு"
   },
   "talk_now": {
     "action": "இப்போதே பேசுங்கள்",
@@ -48,7 +49,8 @@
     "voice": "குரல்",
     "video": "வீடியோ",
     "voice_call": "குரல் அழைப்பு",
-    "video_call": "வீடியோ அழைப்பு"
+    "video_call": "வீடியோ அழைப்பு",
+    "free": "இலவசம்"
   },
   "feed": {
     "end": "முடிவுகள் இவ்வளவுதான்",

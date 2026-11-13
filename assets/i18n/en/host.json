@@ -31,7 +31,9 @@
     "safety_title": "Before you connect",
     "safety_message": "Keep conversations in the app. For your safety, please don't share personal contact details or arrange to meet offline.",
     "start": "Start",
-    "unavailable": "Calling isn't available in this version yet."
+    "unavailable": "Calling isn't available in this version yet.",
+    "free": "Free · {{minutes}} min",
+    "free_then": "then ₹{{price}}/min"
   },
   "social": {
     "instagram": "Instagram",

@@ -9,6 +9,7 @@ import '../../../api/callscreen/call_errors.dart';
 import '../../../api/callscreen/call_models.dart';
 import '../../../api/callscreen/call_queries.dart';
 import '../../../api/instant_call/instant_call_api.dart';
+import '../../../api/free_call/free_call_models.dart';
 import '../../../api/instant_call/instant_call_models.dart';
 import '../call_alerts.dart';
 import '../call_billing.dart';
@@ -181,6 +182,8 @@ abstract final class InstantCallFlow {
     if (rate != null && rate > 0) {
       CallBilling.rememberRate(started.sessionId, rate);
     }
+    // A free search (docs/free_calls.md); the answer confirms it below.
+    CallBilling.rememberFree(started.sessionId, started.freeCall);
     CallController.instance.startOutgoing(call);
     unawaited(_markOutgoing(CallController.instance.value));
     // The server says when its search failed (`INSTANT_CALL_FAILED`); if
@@ -291,6 +294,8 @@ abstract final class InstantCallFlow {
         if (found != null) {
           record = found.callId;
           hostId ??= found.hostUserId;
+          // The call record says whether it is free (the push may be lost).
+          CallBilling.rememberFree(sessionId, found.freeCall);
           _adopt(sessionId, found.callId, hostId);
         }
       } catch (e) {
@@ -362,6 +367,17 @@ abstract final class InstantCallFlow {
     );
     if (ring != null && rate != null && rate > 0) {
       CallBilling.rememberRate(ring, rate.toDouble());
+    }
+    // Whether the call the host answered is free (docs/free_calls.md): the
+    // answer decides, so no free minutes here takes the search's back.
+    if (ring != null) {
+      CallBilling.rememberFree(
+        ring,
+        FreeCallTerms.of(
+          CallPayload.read(data, const ['freeMinutes']),
+          CallPayload.read(data, const ['freeContinuePaid']),
+        ),
+      );
     }
     CallUiEvents.instantMatched(callId: session.callId, hostUserId: hostId);
     CallController.instance.update(

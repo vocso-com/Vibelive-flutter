@@ -11,6 +11,8 @@ import '../../../core/network/api_exception.dart';
 import '../../../core/utils/scale.dart';
 import '../../api/authscreen/interests_models.dart';
 import '../../api/authscreen/interests_queries.dart';
+import '../../api/free_call/free_call_models.dart';
+import '../../api/free_call/free_call_queries.dart';
 import '../../api/homescreen/home_models.dart';
 import '../../api/homescreen/home_queries.dart';
 import '../../api/listingflow/filter_models.dart';
@@ -54,6 +56,8 @@ class DiscoverView extends HookWidget {
     ]);
     final tab = useState(pinned ?? DiscoverTab.all);
     final feed = useDiscoverFeed(context);
+    // "Free call" on the cards while the user has one (docs/free_calls.md).
+    final freeCall = useFreeCallStatus(context).data ?? FreeCallStatus.off;
     // Loaded with the feed (RN), so the first tap on Popular is instant.
     final popular = usePopularHosts(context);
     final form = useInterestForm(context);
@@ -124,6 +128,7 @@ class DiscoverView extends HookWidget {
     // Row widgets are reused as-is; their sizes are scaled to the window.
     final rowWidgets = useMemoized(Expando<Widget>.new, [
       MediaQuery.sizeOf(context),
+      freeCall,
     ]);
     final rowIndex = useMemoized(
       () => {for (final (i, r) in rows.indexed) r.key: i},
@@ -397,12 +402,14 @@ class DiscoverView extends HookWidget {
                                 key: ValueKey(row.key),
                                 pendingSlot: true,
                                 onCard: onCard,
+                                freeCall: freeCall,
                               );
                             }
                             return rowWidgets[row] ??= _Row(
                               row,
                               key: ValueKey(row.key),
                               onCard: onCard,
+                              freeCall: freeCall,
                             );
                           },
                         ),
@@ -474,8 +481,10 @@ class _Row extends StatelessWidget {
     super.key,
     this.pendingSlot = false,
     required this.onCard,
+    this.freeCall = FreeCallStatus.off,
   });
   final DiscoverRow row;
+  final FreeCallStatus freeCall;
 
   /// A half row whose second card is loading: a skeleton in its place.
   final bool pendingSlot;
@@ -497,6 +506,7 @@ class _Row extends StatelessWidget {
               featured: true,
               onTap: open,
               onCall: call,
+              freeCall: freeCall,
             )
           : Row(
               children: [
@@ -505,6 +515,7 @@ class _Row extends StatelessWidget {
                     host: row.hosts.first,
                     onTap: open,
                     onCall: call,
+                    freeCall: freeCall,
                   ),
                 ),
                 gap,
@@ -514,6 +525,7 @@ class _Row extends StatelessWidget {
                           host: row.hosts[1],
                           onTap: open,
                           onCall: call,
+                          freeCall: freeCall,
                         )
                       : pendingSlot
                       ? const Shimmer(child: HostGridCardSkeleton())

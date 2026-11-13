@@ -22,6 +22,8 @@ Future<void> showTalkNowMenu(
   required double? voiceRate,
   required double? videoRate,
   required void Function({required bool video}) onPick,
+  bool voiceFree = false,
+  bool videoFree = false,
 }) {
   return showGeneralDialog<void>(
     context: context,
@@ -35,6 +37,8 @@ Future<void> showTalkNowMenu(
       anchor: anchor,
       voiceRate: voiceRate,
       videoRate: videoRate,
+      voiceFree: voiceFree,
+      videoFree: videoFree,
       onPick: onPick,
     ),
   );
@@ -47,12 +51,18 @@ class _TalkNowMenu extends StatelessWidget {
     required this.voiceRate,
     required this.videoRate,
     required this.onPick,
+    this.voiceFree = false,
+    this.videoFree = false,
   });
 
   final Animation<double> animation;
   final Rect anchor;
   final double? voiceRate;
   final double? videoRate;
+
+  /// That call would start free (docs/free_calls.md): "Free" for its price.
+  final bool voiceFree;
+  final bool videoFree;
   final void Function({required bool video}) onPick;
 
   void _pick(BuildContext context, {required bool video}) {
@@ -65,9 +75,9 @@ class _TalkNowMenu extends StatelessWidget {
   Widget build(BuildContext context) {
     final mq = MediaQuery.of(context);
     // Top to bottom: video, then voice — so voice sits nearest the button.
-    final items = <({bool video, double? rate})>[
-      (video: true, rate: videoRate),
-      (video: false, rate: voiceRate),
+    final items = <({bool video, double? rate, bool free})>[
+      (video: true, rate: videoRate, free: videoFree),
+      (video: false, rate: voiceRate, free: voiceFree),
     ];
     final gap = 12.ms;
     // Above the button when there is room (the usual bottom-right fab); below it
@@ -97,6 +107,7 @@ class _TalkNowMenu extends StatelessWidget {
                       total: items.length,
                       video: items[i].video,
                       rate: items[i].rate,
+                      free: items[i].free,
                       onTap: () => _pick(context, video: items[i].video),
                     ),
                   ),
@@ -120,6 +131,7 @@ class _Bubble extends StatelessWidget {
     required this.video,
     required this.rate,
     required this.onTap,
+    this.free = false,
   });
 
   final Animation<double> animation;
@@ -127,6 +139,7 @@ class _Bubble extends StatelessWidget {
   final int total;
   final bool video;
   final double? rate;
+  final bool free;
   final VoidCallback onTap;
 
   double _staged(Curve curve) {
@@ -141,7 +154,9 @@ class _Bubble extends StatelessWidget {
   Widget build(BuildContext context) {
     const c = _palette;
     final label = context.t(video ? 'home:talk_now.video_call' : 'home:talk_now.voice_call');
-    final priceText = rate == null
+    final priceText = free
+        ? context.t('home:talk_now.free')
+        : rate == null
         ? null
         : '${context.t('search:results.currency')}${formatRate(rate!)}'
               '${context.t('search:results.per_min')}';

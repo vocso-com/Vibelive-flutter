@@ -11,6 +11,7 @@ import 'package:pretty_dio_logger/pretty_dio_logger.dart';
 import 'package:shared_preferences_platform_interface/in_memory_shared_preferences_async.dart';
 import 'package:shared_preferences_platform_interface/shared_preferences_async_platform_interface.dart';
 import 'package:vibelive/app/api/callscreen/pending_decline_queue.dart';
+import 'package:vibelive/app/callscreen/helper/call_billing.dart';
 import 'package:vibelive/app/callscreen/helper/call_alerts.dart';
 import 'package:vibelive/app/callscreen/helper/call_controller.dart';
 import 'package:vibelive/app/callscreen/helper/call_device.dart';
@@ -349,6 +350,7 @@ resetCallTestEnv({int userId = 9, String role = 'Client'}) async {
 /// Every singleton back to idle, every timer cancelled.
 void resetCallState() {
   CallTimers.instance.cancelAll();
+  CallBilling.debugReset();
   CallController.instance.reset();
   CallDedup.instance.reset();
   EndFlow.debugReset();

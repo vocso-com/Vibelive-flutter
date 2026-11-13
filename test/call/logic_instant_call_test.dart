@@ -14,6 +14,8 @@ import 'package:vibelive/app/callscreen/helper/flows/outgoing_flow.dart';
 import 'package:vibelive/app/callscreen/helper/native/headless_call_end.dart';
 import 'package:vibelive/app/callscreen/helper/native/native_call_marks.dart';
 import 'package:vibelive/app/callscreen/helper/push/push_envelope.dart';
+import 'package:vibelive/app/api/free_call/free_call_models.dart';
+import 'package:vibelive/app/callscreen/helper/call_billing.dart';
 
 import 'logic_fakes.dart';
 
@@ -487,6 +489,48 @@ void main() {
       });
       expect(calls.value.serverCallId, '905');
       expect(calls.value.remote.name, 'Asha');
+    });
+
+    test('a free search: the answer says whether the call is free', () async {
+      rolloverOn();
+      backend.replies['POST $initiate'] = (_) => {
+        'success': true,
+        'sessionId': 'sess9',
+        'channelName': 'instant_9_9',
+        'callerToken': agoraToken(),
+        'callerRate': 12,
+        'currentHost': {'userId': 70, 'name': 'Meera'},
+        'firstHost': {'userId': 70, 'name': 'Meera', 'callerRate': 12},
+        'freeCall': {'minutes': 2, 'continuePaid': false},
+      };
+      expect(await OutgoingFlow.place(meera), isTrue);
+      await settle(100);
+      expect(
+        CallBilling.freeFor(calls.value.callId),
+        const FreeCallTerms(minutes: 2, continuePaid: false),
+      );
+
+      CallSignals.onInstantCallConnected(const {
+        'instantCallSessionId': 'sess9',
+        'callId': '905',
+        'hostUserId': '70',
+        'callerRate': '12',
+        'freeMinutes': '2',
+        'freeContinuePaid': 'false',
+      });
+      expect(
+        CallBilling.freeFor(calls.value.callId),
+        const FreeCallTerms(minutes: 2, continuePaid: false),
+      );
+
+      // An answer without free minutes (the free call went elsewhere): paid.
+      CallSignals.onInstantCallConnected(const {
+        'instantCallSessionId': 'sess9',
+        'callId': '905',
+        'hostUserId': '70',
+        'callerRate': '12',
+      });
+      expect(CallBilling.freeFor(calls.value.callId), isNull);
     });
 
     test('off (or the type not taken): a plain call', () async {

@@ -38,6 +38,8 @@ abstract final class CallFlowKeys {
 
   static const lowBalanceWarning = 'callflow:low_balance.warning';
   static const lowBalanceEnded = 'callflow:low_balance.ended';
+  static const freeEndingSoon = 'callflow:free_call.ending';
+  static const freeEnded = 'callflow:free_call.ended';
 }
 
 /// Alerts and toasts of the call logic: [CAlert] / [CToast] (root

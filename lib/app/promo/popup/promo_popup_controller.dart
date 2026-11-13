@@ -12,6 +12,8 @@ import '../../api/promo_banner/promo_banner_queries.dart';
 import '../../api/promo_banner/promo_popup_models.dart';
 import '../../callscreen/helper/call_controller.dart';
 import '../../callscreen/helper/call_navigator.dart';
+import '../../paymentscreen/wallet/helper/first_topup_launch.dart';
+import '../../paymentscreen/wallet/widgets/first_topup_popup.dart';
 import '../../update/update_notice.dart';
 import '../promo_banner_actions.dart';
 import '../templates/promo_markup.dart';
@@ -44,6 +46,15 @@ class PromoPopupController {
   /// How long a due popup waits for the screen to be free.
   @visibleForTesting
   static Duration safeWait = const Duration(seconds: 8);
+
+  /// The first-top-up offer for this open, if any (tests swap it).
+  @visibleForTesting
+  static Future<FirstTopupPlan?> Function() firstTopup =
+      FirstTopupLaunch.prepare;
+
+  /// Home settles before the first-top-up offer grows in.
+  @visibleForTesting
+  static Duration firstTopupDelay = const Duration(milliseconds: 1200);
 
   /// How long an image may take to load before its popup is skipped.
   static const imageWait = Duration(seconds: 6);
@@ -104,6 +115,35 @@ class PromoPopupController {
     _cause = cause;
     final openedAt = now();
     if (!SessionStore.instance.value.isAuthenticated) return;
+    // An open from a notification or a link is the user's errand.
+    final since = openedAt.subtract(const Duration(seconds: 15));
+
+    // The first-top-up offer, for someone who never paid in, takes this
+    // open's one popup ahead of the admin's.
+    FirstTopupPlan? topup;
+    try {
+      topup = await firstTopup();
+    } catch (e) {
+      Log.w('PromoPopup', 'first top-up: $e');
+    }
+    if (seq != _seq) return;
+    if (topup != null) {
+      final wait = firstTopupDelay - now().difference(openedAt);
+      if (wait > Duration.zero) await Future<void>.delayed(wait);
+      if (seq != _seq) return;
+      if (await _waitFree(seq, since) != null) return;
+      final ctx = _home;
+      if (ctx == null || !ctx.mounted) return;
+      _showing = true;
+      try {
+        await FirstTopupLaunch.present(ctx, topup);
+      } catch (e) {
+        Log.w('PromoPopup', 'first top-up show: $e');
+      } finally {
+        _showing = false;
+      }
+      return;
+    }
 
     PromoPopupFeed feed;
     try {
@@ -126,16 +166,10 @@ class PromoPopupController {
     if (delay > Duration.zero) await Future<void>.delayed(delay);
     if (seq != _seq) return;
 
-    // An open from a notification or a link is the user's errand.
-    final since = openedAt.subtract(const Duration(seconds: 15));
-    final deadline = now().add(safeWait);
-    while (true) {
-      if (ExternalOpen.since(since)) return _skip(pick, 'external_open');
-      final busy = blocker();
-      if (busy == null) break;
-      if (!now().isBefore(deadline)) return _skip(pick, busy);
-      await Future<void>.delayed(const Duration(milliseconds: 500));
-      if (seq != _seq) return;
+    final why = await _waitFree(seq, since);
+    if (why != null) {
+      if (why != 'stale') _skip(pick, why);
+      return;
     }
 
     final ctx = _home;
@@ -151,6 +185,21 @@ class PromoPopupController {
     if (late != null) return _skip(pick, late);
     if (ExternalOpen.since(since)) return _skip(pick, 'external_open');
     await _present(_home!, pick);
+  }
+
+  /// Waits up to [safeWait] for the screen to be free: null once it is, else
+  /// why not ('external_open', a [blocker] reason, or 'stale' when a newer
+  /// open took over).
+  Future<String?> _waitFree(int seq, DateTime since) async {
+    final deadline = now().add(safeWait);
+    while (true) {
+      if (ExternalOpen.since(since)) return 'external_open';
+      final busy = blocker();
+      if (busy == null) return null;
+      if (!now().isBefore(deadline)) return busy;
+      await Future<void>.delayed(const Duration(milliseconds: 500));
+      if (seq != _seq) return 'stale';
+    }
   }
 
   /// Why a popup cannot show right now, or null when the screen is free.
@@ -268,6 +317,10 @@ class PromoPopupController {
     now = DateTime.now;
     load = ensurePromoPopups;
     safeWait = const Duration(seconds: 8);
+    // Tests of the admin's popups never meet the first-top-up offer unless
+    // they ask for it.
+    firstTopup = () async => null;
+    firstTopupDelay = const Duration(milliseconds: 1200);
   }
 }
 

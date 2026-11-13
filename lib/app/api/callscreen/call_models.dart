@@ -1,4 +1,5 @@
 import '../../../core/network/strapi.dart';
+import '../free_call/free_call_models.dart';
 
 /// Backend `callStatus`. [unknown] covers a missing or new value.
 enum CallStatus {
@@ -456,6 +457,9 @@ class InitiatedCall {
   final String callerToken;
   final String? callDocumentId;
   final String? receiverDocId;
+
+  /// The server offered this call free (docs/free_calls.md); null: paid.
+  FreeCallTerms? get freeCall => FreeCallTerms.tryParse(raw['freeCall']);
 
   /// `{status: 'busy'}`: the receiver is already on another call.
   static bool isBusyResponse(JsonMap body) =>

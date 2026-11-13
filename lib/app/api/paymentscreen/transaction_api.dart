@@ -40,6 +40,29 @@ abstract final class TransactionApi {
     return [for (final row in paymentRows(body)) WalletTransaction(row)];
   }
 
+  /// Whether [userDocumentId] ever paid money in: one successful Razorpay or
+  /// PayU top-up into any of their wallets. Bonus and referral credits do not
+  /// count (a joining bonus must not hide the first-top-up offer). Asked of
+  /// the server directly, so a long history never hides an old top-up.
+  static Future<bool> hasPaidTopup(String userDocumentId) async {
+    final uid = userDocumentId.trim();
+    if (uid.isEmpty) return false;
+    final body = await ApiClient.get(
+      '/transactions',
+      query: {
+        r'filters[to_wallet][user][documentId][$eq]': uid,
+        r'filters[transactionType][$eq]': 'topup',
+        r'filters[paymentStatus][$eq]': 'success',
+        r'filters[method][$in][0]': 'Razorpay',
+        r'filters[method][$in][1]': 'PayU',
+        'pagination[page]': 1,
+        'pagination[pageSize]': 1,
+        'fields[0]': 'id',
+      },
+    );
+    return paymentRows(body).isNotEmpty;
+  }
+
   static const _listFields = {
     'fields[0]': 'createdAt',
     'fields[1]': 'transaction_Id',

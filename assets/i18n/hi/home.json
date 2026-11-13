@@ -40,7 +40,8 @@
   "card": {
     "price": "₹ {{price}}/मिनट",
     "call_now": "कॉल करें",
-    "city_rating": "{{city}}  •  {{rating}} स्टार"
+    "city_rating": "{{city}}  •  {{rating}} स्टार",
+    "free": "फ्री कॉल"
   },
   "talk_now": {
     "action": "अभी बात करें",
@@ -48,7 +49,8 @@
     "voice": "वॉइस",
     "video": "वीडियो",
     "voice_call": "वॉइस कॉल",
-    "video_call": "वीडियो कॉल"
+    "video_call": "वीडियो कॉल",
+    "free": "फ्री"
   },
   "feed": {
     "end": "परिणाम समाप्त",

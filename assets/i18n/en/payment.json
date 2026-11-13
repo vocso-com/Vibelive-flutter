@@ -223,7 +223,15 @@
     "subtitle": "Added to your wallet straight away. Use it on any call.",
     "becomes": "₹{{amount}} becomes ₹{{total}} in your wallet",
     "minutes": "About {{minutes}} minutes of talking",
-    "not_now": "Not now"
+    "not_now": "Not now",
+    "badge": "FIRST RECHARGE OFFER",
+    "extra": "+{{percent}}% EXTRA",
+    "hero": "Recharge for the first time and get {{percent}}% extra in your wallet, instantly.",
+    "pick": "PICK AN AMOUNT",
+    "free_extra": "+₹{{bonus}} FREE",
+    "popular": "POPULAR",
+    "you_pay": "You pay",
+    "you_get": "You get"
   },
   "abandon_offer": {
     "title": "Wait! Your bonus is ready 🎁",

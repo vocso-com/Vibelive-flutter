@@ -6,6 +6,7 @@ import 'package:wakelock_plus/wakelock_plus.dart';
 import '../../../core/query/query_client.dart';
 import '../../../core/utils/log.dart';
 import '../../api/callscreen/call_keys.dart';
+import '../../api/free_call/free_call_queries.dart';
 import '../../api/paymentscreen/payment_keys.dart';
 import 'call_analytics.dart';
 import 'call_billing.dart';
@@ -169,6 +170,8 @@ abstract final class CallRuntime {
       ...CallKeys.afterCallChange(callId),
       ...PaymentKeys.walletData,
     ]);
+    // The call may have used a free call (docs/free_calls.md).
+    invalidateFreeCallStatus();
     // No call screen to show the summary (headless call, minimized): back
     // to idle right away. A call screen left in the background keeps it.
     if (s.phase == CallPhase.ended && !CallNavigator.onCallRoute) {

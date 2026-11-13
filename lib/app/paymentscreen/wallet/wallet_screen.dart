@@ -277,43 +277,8 @@ class WalletScreen extends HookWidget {
       return null;
     }, const []);
 
-    // First-top-up offer, once the history shows whether they ever paid.
-    // Re-checked when config lands: the flag may arrive after the history.
-    final firstTopupOn = config.bonus.firstTopupOn;
-    useEffect(() {
-      void check() {
-        final s = pager.value;
-        if (offered.value ||
-            !firstTopupOn ||
-            s.filter != TransactionFilter.all ||
-            s.loading ||
-            s.error != null ||
-            s.page < 1 ||
-            !context.mounted) {
-          return;
-        }
-        offered.value = true;
-        // Never push a route mid-build (the effect runs during one).
-        WidgetsBinding.instance.addPostFrameCallback((_) async {
-          if (!context.mounted) return;
-          final amount = await WalletOffers.firstTopup(
-            context,
-            config: configRef.value,
-            history: s.rows,
-          );
-          if (amount != null && context.mounted) {
-            await addMoney(
-              initialAmount: amount.toDouble(),
-              source: 'first_topup_offer',
-            );
-          }
-        });
-      }
-
-      check();
-      pager.addListener(check);
-      return () => pager.removeListener(check);
-    }, [pager, firstTopupOn]);
+    // The first-top-up offer is the app-open popup now (FirstTopupLaunch),
+    // not a prompt on this screen.
 
     // Transaction list analytics: load more, empty tabs, failed pages.
     useEffect(() {

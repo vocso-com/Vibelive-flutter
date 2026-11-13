@@ -154,5 +154,8 @@
   "return_bar": {
     "label": "Return to call",
     "connecting": "Connecting..."
+  },
+  "free": {
+    "left": "Free call · {{time}} left"
   }
 }

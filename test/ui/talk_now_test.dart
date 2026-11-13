@@ -130,6 +130,41 @@ void main() {
     await finishHost(tester);
   });
 
+  // Free calls (docs/free_calls.md): a Talk Now call that would start free
+  // says so instead of its price; one type free leaves the other priced.
+  testWidgets('a free Talk Now call shows "Free" for its price', (
+    tester,
+  ) async {
+    final backend = await resetHost();
+    backend.instantConfig = {
+      'enabled': true,
+      'allowedCallTypes': 'both',
+      'callerVoiceRate': 10,
+      'callerVideoRate': 25,
+    };
+    backend.replies['GET /api/free-call/status'] = (_) => {
+      'available': true,
+      'callsLeft': 1,
+      'minutes': 2,
+      'voice': true,
+      'video': false,
+      'normal': true,
+      'talkNow': true,
+    };
+    await open(tester);
+    final voice = find.byKey(const ValueKey('talk-now-voice'));
+    final video = find.byKey(const ValueKey('talk-now-video'));
+    expect(
+      find.descendant(of: voice, matching: find.text('Free')),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(of: video, matching: find.textContaining('25')),
+      findsOneWidget,
+    );
+    await finishHost(tester);
+  });
+
   testWidgets('one allowed type stays one button', (tester) async {
     final backend = await resetHost();
     backend.instantConfig = {

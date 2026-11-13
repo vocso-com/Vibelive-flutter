@@ -7,6 +7,7 @@ import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/scale.dart';
 import '../../component/c_text.dart';
 import '../../component/pressable.dart';
+import '../helper/call_billing.dart';
 import '../helper/call_controller.dart';
 import '../helper/call_session.dart';
 import 'call_avatar.dart';
@@ -105,6 +106,7 @@ class _Centre extends HookWidget {
         if (callerCompany) const _CompanyPill(),
         if (receiverOfCompany) const _OfficialPill(),
         const _StatusPill(),
+        const _FreePill(),
         if (name != null)
           Padding(
             padding: const EdgeInsets.only(top: 4),
@@ -169,6 +171,49 @@ class _StatusPill extends HookWidget {
         borderRadius: BorderRadius.circular(15.sw),
       ),
       child: text,
+    );
+  }
+}
+
+/// The caller's free time left on a free call (docs/free_calls.md), under
+/// the timer; gone once the free minutes are over.
+class _FreePill extends HookWidget {
+  const _FreePill();
+
+  @override
+  Widget build(BuildContext context) {
+    final (phase, callId, caller) = useCallSelect(
+      (s) => (s.phase, s.callId, s.isCaller),
+    );
+    final free = caller && phase == CallPhase.ongoing
+        ? CallBilling.freeFor(callId)
+        : null;
+    if (free == null) return const SizedBox.shrink();
+    return ValueListenableBuilder<int>(
+      valueListenable: CallController.instance.elapsed,
+      builder: (context, seconds, _) {
+        final left = free.duration.inSeconds - seconds;
+        if (left <= 0) return const SizedBox.shrink();
+        return Padding(
+          key: const ValueKey('call-free-pill'),
+          padding: EdgeInsets.only(top: 6.vs),
+          child: Container(
+            padding: EdgeInsets.symmetric(horizontal: 10.sw, vertical: 4.vs),
+            decoration: BoxDecoration(
+              color: AppColors.green.withValues(alpha: 0.9),
+              borderRadius: BorderRadius.circular(12.sw),
+            ),
+            child: CText(
+              'call:free.left',
+              variables: {'time': formatCallTime(left)},
+              color: AppColors.white,
+              size: 11,
+              weight: FontWeight.w800,
+              maxLines: 1,
+            ),
+          ),
+        );
+      },
     );
   }
 }

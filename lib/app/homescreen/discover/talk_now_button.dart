@@ -11,6 +11,8 @@ import '../../../core/session/session_store.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/vibe_colors.dart';
 import '../../../core/utils/scale.dart';
+import '../../api/free_call/free_call_models.dart';
+import '../../api/free_call/free_call_queries.dart';
 import '../../api/instant_call/instant_call_queries.dart';
 import '../../callscreen/call/helper/call_format.dart';
 import '../../callscreen/helper/call_actions.dart';
@@ -71,6 +73,8 @@ class TalkNowButton extends HookWidget {
   @override
   Widget build(BuildContext context) {
     final config = useInstantCallConfig(context).data;
+    // A Talk Now call that would start free shows "Free" (docs/free_calls.md).
+    final freeCall = useFreeCallStatus(context).data ?? FreeCallStatus.off;
     final session = useValueListenable(SessionStore.instance);
     // A host never sees it unless the account is a company account: Talk Now
     // finds somebody to talk TO, and a host taking one would be calling their
@@ -84,6 +88,8 @@ class TalkNowButton extends HookWidget {
     final video = config.allows(video: true);
     if (!voice && !video) return const SizedBox.shrink();
     final both = voice && video;
+    final voiceFree = freeCall.covers(video: false, talkNow: true);
+    final videoFree = freeCall.covers(video: true, talkNow: true);
 
     // To anchor the bubble menu just above the (folded) button.
     final fabKey = useMemoized(GlobalKey.new);
@@ -117,6 +123,8 @@ class TalkNowButton extends HookWidget {
           anchor: anchor,
           voiceRate: config.callerVoiceRate,
           videoRate: config.callerVideoRate,
+          voiceFree: voiceFree,
+          videoFree: videoFree,
           onPick: ({required bool video}) => place(asVideo: video),
         ),
       );
@@ -128,7 +136,9 @@ class TalkNowButton extends HookWidget {
     final circleRate = circleVideo
         ? config.callerVideoRate
         : config.callerVoiceRate;
-    final price = circleRate == null
+    final price = (circleVideo ? videoFree : voiceFree)
+        ? context.t('home:talk_now.free')
+        : circleRate == null
         ? null
         : '${context.t('search:results.currency')}${formatRate(circleRate)}'
               '${context.t('search:results.per_min')}';
@@ -155,6 +165,8 @@ class TalkNowButton extends HookWidget {
           video: video,
           voiceRate: config.callerVoiceRate,
           videoRate: config.callerVideoRate,
+          voiceFree: voiceFree,
+          videoFree: videoFree,
           place: (asVideo) => place(asVideo: asVideo),
           openMenu: openMenu,
         ),
@@ -172,10 +184,16 @@ class _TalkNowPill extends StatelessWidget {
     required this.videoRate,
     required this.place,
     required this.openMenu,
+    this.voiceFree = false,
+    this.videoFree = false,
   });
 
   final bool voice;
   final bool video;
+
+  /// That call would start free (docs/free_calls.md).
+  final bool voiceFree;
+  final bool videoFree;
 
   /// Null when the server did not send one — an older backend. The button
   /// still works; it simply does not claim a price it does not know.
@@ -230,6 +248,7 @@ class _TalkNowPill extends StatelessWidget {
               icon: LucideIcons.phone,
               label: 'home:talk_now.voice',
               rate: voiceRate,
+              free: voiceFree,
             ),
             SizedBox(width: 6.ms),
             _RateChip(
@@ -237,12 +256,14 @@ class _TalkNowPill extends StatelessWidget {
               icon: LucideIcons.video,
               label: 'home:talk_now.video',
               rate: videoRate,
+              free: videoFree,
             ),
           ] else
             _RateChip(
               icon: video ? LucideIcons.video : LucideIcons.phone,
               label: video ? 'home:talk_now.video' : 'home:talk_now.voice',
               rate: video ? videoRate : voiceRate,
+              free: video ? videoFree : voiceFree,
             ),
         ],
       ),
@@ -308,11 +329,15 @@ class _RateChip extends StatelessWidget {
     required this.icon,
     required this.label,
     required this.rate,
+    this.free = false,
   });
 
   final IconData icon;
   final String label;
   final double? rate;
+
+  /// "Free" in place of the price.
+  final bool free;
 
   @override
   Widget build(BuildContext context) {
@@ -333,7 +358,9 @@ class _RateChip extends StatelessWidget {
         children: [
           Icon(icon, size: 14.ms, color: c.primaryGradient.first),
           SizedBox(width: 4.ms),
-          if (rate case final r?)
+          if (free)
+            Text(context.t('home:talk_now.free'), maxLines: 1, style: style)
+          else if (rate case final r?)
             Text.rich(
               TextSpan(
                 children: [

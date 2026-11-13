@@ -79,7 +79,28 @@ abstract final class FirstTopupOffer {
     return true;
   }
 
+  /// Whether the caps would let it show now, without counting a show.
+  static bool mayShow({required double percent}) => shouldShow(
+    enabled: true,
+    percent: percent,
+    hasPaid: false,
+    timesShown: _read(_kShown),
+    dismissals: _read(_kDismissed),
+    shownThisSession: _shownThisSession,
+  );
+
   static void recordDismissal() => _write(_kDismissed, _read(_kDismissed) + 1);
+
+  /// Every amount the wallet offers (the admin's `wallet_preset_amounts`),
+  /// lowest first, each once.
+  static List<int> amounts(List<int> presets) =>
+      ({for (final n in presets) if (n > 0) n}.toList()..sort());
+
+  /// The amount picked for them at first: the middle one (most people pick
+  /// the middle of three), marked "popular".
+  static int? suggested(List<int> amounts) => amounts.isEmpty
+      ? null
+      : amounts[amounts.length == 2 ? 1 : (amounts.length - 1) ~/ 2];
 
   /// Three options is a choice; six is a form. The lowest, then the middle
   /// of what is offered (RN).

@@ -25,5 +25,9 @@
   "low_balance": {
     "warning": "Low balance: you have about 5 minutes left. Recharge to continue.",
     "ended": "Call ended due to low balance."
+  },
+  "free_call": {
+    "ending": "Your free call ends in 30 seconds.",
+    "ended": "Your free call has ended."
   }
 }

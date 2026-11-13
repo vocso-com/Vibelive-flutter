@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/vibe_colors.dart';
 import '../../../core/utils/scale.dart';
+import '../../api/free_call/free_call_models.dart';
+import '../../api/free_call/free_call_queries.dart';
 import '../../api/listingflow/listing_models.dart';
 import '../../chatscreen/entry/chat_entry.dart';
 import '../../component/c_text.dart';
@@ -78,39 +81,50 @@ class ProfileCallActions extends StatelessWidget {
                 ],
               ),
             ),
-          ValueListenableBuilder<bool>(
-            valueListenable: controller.preparingCall,
-            builder: (_, busy, _) => Row(
-              children: [
-                if (showAudio)
-                  Expanded(
-                    child: ProfileCallButton(
-                      video: false,
-                      filled: !showVideo,
-                      busy: busy && !controller.pendingVideo,
-                      enabled: !busy && (isCompany || audioRate),
-                      label: isCompany ? 'host:call.audio' : null,
-                      price: host.aPrice,
-                      onTap: () => call(false),
-                    ),
-                  ),
-                if (showAudio && showVideo) SizedBox(width: 10.ms),
-                if (showVideo)
-                  Expanded(
-                    child: ProfileCallButton(
-                      video: true,
-                      filled: true,
-                      busy: busy && controller.pendingVideo,
-                      enabled: !busy,
-                      label: isCompany ? 'host:call.video' : null,
-                      price: host.vPrice,
-                      onTap: () => call(true),
-                    ),
-                  ),
-                if (!showAudio && !showVideo)
-                  const Expanded(child: ProfileCallsUnavailable()),
-              ],
-            ),
+          HookBuilder(
+            builder: (context) {
+              // A free call shows as one (docs/free_calls.md); never on the
+              // user's own profile.
+              final free = isMe
+                  ? FreeCallStatus.off
+                  : (useFreeCallStatus(context).data ?? FreeCallStatus.off);
+              return ValueListenableBuilder<bool>(
+                valueListenable: controller.preparingCall,
+                builder: (_, busy, _) => Row(
+                  children: [
+                    if (showAudio)
+                      Expanded(
+                        child: ProfileCallButton(
+                          video: false,
+                          filled: !showVideo,
+                          busy: busy && !controller.pendingVideo,
+                          enabled: !busy && (isCompany || audioRate),
+                          label: isCompany ? 'host:call.audio' : null,
+                          price: host.aPrice,
+                          free: ProfileCallButton.freeOf(free, video: false),
+                          onTap: () => call(false),
+                        ),
+                      ),
+                    if (showAudio && showVideo) SizedBox(width: 10.ms),
+                    if (showVideo)
+                      Expanded(
+                        child: ProfileCallButton(
+                          video: true,
+                          filled: true,
+                          busy: busy && controller.pendingVideo,
+                          enabled: !busy,
+                          label: isCompany ? 'host:call.video' : null,
+                          price: host.vPrice,
+                          free: ProfileCallButton.freeOf(free, video: true),
+                          onTap: () => call(true),
+                        ),
+                      ),
+                    if (!showAudio && !showVideo)
+                      const Expanded(child: ProfileCallsUnavailable()),
+                  ],
+                ),
+              );
+            },
           ),
           // Chat under the calls, when it is on and the host takes chats.
           ProfileChatButton(
@@ -135,7 +149,18 @@ class ProfileCallButton extends StatelessWidget {
     required this.label,
     required this.price,
     required this.onTap,
+    this.free,
   });
+
+  /// The terms a call of this type would start with when it is free
+  /// (docs/free_calls.md), else null.
+  static FreeCallTerms? freeOf(FreeCallStatus status, {required bool video}) =>
+      status.covers(video: video, talkNow: false)
+      ? FreeCallTerms(
+          minutes: status.minutes,
+          continuePaid: status.continuePaid,
+        )
+      : null;
 
   final bool video;
 
@@ -149,11 +174,16 @@ class ProfileCallButton extends StatelessWidget {
   final double price;
   final VoidCallback onTap;
 
+  /// Shown as a free call: "Free · N min", and the rate after it when the
+  /// call goes on paid.
+  final FreeCallTerms? free;
+
   @override
   Widget build(BuildContext context) {
     final c = context.colors;
     final dark = c.isDark;
     final fg = filled ? c.onAccent : c.text;
+    final freeCall = busy ? null : free;
     return Opacity(
       opacity: enabled ? 1 : 0.4,
       child: Pressable(
@@ -196,9 +226,22 @@ class ProfileCallButton extends StatelessWidget {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
+                    // A free call: what follows it, when it goes on paid.
+                    if (freeCall != null && freeCall.continuePaid && price > 0)
+                      CText(
+                        'host:call.free_then',
+                        variables: {'price': HostProfileRules.price(price)},
+                        size: 10.5,
+                        weight: FontWeight.w700,
+                        color: fg.withValues(alpha: 0.8),
+                        maxLines: 1,
+                      )
                     // A company calls for free, but still sees the host's
                     // rate above "Audio / Video Call".
-                    if (label != null && price > 0 && !busy)
+                    else if (freeCall == null &&
+                        label != null &&
+                        price > 0 &&
+                        !busy)
                       CText(
                         'host:call.rate',
                         variables: {'price': HostProfileRules.price(price)},
@@ -210,8 +253,13 @@ class ProfileCallButton extends StatelessWidget {
                     CText(
                       busy
                           ? 'host:call.connecting'
+                          : freeCall != null
+                          ? 'host:call.free'
                           : (label ?? 'host:call.rate'),
-                      variables: {'price': HostProfileRules.price(price)},
+                      variables: {
+                        'price': HostProfileRules.price(price),
+                        'minutes': '${freeCall?.minutes ?? 0}',
+                      },
                       size: 13,
                       weight: FontWeight.w900,
                       letterSpacing: 0.5,

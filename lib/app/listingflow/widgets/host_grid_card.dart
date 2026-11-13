@@ -5,6 +5,7 @@ import '../../../core/i18n/i18n.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/vibe_colors.dart';
 import '../../../core/utils/scale.dart';
+import '../../api/free_call/free_call_models.dart';
 import '../../api/listingflow/listing_models.dart';
 import '../../chatscreen/entry/chat_entry.dart';
 import '../../component/c_image.dart';
@@ -24,9 +25,14 @@ class HostGridCard extends StatelessWidget {
     required this.onTap,
     this.featured = false,
     this.onCall,
+    this.freeCall = FreeCallStatus.off,
   });
 
   final HostCard host;
+
+  /// The user's free calls (docs/free_calls.md): a call this card's price
+  /// is for that would start free shows "Free call" instead.
+  final FreeCallStatus freeCall;
   final bool featured;
   final ValueChanged<HostCard> onTap;
 
@@ -42,6 +48,8 @@ class HostGridCard extends StatelessWidget {
     final c = context.colors;
     final h = host;
     final price = h.aPrice > 0 ? h.aPrice : (h.vPrice > 0 ? h.vPrice : null);
+    final free =
+        price != null && freeCall.covers(video: h.aPrice <= 0, talkNow: false);
     final image = h.cardImage ?? (h.images.isEmpty ? null : h.images.first);
     final topics = h.topics.take(featured ? 2 : 1);
     final radius = BorderRadius.circular(featured ? 36.ms : 30.ms);
@@ -111,6 +119,8 @@ class HostGridCard extends StatelessWidget {
                             ),
                             text: busy != null
                                 ? context.t(busy.key, variables: busy.variables)
+                                : free
+                                ? context.t('home:card.free')
                                 : context.t(
                                     'home:card.price',
                                     variables: {'price': _price(price)},

@@ -3,49 +3,14 @@ import 'package:flutter/widgets.dart';
 import '../../../../core/analytics/events/payment_events.dart';
 import '../../../../core/config/runtime_config.dart';
 import '../../../api/paymentscreen/checkout_models.dart';
-import '../../../api/paymentscreen/wallet_models.dart';
 import '../widgets/abandon_offer_sheet.dart';
-import '../widgets/first_topup_sheet.dart';
 import 'first_topup_offer.dart';
 
-/// The wallet's two bonus prompts (RN WalletScreen). Both derive everything
-/// from config: with their flag off, or the percent at 0, they never show.
+/// The wallet's bonus prompt after an abandoned checkout (RN WalletScreen).
+/// It derives everything from config: with its flag off, or the percent at
+/// 0, it never shows. (The first-top-up offer is the app-open popup now:
+/// FirstTopupLaunch.)
 abstract final class WalletOffers {
-  /// First-top-up offer for someone who has never paid in. The amount they
-  /// picked, else null.
-  static Future<int?> firstTopup(
-    BuildContext context, {
-    required RuntimeConfig config,
-    required Iterable<WalletTransaction> history,
-  }) async {
-    final bonus = config.bonus;
-    if (!bonus.firstTopupOn || FirstTopupOffer.hasPaidTopup(history)) {
-      return null;
-    }
-    final percent = bonus.firstTopupBonusPercent;
-    if (!FirstTopupOffer.claimShow(enabled: true, percent: percent)) {
-      return null;
-    }
-    final options = FirstTopupOffer.options(config.presetAmounts);
-    PaymentEvents.firstTopupOfferShown(
-      percent: percent,
-      suggested: options.length > 1 ? options[1] : options.firstOrNull,
-    );
-    final chosen = await showFirstTopupSheet(
-      context,
-      percent: percent,
-      presets: config.presetAmounts,
-      voiceRate: config.pricing.minVoiceCallRate,
-    );
-    if (chosen == null) {
-      FirstTopupOffer.recordDismissal();
-      PaymentEvents.firstTopupOfferDismissed(percent: percent);
-      return null;
-    }
-    PaymentEvents.firstTopupOfferTapped(percent: percent, amount: chosen);
-    return chosen;
-  }
-
   /// Exit-intent offer right after a dismissed checkout, while the intent is
   /// still warm. The amount to check out again, else null.
   static Future<double?> afterAbandon(

@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:vibelive/app/api/callscreen/call_api.dart';
 import 'package:vibelive/app/api/callscreen/call_models.dart';
+import 'package:vibelive/app/api/free_call/free_call_models.dart';
 import 'package:vibelive/app/callscreen/helper/call_actions.dart';
 import 'package:vibelive/app/callscreen/helper/call_billing.dart';
 import 'package:vibelive/app/callscreen/helper/call_controller.dart';
@@ -127,6 +128,171 @@ void main() {
       await settle(50);
       expect(CallTimers.instance.isArmed(CallTimers.maxDuration), isFalse);
       expect(backend.to('GET', '/api/wallets'), isEmpty);
+    });
+  });
+
+  group('free calls (docs/free_calls.md)', () {
+    const twoFree = FreeCallTerms(minutes: 2, continuePaid: false);
+    const twoThenPaid = FreeCallTerms(minutes: 2);
+
+    test('ending at the free limit: 5 s inside it, warned 30 s before', () {
+      final cap = MaxDuration.compute(
+        cashBalance: 500,
+        ratePerMin: 4,
+        free: twoFree,
+      )!;
+      expect(cap.end, const Duration(seconds: 115));
+      expect(cap.warnAt, const Duration(seconds: 85));
+      expect(cap.freeLimit, isTrue);
+    });
+
+    test('going on paid: the free minutes, then what the cash pays for', () {
+      final cap = MaxDuration.compute(
+        cashBalance: 9,
+        ratePerMin: 4,
+        free: twoThenPaid,
+      )!;
+      // 2 free + 2 paid minutes, 20 s inside the last as any paid call.
+      expect(cap.end, const Duration(seconds: 220));
+      expect(cap.freeLimit, isFalse);
+      // Nothing to pay with: it ends at the free limit after all.
+      final broke = MaxDuration.compute(
+        cashBalance: 3,
+        ratePerMin: 4,
+        free: twoThenPaid,
+      )!;
+      expect(broke.end, const Duration(seconds: 115));
+      expect(broke.freeLimit, isTrue);
+    });
+
+    test('a company caller or an unpriced call: capped only when it stops', () {
+      expect(
+        MaxDuration.compute(
+          cashBalance: 0,
+          ratePerMin: 4,
+          company: true,
+          free: twoThenPaid,
+        ),
+        isNull,
+      );
+      expect(
+        MaxDuration.compute(
+          cashBalance: 0,
+          ratePerMin: 4,
+          company: true,
+          free: twoFree,
+        )!.end,
+        const Duration(seconds: 115),
+      );
+      expect(
+        MaxDuration.compute(cashBalance: 0, ratePerMin: 0, free: twoThenPaid),
+        isNull,
+      );
+      expect(
+        MaxDuration.compute(cashBalance: 0, ratePerMin: 0, free: twoFree)!.end,
+        const Duration(seconds: 115),
+      );
+    });
+
+    test('armed with no balance read when nothing is paid after', () async {
+      backend.cash = 0;
+      CallBilling.rememberRate('77', 10);
+      CallBilling.rememberFree('77', twoFree);
+      calls.startOutgoing(
+        const CallSession(callId: '77', callerId: '9', receiverId: '5'),
+      );
+      calls
+        ..setAccepted()
+        ..setConnected();
+      await settle(50);
+      expect(backend.to('GET', '/api/wallets'), isEmpty);
+      expect(CallTimers.instance.isArmed(CallTimers.maxDuration), isTrue);
+      expect(CallTimers.instance.isArmed(CallTimers.lowBalance), isTrue);
+      expect(CallBilling.freeFor('77'), twoFree);
+    });
+
+    test('at the free limit: hung up with the free-call words', () async {
+      CallBilling.rememberRate('77', 10);
+      CallBilling.rememberFree('77', const FreeCallTerms(minutes: 0));
+      expect(CallBilling.freeFor('77'), isNull, reason: 'no free minutes');
+      CallBilling.rememberFree('77', twoFree);
+      calls.startOutgoing(
+        const CallSession(callId: '77', callerId: '9', receiverId: '5'),
+      );
+      calls
+        ..setAccepted()
+        ..setConnected();
+      await settle(50);
+      // Two minutes on: armed again from there, the limit is already past.
+      var ended = 0;
+      await CallBilling.arm(
+        calls.value.copyWith(
+          connectedAt: DateTime.now().subtract(const Duration(minutes: 2)),
+        ),
+        onLimit: () => ended++,
+      );
+      await settle(20);
+      expect(ended, 1);
+      expect(alertLog(), contains('toast|callflow:free_call.ended'));
+      expect(alertLog(), isNot(contains('toast|callflow:low_balance.ended')));
+      CallBilling.forget('77');
+      expect(CallBilling.freeFor('77'), isNull);
+    });
+
+    test('a later answer can take the free terms back', () {
+      CallBilling.rememberFree('s1', twoFree);
+      CallBilling.rememberFree('s1', null);
+      expect(CallBilling.freeFor('s1'), isNull);
+    });
+
+    test('terms and status read from the server', () {
+      expect(FreeCallTerms.tryParse(null), isNull);
+      expect(FreeCallTerms.tryParse({'minutes': 0}), isNull);
+      expect(
+        FreeCallTerms.tryParse({'minutes': 3, 'continuePaid': false}),
+        const FreeCallTerms(minutes: 3, continuePaid: false),
+      );
+      expect(FreeCallTerms.of('2', 'true'), twoThenPaid);
+      expect(FreeCallTerms.of('2', null), twoThenPaid);
+      expect(FreeCallTerms.of(null, 'false'), isNull);
+
+      final call = InitiatedCall.tryParse({
+        'callDetails': {'id': 5},
+        'channelName': 'c',
+        'callerToken': 't',
+        'freeCall': {'minutes': 2, 'continuePaid': false},
+      })!;
+      expect(call.freeCall, twoFree);
+      expect(
+        InitiatedCall.tryParse({
+          'callDetails': {'id': 5},
+          'channelName': 'c',
+          'callerToken': 't',
+        })!.freeCall,
+        isNull,
+      );
+
+      final status = FreeCallStatus.fromJson(const {
+        'available': true,
+        'callsLeft': 1,
+        'minutes': 2,
+        'voice': true,
+        'video': false,
+        'normal': true,
+        'talkNow': false,
+      });
+      expect(status.covers(video: false, talkNow: false), isTrue);
+      expect(status.covers(video: true, talkNow: false), isFalse);
+      expect(status.covers(video: false, talkNow: true), isFalse);
+      expect(
+        FreeCallStatus.fromJson(const {
+          'available': true,
+          'callsLeft': 0,
+          'minutes': 2,
+        }).available,
+        isFalse,
+      );
+      expect(FreeCallStatus.fromJson(const {}).available, isFalse);
     });
   });
 

@@ -241,6 +241,8 @@ abstract final class OutgoingFlow {
     );
     final rate = r.ratePerMin;
     if (rate != null) CallBilling.rememberRate(started.callId, rate);
+    // A free call (docs/free_calls.md): its free minutes come before any cap.
+    CallBilling.rememberFree(started.callId, started.freeCall);
     CallController.instance.startOutgoing(call);
     // Android: the ongoing-call service must start while the app is in
     // front (Android 12+ refuses it from the background).

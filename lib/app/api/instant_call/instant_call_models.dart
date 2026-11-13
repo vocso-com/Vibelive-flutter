@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 
 import '../../../core/network/strapi.dart';
+import '../free_call/free_call_models.dart';
 
 enum InstantCallSessionStatus {
   searching,
@@ -66,6 +67,7 @@ class InitiatedInstantCall {
     this.callerRate,
     this.firstHost,
     this.firstHostBusy = false,
+    this.freeCall,
   });
 
   final String sessionId;
@@ -81,6 +83,10 @@ class InitiatedInstantCall {
 
   /// ₹/min the caller pays for Talk Now (the config's caller rate).
   final double? callerRate;
+
+  /// The search may start free (docs/free_calls.md). The answer decides:
+  /// the connected push / status says whether the call itself is free.
+  final FreeCallTerms? freeCall;
 
   static InitiatedInstantCall? tryParse(Map<String, dynamic> body) {
     final sessionId = J.str(body['sessionId']);
@@ -113,6 +119,7 @@ class InitiatedInstantCall {
           ? InstantCallHost.fromJson(first)
           : null,
       firstHostBusy: first is Map && J.boolean(first['busy']),
+      freeCall: FreeCallTerms.tryParse(body['freeCall']),
     );
   }
 }
@@ -126,6 +133,7 @@ class InstantConnectedCall {
     this.hostUserId,
     this.hostName,
     this.callStatus,
+    this.freeCall,
   });
 
   final String callId;
@@ -134,6 +142,9 @@ class InstantConnectedCall {
 
   /// `pending` until the caller confirms the connection, then `ongoing`.
   final String? callStatus;
+
+  /// The call record is a free call (docs/free_calls.md); null: paid.
+  final FreeCallTerms? freeCall;
 
   static InstantConnectedCall? tryParse(Map<String, dynamic>? body) {
     final call = body?['connectedCall'];
@@ -145,6 +156,7 @@ class InstantConnectedCall {
       callStatus: call is Map ? J.str(call['status']) : null,
       hostUserId: host is Map ? J.str(host['userId']) : null,
       hostName: host is Map ? J.str(host['name']) : null,
+      freeCall: call is Map ? FreeCallTerms.tryParse(call['freeCall']) : null,
     );
   }
 }

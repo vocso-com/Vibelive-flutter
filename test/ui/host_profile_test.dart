@@ -102,6 +102,9 @@ class _Backend implements HttpClientAdapter {
   bool vibesOn = false;
   List<Map<String, Object?>> vibes = const [];
   double cash = 1000;
+
+  /// GET /free-call/status (docs/free_calls.md); null: none.
+  Map<String, Object?>? freeCall;
   final requests = <String>[];
   final reviewPages = <int>[];
   final posted = <String, Object?>{};
@@ -168,6 +171,8 @@ class _Backend implements HttpClientAdapter {
         };
       case 'GET /api/host-statuses/host/exp7':
         return {'results': vibes};
+      case 'GET /api/free-call/status':
+        return freeCall ?? {'available': false, 'callsLeft': 0};
       case 'GET /api/report-categories':
         return {
           'data': [
@@ -439,6 +444,58 @@ void main() {
     await tester.tap(find.text('ADD ₹90'));
     await _pump(tester, 800);
     expect(find.text('WALLET PAGE'), findsOneWidget);
+    await finish(tester);
+  });
+
+  testWidgets('a free call: shown on both buttons, and no balance needed', (
+    tester,
+  ) async {
+    backend.cash = 0;
+    backend.freeCall = {
+      'available': true,
+      'callsLeft': 1,
+      'minutes': 2,
+      'voice': true,
+      'video': true,
+      'normal': true,
+      'talkNow': true,
+      'continuePaid': true,
+    };
+    await open(tester);
+
+    expect(find.text('Free · 2 min'), findsNWidgets(2));
+    expect(find.text('then ₹20/min'), findsOneWidget);
+    expect(find.text('then ₹30/min'), findsOneWidget);
+    await _tap(tester, find.text('then ₹20/min'));
+    await _pump(tester, 400);
+    expect(find.text('Before you connect'), findsOneWidget);
+    expect(find.textContaining('Add ₹'), findsNothing);
+    await finish(tester);
+  });
+
+  testWidgets('free on voice only: video keeps its price and its gate', (
+    tester,
+  ) async {
+    backend.cash = 0;
+    backend.freeCall = {
+      'available': true,
+      'callsLeft': 1,
+      'minutes': 3,
+      'voice': true,
+      'video': false,
+      'continuePaid': false,
+    };
+    await open(tester);
+
+    expect(find.text('Free · 3 min'), findsOneWidget);
+    expect(
+      find.textContaining('then ₹'),
+      findsNothing,
+      reason: 'it ends at the free limit',
+    );
+    await _tap(tester, find.text('₹30/min'));
+    await _pump(tester, 400);
+    expect(find.text('Calls start with 5 minutes at ₹30/min'), findsOneWidget);
     await finish(tester);
   });
 

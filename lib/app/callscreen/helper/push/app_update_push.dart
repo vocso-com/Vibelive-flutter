@@ -4,6 +4,7 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import '../../../../core/query/query_hooks.dart';
 import '../../../../core/utils/log.dart';
 import '../../../api/chat/chat_queries.dart';
+import '../../../api/free_call/free_call_queries.dart';
 import '../../../api/host_status/host_status_queries.dart';
 import '../../../api/hosthub/hosthub_keys.dart';
 import '../../../api/promo_banner/promo_banner_queries.dart';
@@ -49,6 +50,12 @@ abstract final class AppUpdatePush {
       }
       if (scope?.toLowerCase() == 'chat') {
         invalidateChatConfig();
+        return;
+      }
+      // Free calls changed (docs/free_calls.md): re-read whether this user
+      // has one, so "Free call" shows or goes at once.
+      if (scope?.toLowerCase() == 'free_call') {
+        invalidateFreeCallStatus();
         return;
       }
       // Backend call pricing changed (admin turned it on, set a level): re-read

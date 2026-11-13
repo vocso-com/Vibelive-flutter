@@ -118,6 +118,14 @@ abstract final class CallTimings {
 
   /// Low-balance toast this long before the end (server warns at 300 s).
   static const lowBalanceWarning = Duration(minutes: 5);
+
+  /// A free call that stops at its free limit ends this much before it by
+  /// our clock (docs/free_calls.md): the server's clock started a moment
+  /// earlier, and it counts a further 15 s past the limit as free.
+  static const freeEndMargin = Duration(seconds: 5);
+
+  /// "Free call ends soon" this long before a free call's end.
+  static const freeEndWarning = Duration(seconds: 30);
 }
 
 /// Fixed request values copied from RN.

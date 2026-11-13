@@ -11,6 +11,7 @@ import '../../../../core/router/app_router.dart';
 import '../../../../core/session/session_store.dart';
 import '../../../../core/utils/log.dart';
 import '../../../api/client/client_queries.dart';
+import '../../../api/free_call/free_call_queries.dart';
 import '../../../api/listingflow/listing_models.dart';
 import '../../../api/paymentscreen/payment_queries.dart';
 import '../../../api/paymentscreen/runtime_config_queries.dart';
@@ -211,6 +212,9 @@ class HostProfileController {
       return false;
     }
 
+    // Whether this call starts free (docs/free_calls.md): read alongside.
+    // Off when unknown, so the balance gate works as before.
+    final freeCall = ensureFreeCallStatus();
     // Started now so it overlaps the profile read. A failed read lets the
     // call through (RN fails open: the wallet never blocks a call).
     final wallet = ensureWalletBalance(userDocumentId: uid)
@@ -249,7 +253,9 @@ class HostProfileController {
     }
 
     final rate = video ? host.vPrice : host.aPrice;
-    if (!company && rate > 0) {
+    // A free call needs no balance to start: the server checks the same.
+    final free = (await freeCall).covers(video: video, talkNow: false);
+    if (!company && rate > 0 && !free) {
       final balance = await wallet;
       // The minimum comes from config (cached, fallback 5 min); a stale
       // block is re-read in the background for the next call.
@@ -306,7 +312,10 @@ class HostProfileController {
       return false;
     }
     if (_disposed) return false;
-    precheck('passed', enoughBalance: company || rate <= 0 ? null : true);
+    precheck(
+      free ? 'passed_free' : 'passed',
+      enoughBalance: company || rate <= 0 || free ? null : true,
+    );
     close();
     await handOff(host, video);
     return true;

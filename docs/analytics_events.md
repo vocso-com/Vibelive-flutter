@@ -250,7 +250,7 @@ Helpers: `lib/core/analytics/events/discover_events.dart` (`DiscoverEvents`). Al
 | profile_shared | share via OS / copy link / QR (top bar sheet or photo preview) | host_id, method (system/copy_link/qr) | Firebase recommended `share` {method, content_type=host_profile, item_id} |
 | profile_link_tapped | social / website link (chips, influencer sheet) | host_id, kind (instagram/facebook/snapchat/website), source, opened | |
 | call_button_tapped | audio / video button on profile | host_id, call_type, rate, source, is_company | |
-| call_precheck_result | where pre-call checks ended | host_id, call_type, result (passed/own_profile/signed_out/incomplete_profile/balance_gate/safety_cancelled), enough_balance | |
+| call_precheck_result | where pre-call checks ended | host_id, call_type, result (passed/passed_free/own_profile/signed_out/incomplete_profile/balance_gate/safety_cancelled; passed_free = a free call, no balance gate, docs/free_calls.md), enough_balance | |
 | call_prompt_answered | login / update-profile alert before a call | prompt (login/update_profile), accepted | |
 | balance_gate_shown / balance_gate_topup_tapped | (existing, RN parity) | expert_id, required, balance, gap / suggested_amount | |
 | balance_gate_transfer_tapped | gate's Transfer earnings | expert_id, gap | (transfer sheet opened with source=balance_gate) |
