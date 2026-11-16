@@ -16,6 +16,7 @@ class PushEnvelope {
     this.sentAt,
     this.hasNotification = false,
     this.notificationId,
+    this.imageUrl,
   });
 
   /// FCM message. [sentAt] is the envelope's `sentTime`, else the data's own
@@ -29,6 +30,11 @@ class PushEnvelope {
       messageId: message.messageId,
       sentAt: message.sentTime ?? timestampOf(data),
       hasNotification: message.notification != null,
+      imageUrl:
+          _https(message.notification?.android?.imageUrl) ??
+          _https(message.notification?.apple?.imageUrl) ??
+          _https(data['imageUrl']) ??
+          _https(data['image']),
     );
   }
 
@@ -64,6 +70,10 @@ class PushEnvelope {
 
   /// The local notification id this came from (taps on our own banners).
   final String? notificationId;
+
+  /// The notification's picture (FCM `notification.image`), when it has one:
+  /// drawn as a big picture when the app shows the notification itself.
+  final String? imageUrl;
 
   /// `data.type`, lowercased.
   String get type => (data['type'] ?? '').toLowerCase();
@@ -123,6 +133,7 @@ class PushEnvelope {
     sentAt: sentAt,
     hasNotification: hasNotification,
     notificationId: notificationId ?? this.notificationId,
+    imageUrl: imageUrl,
   );
 
   /// The JSON payload attached to every local notification the app shows.
@@ -178,6 +189,11 @@ class PushEnvelope {
       return DateTime.fromMillisecondsSinceEpoch(ms);
     }
     return null;
+  }
+
+  static String? _https(Object? v) {
+    final s = _text(v);
+    return s != null && s.toLowerCase().startsWith('https://') ? s : null;
   }
 
   static String? _text(Object? v) {

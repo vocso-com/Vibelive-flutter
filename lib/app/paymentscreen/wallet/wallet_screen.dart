@@ -18,6 +18,7 @@ import '../../../core/session/session_store.dart';
 import '../../../core/utils/log.dart';
 import '../../../core/utils/scale.dart';
 import '../../api/client/client_queries.dart';
+import '../../api/paymentscreen/transaction_api.dart';
 import '../../api/paymentscreen/checkout_models.dart';
 import '../../api/paymentscreen/payment_queries.dart';
 import '../../api/paymentscreen/runtime_config_queries.dart';
@@ -136,6 +137,35 @@ class WalletScreen extends HookWidget {
       return usable ? st.rows : null;
     }
 
+    /// The bonus this top-up gets. The history may not be loaded yet (the
+    /// call balance gate opens Add Money on the wallet's first frame): then
+    /// the server says whether this user ever paid, as the app-open offer
+    /// asks it, so the first-top-up bonus shows the same from every way in.
+    Future<TopUpBonus?> bonusFor({required bool comeback}) async {
+      final history = paidHistory();
+      // Early (the gate's path): the settings as fresh as the offer reads them.
+      final config = history == null
+          ? await ensureFreshRuntimeConfig()
+          : configRef.value;
+      bool? paidBefore;
+      if (history == null && config.bonus.firstTopupOn) {
+        final uid = SessionStore.instance.value.userDocumentId;
+        if (uid != null) {
+          try {
+            paidBefore = await TransactionApi.hasPaidTopup(uid);
+          } catch (e) {
+            Log.w(_tag, 'paid-before check failed, no first-top-up bonus: $e');
+          }
+        }
+      }
+      return TopUpBonus.resolve(
+        config: config,
+        history: history,
+        comeback: comeback,
+        paidBefore: paidBefore,
+      );
+    }
+
     /// [source]: what opened Add Money (analytics).
     Future<void> addMoney({
       double? initialAmount,
@@ -148,17 +178,15 @@ class WalletScreen extends HookWidget {
         return profileIncomplete('payment:wallet.incomplete_add');
       }
       PayerInfo payer() => PayerInfo.fromUser(userRef.value);
+      final bonus = await bonusFor(comeback: comeback);
+      if (!context.mounted) return;
       final exit = await showAddMoney(
         context,
         flow: flow,
         payer: payer,
         initialAmount: initialAmount,
         source: source,
-        bonus: TopUpBonus.resolve(
-          config: configRef.value,
-          history: paidHistory(),
-          comeback: comeback,
-        ),
+        bonus: bonus,
       );
       if (exit == null || !context.mounted) return;
       final order = exit.checkout;

@@ -27,6 +27,7 @@ abstract final class CampaignPush {
         notificationId: id,
       ),
       channelId: NotificationChannels.campaigns,
+      imageUrl: m.imageUrl,
     );
   }
 

@@ -176,5 +176,33 @@ void main() {
       await pumpFor(tester, 50);
       await finishHost(tester);
     });
+
+    testWidgets('"Log in again" asks in the panel itself (a dialog would open '
+        'behind it), then signs out', (tester) async {
+      await open(tester);
+      SessionHealth.instance.value = SessionIssue.rejected;
+      await pumpFor(tester, 100);
+
+      // Cancel goes back to Retry.
+      await tester.tap(find.text('Log in again'));
+      await pumpFor(tester, 100);
+      expect(find.text('Are you sure you want to logout?'), findsOneWidget);
+      expect(find.byType(Dialog), findsNothing);
+      await tester.tap(find.byKey(const ValueKey('session-issue-cancel')));
+      await pumpFor(tester, 100);
+      expect(find.text('RETRY'), findsOneWidget);
+
+      // Logout: signed out, the panel goes with the session.
+      await tester.tap(find.text('Log in again'));
+      await pumpFor(tester, 100);
+      await tester.tap(find.byKey(const ValueKey('session-issue-logout')));
+      await pumpFor(tester, 9000);
+      expect(SessionStore.instance.value.isAuthenticated, isFalse);
+      expect(find.text("Couldn't refresh your session"), findsNothing);
+      expect(find.text('HOME'), findsOneWidget);
+      SessionHealth.instance.debugReset();
+      ApiClient.resetLogoutFlag();
+      await finishHost(tester);
+    });
   });
 }

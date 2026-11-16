@@ -1,5 +1,10 @@
-import 'dart:io' show Platform;
+import 'dart:async';
+import 'dart:io' show File, HttpClient, Platform;
+import 'dart:typed_data';
 import 'dart:ui' show Color;
+
+import 'package:flutter/foundation.dart' show visibleForTesting;
+import 'package:path_provider/path_provider.dart';
 
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
@@ -61,8 +66,15 @@ abstract final class LocalNotifier {
     required PushEnvelope envelope,
     required String channelId,
     bool autoCancel = true,
+    String? imageUrl,
   }) async {
     if (!_initialised) await init();
+    // A picture (a campaign's or an admin test's): shown big when it can be
+    // fetched in a few seconds; otherwise the plain notification, as before.
+    final picture = imageUrl == null ? null : await fetchImage(imageUrl);
+    final attachment = picture == null || !Platform.isIOS
+        ? null
+        : await _attachmentFile(id, imageUrl!, picture);
     final details = NotificationDetails(
       android: AndroidNotificationDetails(
         channelId,
@@ -75,13 +87,25 @@ abstract final class LocalNotifier {
         autoCancel: autoCancel,
         showWhen: true,
         visibility: NotificationVisibility.public,
+        largeIcon: picture == null ? null : ByteArrayAndroidBitmap(picture),
+        styleInformation: picture == null
+            ? null
+            : BigPictureStyleInformation(
+                ByteArrayAndroidBitmap(picture),
+                contentTitle: title,
+                summaryText: body,
+                hideExpandedLargeIcon: true,
+              ),
       ),
-      iOS: const DarwinNotificationDetails(
+      iOS: DarwinNotificationDetails(
         presentAlert: true,
         presentBanner: true,
         presentList: true,
         presentBadge: true,
         presentSound: true,
+        attachments: attachment == null
+            ? null
+            : [DarwinNotificationAttachment(attachment)],
       ),
     );
     try {
@@ -94,6 +118,55 @@ abstract final class LocalNotifier {
       );
     } catch (e) {
       Log.w('LocalNotifier', 'show $id failed: $e');
+    }
+  }
+
+  /// Fetches a notification picture: https only, a few seconds and 2 MB at
+  /// most; null on anything else (tests swap it).
+  @visibleForTesting
+  static Future<Uint8List?> Function(String url) fetchImage = _download;
+
+  static Future<Uint8List?> _download(String url) async {
+    final uri = Uri.tryParse(url);
+    if (uri == null || uri.scheme != 'https') return null;
+    final client = HttpClient()..connectionTimeout = const Duration(seconds: 5);
+    try {
+      final request = await client
+          .getUrl(uri)
+          .timeout(const Duration(seconds: 5));
+      final response = await request.close().timeout(
+        const Duration(seconds: 6),
+      );
+      if (response.statusCode != 200) return null;
+      final bytes = BytesBuilder(copy: false);
+      await for (final chunk in response.timeout(const Duration(seconds: 6))) {
+        bytes.add(chunk);
+        if (bytes.length > 2 * 1024 * 1024) return null;
+      }
+      return bytes.isEmpty ? null : bytes.takeBytes();
+    } catch (e) {
+      Log.d('LocalNotifier', 'picture not fetched: $e');
+      return null;
+    } finally {
+      client.close(force: true);
+    }
+  }
+
+  /// iOS shows a picture from a file: written to the temp folder.
+  static Future<String?> _attachmentFile(
+    String id,
+    String url,
+    Uint8List bytes,
+  ) async {
+    try {
+      final dir = await getTemporaryDirectory();
+      final ext = url.toLowerCase().contains('.png') ? 'png' : 'jpg';
+      final file = File('${dir.path}/push_${idFor(id)}.$ext');
+      await file.writeAsBytes(bytes, flush: true);
+      return file.path;
+    } catch (e) {
+      Log.d('LocalNotifier', 'picture not attached: $e');
+      return null;
     }
   }
 

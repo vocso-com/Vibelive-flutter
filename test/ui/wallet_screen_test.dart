@@ -274,6 +274,7 @@ void main() {
     Size size = const Size(390, 844),
     bool dark = true,
     bool settle = true,
+    double? prefill,
   }) async {
     tester.view
       ..physicalSize = size * 3
@@ -286,7 +287,7 @@ void main() {
       routes: [
         GoRoute(
           path: AppRoutes.wallet,
-          builder: (_, _) => const WalletScreen(),
+          builder: (_, _) => WalletScreen(prefillAmount: prefill),
         ),
         for (final (path, label) in const [
           (AppRoutes.home, 'HOME PAGE'),
@@ -558,6 +559,29 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('add-money-amount-1000')));
     await _pump(tester, 300);
     expect(find.text('Pay ₹1,180'), findsOneWidget);
+    await finish(tester);
+  });
+
+  testWidgets('from the call balance gate (Add Money at once, history not '
+      'loaded yet): the first-top-up bonus still shows', (tester) async {
+    backend
+      ..firstTopupPercent = 50
+      ..totalTx = 0; // never paid in
+    await open(tester, prefill: 200, settle: false);
+    await _pump(tester, 900);
+    expect(find.byKey(const ValueKey('add-money-bonus')), findsOneWidget);
+    expect(find.text('+50% EXTRA'), findsOneWidget);
+    await finish(tester);
+  });
+
+  testWidgets('from the call balance gate, paid before: no first-top-up '
+      'bonus', (tester) async {
+    backend
+      ..firstTopupPercent = 50
+      ..totalTx = 3;
+    await open(tester, prefill: 200, settle: false);
+    await _pump(tester, 900);
+    expect(find.byKey(const ValueKey('add-money-bonus')), findsNothing);
     await finish(tester);
   });
 

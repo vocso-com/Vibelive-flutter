@@ -10,7 +10,6 @@ import '../../core/theme/vibe_colors.dart';
 import '../../core/utils/scale.dart';
 import '../api/authscreen/auth_queries.dart';
 import '../callscreen/helper/call_controller.dart';
-import '../component/c_alert.dart';
 import '../component/c_button.dart';
 import '../component/c_text.dart';
 import '../component/pressable.dart';
@@ -64,6 +63,12 @@ class _IssuePanelState extends State<_IssuePanel> {
   static const autoRetry = Duration(seconds: 20);
 
   bool _busy = false;
+
+  /// "Log in again" asked to be sure, in this panel: the panel sits over the
+  /// app's navigator (MaterialApp.builder), so a dialog would open BEHIND it
+  /// and the button looked dead.
+  bool _confirming = false;
+  bool _signingOut = false;
   Timer? _timer;
 
   @override
@@ -92,14 +97,16 @@ class _IssuePanelState extends State<_IssuePanel> {
     if (mounted && !quiet) setState(() => _busy = false);
   }
 
-  Future<void> _logInAgain() async {
-    final ok = await CAlert.confirm(
-      title: 'resources:logout.title',
-      message: 'resources:logout.message',
-      confirmLabel: 'resources:logout.confirm',
-      variant: CAlertVariant.error,
-    );
-    if (ok) await logout();
+  /// Signs out (server cleanup best effort, 8 s at most, then always local):
+  /// the panel goes with the session and the app opens on Login.
+  Future<void> _logOut() async {
+    if (_signingOut) return;
+    setState(() => _signingOut = true);
+    try {
+      await logout();
+    } finally {
+      if (mounted) setState(() => _signingOut = false);
+    }
   }
 
   @override
@@ -139,7 +146,9 @@ class _IssuePanelState extends State<_IssuePanel> {
                   ),
                   SizedBox(height: 16.ms),
                   CText(
-                    'session_issue.${prefix}_title',
+                    _confirming
+                        ? 'resources:logout.title'
+                        : 'session_issue.${prefix}_title',
                     size: 19,
                     weight: FontWeight.w800,
                     color: c.modalText,
@@ -147,7 +156,9 @@ class _IssuePanelState extends State<_IssuePanel> {
                   ),
                   SizedBox(height: 8.ms),
                   CText(
-                    'session_issue.${prefix}_body',
+                    _confirming
+                        ? 'resources:logout.message'
+                        : 'session_issue.${prefix}_body',
                     size: 14,
                     height: 20,
                     weight: FontWeight.w500,
@@ -155,27 +166,55 @@ class _IssuePanelState extends State<_IssuePanel> {
                     align: TextAlign.center,
                   ),
                   SizedBox(height: 20.ms),
-                  CButton(
-                    title: 'session_issue.retry',
-                    loading: _busy,
-                    showArrow: false,
-                    onPressed: _retry,
-                  ),
-                  if (refused) ...[
+                  if (_confirming) ...[
+                    CButton(
+                      key: const ValueKey('session-issue-logout'),
+                      title: 'resources:logout.confirm',
+                      loading: _signingOut,
+                      showArrow: false,
+                      onPressed: _logOut,
+                    ),
                     SizedBox(height: 6.ms),
                     Pressable(
-                      onPressed: _logInAgain,
+                      key: const ValueKey('session-issue-cancel'),
+                      onPressed: _signingOut
+                          ? null
+                          : () => setState(() => _confirming = false),
                       hitPadding: EdgeInsets.all(6.ms),
                       child: Padding(
                         padding: EdgeInsets.symmetric(vertical: 10.ms),
                         child: CText(
-                          'session_issue.log_in_again',
+                          'actions.cancel',
                           size: 14,
                           weight: FontWeight.w700,
                           color: c.modalMuted,
                         ),
                       ),
                     ),
+                  ] else ...[
+                    CButton(
+                      title: 'session_issue.retry',
+                      loading: _busy,
+                      showArrow: false,
+                      onPressed: _retry,
+                    ),
+                    if (refused) ...[
+                      SizedBox(height: 6.ms),
+                      Pressable(
+                        key: const ValueKey('session-issue-log-in-again'),
+                        onPressed: () => setState(() => _confirming = true),
+                        hitPadding: EdgeInsets.all(6.ms),
+                        child: Padding(
+                          padding: EdgeInsets.symmetric(vertical: 10.ms),
+                          child: CText(
+                            'session_issue.log_in_again',
+                            size: 14,
+                            weight: FontWeight.w700,
+                            color: c.modalMuted,
+                          ),
+                        ),
+                      ),
+                    ],
                   ],
                 ],
               ),
