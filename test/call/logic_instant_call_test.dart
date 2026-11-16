@@ -61,7 +61,7 @@ void main() {
   tearDown(resetCallState);
 
   group('the ring', () {
-    test('a Talk Now ring says so; nothing to ack', () async {
+    test('a Talk Now ring says so, and acks with the session id', () async {
       final p = CallPayload.parse(talkNowRing())!;
       expect(p.session.isInstantCall, isTrue);
       expect(p.session.instantCallSessionId, 'sess1');
@@ -69,7 +69,18 @@ void main() {
 
       await CallSignals.onInvite(talkNowRing(), foreground: false);
       await settle(200);
-      expect(backend.to('POST', ack), isEmpty);
+      // The backend records "rang on phone" for this host on the session.
+      expect(backend.to('POST', ack), hasLength(1));
+      expect(backend.lastBody('POST', ack)['callId'], 'sess1');
+    });
+
+    test('with the app open, a Talk Now ring still acks (once)', () async {
+      await CallSignals.onInvite(talkNowRing(), foreground: true);
+      await settle(200);
+      await CallSignals.onInvite(talkNowRing(), foreground: true);
+      await settle(200);
+      expect(backend.to('POST', ack), hasLength(1));
+      expect(backend.lastBody('POST', ack)['callId'], 'sess1');
     });
 
     test('an end with only the session id stops the ring', () async {

@@ -146,8 +146,9 @@ abstract final class PushFlow {
     final callId = s.callId;
     final receiverId = s.receiverId ?? CallIdentity.userId;
     if (callId == null || receiverId == null) return;
-    // Talk Now: the ring is a session, not a call record (nothing to ack).
-    if (s.isInstantCall) return;
+    // Talk Now too: its callId is the search session's id, and the backend
+    // records "rang on phone" for this host (admin's ring proof). Without it
+    // a ring shown with the app open read as "Sent to phone, not proof".
     if (!CallDedup.instance.beginAck(callId)) return;
     unawaited(
       CallRequests.sendRingingAck(
