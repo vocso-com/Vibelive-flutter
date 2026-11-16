@@ -195,6 +195,8 @@ abstract final class PushRouter {
           body: m.body,
           envelope: m,
           channelId: NotificationChannels.general,
+          // An admin's bulk push may carry a picture.
+          imageUrl: m.imageUrl,
         );
       case PushKind.heartbeat:
       case PushKind.call:
