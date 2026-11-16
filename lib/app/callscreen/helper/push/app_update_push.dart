@@ -5,6 +5,8 @@ import '../../../../core/query/query_hooks.dart';
 import '../../../../core/utils/log.dart';
 import '../../../api/chat/chat_queries.dart';
 import '../../../api/free_call/free_call_queries.dart';
+import '../../../api/hosthub/call_pricing_queries.dart';
+import '../../../api/hosthub/training_queries.dart';
 import '../../../api/host_status/host_status_queries.dart';
 import '../../../api/hosthub/hosthub_keys.dart';
 import '../../../api/promo_banner/promo_banner_queries.dart';
@@ -58,11 +60,18 @@ abstract final class AppUpdatePush {
         invalidateFreeCallStatus();
         return;
       }
+      // Host onboarding training changed (docs/host_onboarding.md): re-read
+      // the steps and clips before the next onboarding screen asks.
+      if (scope?.toLowerCase() == 'host_onboarding') {
+        invalidateHostTraining();
+        return;
+      }
       // Backend call pricing changed (admin turned it on, set a level): re-read
       // the host's own profile so the rate screen flips to / from read-only
       // earnings without a reinstall (call_pricing §7.3).
       if (scope?.toLowerCase() == 'call_pricing') {
         queryCache.invalidateAll(const [HostHubKeys.profileAll]);
+        invalidateMyCallPricing();
         return;
       }
       // The admin's settings: the config itself, then what reads it (the

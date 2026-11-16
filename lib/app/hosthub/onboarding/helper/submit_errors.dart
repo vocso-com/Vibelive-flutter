@@ -58,6 +58,9 @@ abstract final class HostSubmitErrors {
     return details is Map && details['code'] == 'HOST_PROFILE_EXISTS';
   }
 
+  /// The server refused the handle (unique): another profile holds it.
+  static bool isHandleTaken(ApiException e) => _field(e) == 'handler';
+
   /// The step to go back to, or null when the error isn't about a field.
   static HostStep? stepFor(ApiException e) {
     final field = _field(e);

@@ -1,6 +1,8 @@
 import 'package:flutter/widgets.dart';
 
+import '../../../api/hosthub/handle_api.dart';
 import '../../../api/hosthub/hosthub_queries.dart';
+import '../../../../core/utils/log.dart';
 import '../../../component/c_toast.dart';
 import 'draft_controller.dart';
 import 'host_funnel.dart';
@@ -22,6 +24,7 @@ class HostFlowController {
     this.existingHost,
     this.funnel,
     this.skip,
+    this.training,
   });
 
   final HostDraftController draft;
@@ -55,6 +58,19 @@ class HostFlowController {
   /// Steps the flow walks past (the Video step while the admin has video
   /// intros off). Null: none.
   final bool Function(HostStep step)? skip;
+
+  /// The admin's onboarding training (docs/host_onboarding.md): shows what is
+  /// placed after [from] that is not done yet ([beforeSubmit]: everything not
+  /// done). true: carry on; false: the host backed out (stay on [from]).
+  /// Null: no training. Never while editing one section. An [existing] host
+  /// gets it only when the admin says so, never required, and nothing is
+  /// asked before their Save.
+  final Future<bool> Function(
+    HostStep from, {
+    required bool beforeSubmit,
+    required bool existing,
+  })?
+  training;
 
   /// The step after [step], past any skipped ones.
   HostStep _after(HostStep step) {
@@ -160,6 +176,7 @@ class HostFlowController {
       return;
     }
     if (step == HostStep.basic && !await _handleIsFree()) return;
+    if (!await _trained(step)) return;
     if (step == HostStep.guidelines) {
       final saving = savesInstead;
       busy.value = true;
@@ -183,6 +200,28 @@ class HostFlowController {
     await goTo(_takeReturn() ?? _after(step));
   }
 
+  bool get _trains => training != null && !editing;
+
+  /// The training after [step] (before Submit: all of it still to do). Never
+  /// in the way: anything going wrong here lets the host carry on.
+  Future<bool> _trained(HostStep step) async {
+    if (!_trains) return true;
+    final existing = existingHost?.call() ?? false;
+    busy.value = true;
+    try {
+      return await training!(
+        step,
+        beforeSubmit: step == HostStep.guidelines && !existing,
+        existing: existing,
+      );
+    } catch (e) {
+      Log.w('hostflow', 'training skipped: $e');
+      return true;
+    } finally {
+      busy.value = false;
+    }
+  }
+
   Future<bool> _handleIsFree() async {
     busy.value = true;
     try {
@@ -191,10 +230,7 @@ class HostFlowController {
         ownExpertId: draft.expertId,
       );
       if (!free) {
-        draft.notice.value = (
-          key: 'hostflow:errors.handle_taken',
-          variables: null,
-        );
+        draft.notice.value = await handleTakenNotice(draft.handle.text);
         funnel?.handleTaken();
       }
       return free;
@@ -207,4 +243,21 @@ class HostFlowController {
   }
 
   void dispose() => busy.dispose();
+}
+
+/// "This handle is already taken", with a free one close to it when the
+/// server offers one ("Try @aanya_talks").
+Future<HostIssue> handleTakenNotice(String handle) async {
+  String? suggestion;
+  try {
+    suggestion = (await HostHandleApi.check(handle)).suggestion;
+  } catch (_) {
+    // The plain message is enough.
+  }
+  return suggestion == null
+      ? (key: 'hostflow:errors.handle_taken', variables: null)
+      : (
+          key: 'hostflow:errors.handle_taken_try',
+          variables: {'handle': suggestion},
+        );
 }

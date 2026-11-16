@@ -128,10 +128,7 @@ class _HostVideoIntroFieldState extends State<HostVideoIntroField> {
       );
     } catch (e) {
       Log.d('VideoIntro', 'capture failed: $e');
-      CToast.show(
-        'hostflow:video.failed',
-        variant: CToastVariant.error,
-      );
+      CToast.show('hostflow:video.failed', variant: CToastVariant.error);
     }
   }
 
@@ -164,11 +161,7 @@ class _HostVideoIntroFieldState extends State<HostVideoIntroField> {
               weight: FontWeight.w700,
             ),
             SizedBox(height: 4.ms),
-            CText(
-              'hostflow:video.hint',
-              size: 12,
-              color: c.textMuted,
-            ),
+            CText('hostflow:video.hint', size: 12, color: c.textMuted),
             SizedBox(height: 10.ms),
             if (intro == null) _AddTile(onTap: _capture) else _preview(intro),
           ],
@@ -321,7 +314,12 @@ class _TextAction extends StatelessWidget {
             Icon(icon, size: 15.ms, color: tone),
             SizedBox(width: 6.ms),
             Flexible(
-              child: CText(label, size: 12, weight: FontWeight.w600, color: tone),
+              child: CText(
+                label,
+                size: 12,
+                weight: FontWeight.w600,
+                color: tone,
+              ),
             ),
           ],
         ),

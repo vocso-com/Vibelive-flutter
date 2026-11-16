@@ -95,10 +95,8 @@ class HostBadgeFormScreen extends HookWidget {
       viewedStep.value = steps[index];
       final name = 'verification_badge_form_${steps[index]}';
       WidgetsBinding.instance.addPostFrameCallback(
-        (_) => ScreenTracker.setSubScreen(
-          AppRoutes.verificationBadgeForm,
-          name,
-        ),
+        (_) =>
+            ScreenTracker.setSubScreen(AppRoutes.verificationBadgeForm, name),
       );
     }
 

@@ -49,6 +49,8 @@ import 'steps/submitted_step.dart';
 import 'steps/tagline_step.dart';
 import 'steps/video_step.dart';
 import 'steps/voice_step.dart';
+import 'training/onboarding_clips.dart';
+import 'training/training_screen.dart';
 import 'widgets/continue_bar.dart';
 import 'widgets/progress_header.dart';
 
@@ -148,6 +150,12 @@ class HostOnboardingScreen extends HookWidget {
               _ => false,
             });
 
+    // The admin's training and clips (docs/host_onboarding.md). A host who
+    // already has a profile gets them only when the admin says so, never
+    // required.
+    final existingContext = editStep != null || existingHost;
+    final starting = useRef(false);
+
     final submit = useSubmitHostOnboarding();
     final pricing = usePricingConfig(context).data ?? PricingConfig.empty;
     // Only intro <-> flow rebuilds this widget; steps rebuild themselves.
@@ -231,8 +239,29 @@ class HostOnboardingScreen extends HookWidget {
           await openExistingProfile(user);
           return HostStep.guidelines;
         }
+        // The handle: another profile holds it (one the app's check could
+        // not see before the server check existed). Say so plainly, with a
+        // free one, before Basic info opens on it: not a silent jump back.
+        if (HostSubmitErrors.isHandleTaken(e)) {
+          funnel.submitFailed(e, HostStep.basic);
+          queryCache.invalidateAll(const [
+            ['hosthub', 'handle'],
+          ]);
+          final notice = await handleTakenNotice(draft.handle.text);
+          draft.notice.value = notice;
+          if (context.mounted) {
+            await CAlert.show(
+              context: context,
+              title: 'hostflow:errors.handle_taken_title',
+              message: notice.key,
+              variables: notice.variables,
+              variant: CAlertVariant.warning,
+            );
+          }
+          return HostStep.basic;
+        }
         // A field the server rejected: back to its step with the error
-        // shown there (e.g. a handle another profile already owns).
+        // shown there.
         final target = HostSubmitErrors.stepFor(e);
         funnel.submitFailed(e, target ?? HostStep.guidelines);
         if (target == null) {
@@ -287,7 +316,28 @@ class HostOnboardingScreen extends HookWidget {
                 ? IntroStep(
                     key: const ValueKey('intro'),
                     resuming: draft.started,
-                    onStart: () {
+                    media: HostClipsFrame(
+                      step: HostStep.intro,
+                      current: draft.step,
+                      existing: existingContext,
+                      palette: HostPalette.dark,
+                    ),
+                    onStart: () async {
+                      if (starting.value) return;
+                      starting.value = true;
+                      try {
+                        // Training placed right after the Welcome screen.
+                        if (editStep == null &&
+                            !await HostTraining.run(
+                              context,
+                              after: HostStep.intro,
+                              existing: existingHost,
+                            )) {
+                          return;
+                        }
+                      } finally {
+                        starting.value = false;
+                      }
                       funnel.completed(HostStep.intro);
                       draft.started = true;
                       draft.step.value = HostStep.basic;
@@ -324,8 +374,7 @@ class HostOnboardingScreen extends HookWidget {
 /// the name), and Submit created a second profile that took the account off
 /// the approved one. Their topics the same: seeded empty, a save would wipe
 /// them.
-(UserWithExpert?, bool, HostProfile?, ApiException?, VoidCallback)
-_usePrefill(
+(UserWithExpert?, bool, HostProfile?, ApiException?, VoidCallback) _usePrefill(
   BuildContext context,
   HostDraftController draft,
   SessionState session,
@@ -453,6 +502,15 @@ class _Flow extends HookWidget {
         saveAll: () => latest.value.saveAll(),
         existingHost: () => latest.value.existingHost,
         funnel: funnel,
+        // The admin's training after a step and before Submit (new hosts
+        // only: the controller leaves edits and existing hosts out).
+        training: (from, {required beforeSubmit, required existing}) =>
+            HostTraining.run(
+              context,
+              after: from,
+              beforeSubmit: beforeSubmit,
+              existing: existing,
+            ),
         // No video step while the admin has video intros off: a clip the
         // server would drop must not be asked for.
         skip: (s) =>
@@ -477,7 +535,16 @@ class _Flow extends HookWidget {
 
     final steps = <Widget>[
       for (final s in HostStep.pages)
-        KeyedSubtree(key: ValueKey(s), child: _page(s, flow)),
+        KeyedSubtree(
+          key: ValueKey(s),
+          // The admin's clips for this step, above it.
+          child: HostStepWithClips(
+            step: s,
+            current: draft.step,
+            existing: save != null || existingHost,
+            child: _page(s, flow),
+          ),
+        ),
     ];
     // Back gesture / Android back = the chevron (one step back).
     return PopScope(

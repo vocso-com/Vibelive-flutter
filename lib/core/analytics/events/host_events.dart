@@ -134,10 +134,7 @@ abstract final class HostEvents {
 
   /// An existing host saved [step] (`all`: the last step's "Save").
   static void sectionSaved(String step, {required String mode}) =>
-      Analytics.log('host_profile_section_saved', {
-        'step': step,
-        'mode': mode,
-      });
+      Analytics.log('host_profile_section_saved', {'step': step, 'mode': mode});
 
   static void sectionSaveFailed(String step, {required String error}) =>
       Analytics.log('host_profile_section_save_failed', {
@@ -272,11 +269,10 @@ abstract final class HostEvents {
     'enabled': enabled,
   });
 
-  static void earningsViewed({int? audioRate, int? videoRate}) =>
-      Analytics.log('host_earnings_viewed', {
-        'audio_rate': audioRate,
-        'video_rate': videoRate,
-      });
+  static void earningsViewed({int? audioRate, int? videoRate}) => Analytics.log(
+    'host_earnings_viewed',
+    {'audio_rate': audioRate, 'video_rate': videoRate},
+  );
 
   /// [mode]: `online` | `offline` | `scheduled`.
   static void availabilityModeSelected(String mode) =>
@@ -355,20 +351,74 @@ abstract final class HostEvents {
   static void moderationMessageTapped({required String action}) =>
       Analytics.log('host_moderation_message_tapped', {'action': action});
 
+  // ── Onboarding training (docs/host_onboarding.md) ─────────────────────
+
+  /// The admin's training steps opened from the flow ([beforeSubmit]: the
+  /// catch-up before Submit).
+  static void trainingShown({required int count, required bool beforeSubmit}) =>
+      Analytics.log('host_training_shown', {
+        'count': count,
+        'before_submit': beforeSubmit,
+      });
+
+  static void trainingStepViewed({
+    required String stepId,
+    required String kind,
+    required int number,
+  }) => Analytics.log('host_training_step_viewed', {
+    'step_id': stepId,
+    'kind': kind,
+    'number': number,
+  });
+
+  /// [result]: watched (to the end), skipped, continued (before the end).
+  static void trainingVideoDone({
+    required String stepId,
+    required String result,
+    required int seconds,
+  }) => Analytics.log('host_training_video_done', {
+    'step_id': stepId,
+    'result': result,
+    'seconds': seconds,
+  });
+
+  /// [passed] / [percent]: null when the admin does not show them to the
+  /// host (the app is not told either).
+  static void trainingQuizSubmitted({
+    required String stepId,
+    required int? percent,
+    required bool? passed,
+    required int attempt,
+  }) => Analytics.log('host_training_quiz_submitted', {
+    'step_id': stepId,
+    'percent': ?percent,
+    'passed': ?passed,
+    'result_shown': passed != null,
+    'attempt': attempt,
+  });
+
+  /// Backed out of the training (stays on the step before it).
+  static void trainingLeft({required String stepId}) =>
+      Analytics.log('host_training_left', {'step_id': stepId});
+
+  /// The clips frame on an onboarding step came on screen.
+  static void onboardingClipsShown({
+    required String step,
+    required int count,
+  }) => Analytics.log('host_onboarding_clips_shown', {
+    'step': step,
+    'count': count,
+  });
+
   // ── Verification badge ────────────────────────────────────────────────
 
-  static void badgeStatusViewed({
-    required String step,
-    required bool review,
-  }) => Analytics.log('badge_status_viewed', {'step': step, 'review': review});
+  static void badgeStatusViewed({required String step, required bool review}) =>
+      Analytics.log('badge_status_viewed', {'step': step, 'review': review});
 
   static void badgePrimaryTapped({
     required String step,
     required bool review,
-  }) => Analytics.log('badge_primary_tapped', {
-    'step': step,
-    'review': review,
-  });
+  }) => Analytics.log('badge_primary_tapped', {'step': step, 'review': review});
 
   /// Not eligible yet (no approved host profile).
   static void badgeLockedViewed({required String screen}) =>
@@ -454,13 +504,11 @@ abstract final class HostEvents {
   static void badgeFormStepSaved(String step) =>
       Analytics.log('badge_form_step_saved', {'step': step});
 
-  static void badgeFormValidationFailed(
-    String step, {
-    required String issue,
-  }) => Analytics.log('badge_form_validation_failed', {
-    'step': step,
-    'issue': issue,
-  });
+  static void badgeFormValidationFailed(String step, {required String issue}) =>
+      Analytics.log('badge_form_validation_failed', {
+        'step': step,
+        'issue': issue,
+      });
 
   static void badgeFormBack(String step) =>
       Analytics.log('badge_form_back', {'step': step});
@@ -475,10 +523,8 @@ abstract final class HostEvents {
   static void badgeDocUploadFailed({
     required String side,
     required String error,
-  }) => Analytics.log('badge_doc_upload_failed', {
-    'side': side,
-    'error': error,
-  });
+  }) =>
+      Analytics.log('badge_doc_upload_failed', {'side': side, 'error': error});
 
   static void badgeInfluencerToggled({required bool enabled}) =>
       Analytics.log('badge_influencer_toggled', {'enabled': enabled});

@@ -415,6 +415,12 @@ Sub-screens: each step is `host_onboarding_<step>` on the route it is open on (`
 | host_moderation_messages_shown | messages card shown (per count) | count |
 | host_moderation_messages_expanded | more / less | expanded |
 | host_moderation_message_tapped | message action | action (link/fix/dismiss) |
+| host_training_shown | onboarding training opened from the flow | count, before_submit |
+| host_training_step_viewed | a training step on screen | step_id, kind (video/quiz), number |
+| host_training_video_done | training video left | step_id, result (watched/skipped/continued), seconds |
+| host_training_quiz_submitted | quiz attempt marked | step_id, percent, passed (both only when shown to the host), result_shown, attempt |
+| host_training_left | backed out of training | step_id |
+| host_onboarding_clips_shown | clips frame on an onboarding step | step, count |
 
 ### Verification badge
 | event | when | params | Meta / Firebase |

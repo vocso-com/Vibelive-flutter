@@ -11,6 +11,7 @@ import '../../../../core/query/query_hooks.dart';
 import '../../../../core/router/app_router.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/utils/scale.dart';
+import '../../../api/hosthub/call_pricing_queries.dart';
 import '../../../api/hosthub/hosthub_keys.dart';
 import '../../../api/hosthub/hosthub_queries.dart';
 import '../../../api/hosthub/profile_models.dart';
@@ -52,13 +53,21 @@ class RatesStep extends HookWidget {
     // it controls pricing for them (call_pricing §5.2). Read unconditionally
     // (hooks); a non-host / inactive host reads as null and the editable
     // screen below is unchanged.
-    final ownPricing = useHostProfile(context).data?.callPricing;
+    final host = useHostProfile(context).data;
+    final ownPricing = host?.callPricing;
+    // Not a host yet (onboarding: no profile): the same answer, asked for the
+    // signed-in user (level 1), so the price shows as fixed here too.
+    final newHostPricing = useMyCallPricing(
+      context,
+      enabled: callPricing == null && host == null,
+    ).data;
     // Re-read the host's own profile on resume so a change the admin makes
     // (level, feature on) lands without a reinstall (§7.3); the CONFIG_UPDATED
     // push with scope `call_pricing` does the same while the app is open.
     useOnAppLifecycleStateChange((_, state) {
       if (state == AppLifecycleState.resumed) {
         queryCache.invalidateAll(const [HostHubKeys.profileAll]);
+        invalidateMyCallPricing();
       }
     });
     final voicePayout = HostRatePayout.from(runtime, pricing, video: false);
@@ -75,7 +84,11 @@ class RatesStep extends HookWidget {
 
     // Backend controls pricing for this host: a read-only earnings screen.
     // The host keeps the format on/off switch; only the amounts are fixed.
-    final backendPricing = callPricing ?? ownPricing ?? CallPricing.inactive;
+    final backendPricing =
+        callPricing ??
+        ownPricing ??
+        (host == null ? newHostPricing : null) ??
+        CallPricing.inactive;
     if (backendPricing.active) {
       return HostEarningsReadOnly(draft: draft, pricing: backendPricing);
     }

@@ -220,6 +220,8 @@
     "name": "Please enter your full name.",
     "handle_invalid": "Choose a handle of 3–30 lowercase letters or underscores.",
     "handle_taken": "This handle is already taken. Try another one.",
+    "handle_taken_try": "This handle is already taken. Try @{{handle}}.",
+    "handle_taken_title": "Username taken",
     "gender": "Please choose your gender.",
     "languages": "Choose at least one language you speak.",
     "location": "Please choose your state and district.",

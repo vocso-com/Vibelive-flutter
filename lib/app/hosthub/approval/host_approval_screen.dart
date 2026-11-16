@@ -81,10 +81,8 @@ class HostApprovalScreen extends HookWidget {
       viewed.value = statusName;
       final count = missing.length;
       WidgetsBinding.instance.addPostFrameCallback(
-        (_) => HostEvents.approvalViewed(
-          status: statusName,
-          missingCount: count,
-        ),
+        (_) =>
+            HostEvents.approvalViewed(status: statusName, missingCount: count),
       );
     }
 

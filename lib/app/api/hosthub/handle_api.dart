@@ -1,15 +1,55 @@
 import '../../../core/network/api_client.dart';
+import '../../../core/network/api_exception.dart';
 import '../../../core/network/strapi.dart';
 import '../../../core/session/session_store.dart';
 import 'strapi_lookup.dart';
 
+/// Whether a handle is free, and a free one close to it when it is not.
+typedef HostHandleCheck = ({bool available, String? suggestion});
+
 /// Profile handle (`expert-profiles.handler`) lookups for the onboarding
-/// flow. The backend has no dedicated "is it free" route: a case-insensitive
-/// filter on the list endpoint answers it.
+/// flow.
 abstract final class HostHandleApi {
   /// True when no other host uses [handle]. [ownExpertId] (a host editing
   /// their own profile) is not counted as a clash.
-  static Future<bool> isAvailable(String handle, {String? ownExpertId}) async {
+  static Future<bool> isAvailable(String handle, {String? ownExpertId}) async =>
+      (await check(handle, ownExpertId: ownExpertId)).available;
+
+  /// `GET /me/handle-check`: every profile counts (approved or not, listed or
+  /// hidden), the user's own excepted, with a free [HostHandleCheck.suggestion]
+  /// when taken. The public list below sees approved, listed hosts only, so a
+  /// handle an unapproved profile holds read as free and the submit failed
+  /// with "must be unique"; it is kept for an older backend (404).
+  static Future<HostHandleCheck> check(
+    String handle, {
+    String? ownExpertId,
+  }) async {
+    try {
+      final body = Strapi.map(
+        await ApiClient.get(
+          '/me/handle-check',
+          query: {'handle': handle.trim()},
+        ),
+      );
+      if (body != null && body.containsKey('available')) {
+        return (
+          available: J.boolean(body['available']),
+          suggestion: J.str(body['suggestion']),
+        );
+      }
+    } on ApiException catch (e) {
+      if (e.statusCode != 404) rethrow;
+    }
+    return (
+      available: await _listSaysFree(handle, ownExpertId: ownExpertId),
+      suggestion: null,
+    );
+  }
+
+  static Future<bool> _listSaysFree(
+    String handle, {
+    String? ownExpertId,
+  }) async {
     final rows = StrapiLookup.rowsOf(
       await ApiClient.get(
         '/expert-profiles',

@@ -14,11 +14,20 @@ import '../widgets/continue_bar.dart';
 /// themes. The user is signed in, so the design's "Log in" line is dropped;
 /// the back gesture leaves.
 class IntroStep extends StatelessWidget {
-  const IntroStep({super.key, required this.resuming, required this.onStart});
+  const IntroStep({
+    super.key,
+    required this.resuming,
+    required this.onStart,
+    this.media,
+  });
 
   /// A saved draft exists: "Continue setup" instead of "Get started".
   final bool resuming;
   final VoidCallback onStart;
+
+  /// The admin's clips for this screen (docs/host_onboarding.md), under the
+  /// brand line. Null: the screen as designed.
+  final Widget? media;
 
   /// The design's bottom: deep violet.
   static const deep = Color(0xFF120A2E);
@@ -88,6 +97,10 @@ class IntroStep extends StatelessWidget {
                             letterSpacing: -0.4,
                             color: AppColors.white,
                           ),
+                          if (media case final media?) ...[
+                            SizedBox(height: 14.ms),
+                            media,
+                          ],
                           const Spacer(),
                           const CText(
                             'hostflow:intro.title',

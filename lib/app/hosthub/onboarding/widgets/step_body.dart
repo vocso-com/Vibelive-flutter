@@ -4,8 +4,23 @@ import '../../../../core/utils/scale.dart';
 import '../../../component/c_text.dart';
 import '../helper/host_palette.dart';
 
+/// Something the flow shows at the top of a step's page, scrolling with it:
+/// the admin's clips (docs/host_onboarding.md). [HostStepBody] reads it.
+class HostStepHeader extends InheritedWidget {
+  const HostStepHeader({super.key, required this.header, required super.child});
+
+  final Widget header;
+
+  static Widget? of(BuildContext context) =>
+      context.dependOnInheritedWidgetOfExactType<HostStepHeader>()?.header;
+
+  @override
+  bool updateShouldNotify(HostStepHeader old) => header != old.header;
+}
+
 /// A form step's scrolling page: title, subtitle, then [children]. Dragging
-/// dismisses the keyboard.
+/// dismisses the keyboard. A [HostStepHeader] above it goes first, and
+/// scrolls away with the page.
 class HostStepBody extends StatelessWidget {
   const HostStepBody({
     super.key,
@@ -24,12 +39,14 @@ class HostStepBody extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final p = HostPalette.of(context);
+    final header = HostStepHeader.of(context);
     return SingleChildScrollView(
       keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
       padding: EdgeInsets.fromLTRB(20.ms, 6.ms, 20.ms, 24.ms),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          if (header != null) ...[header, SizedBox(height: 14.ms)],
           HostTitle(title, variables: titleVariables),
           if (subtitle != null) ...[
             SizedBox(height: 8.ms),

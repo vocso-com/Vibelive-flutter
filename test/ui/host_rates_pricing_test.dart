@@ -203,6 +203,39 @@ void main() {
       expect(tester.takeException(), isNull);
       await finishHost(tester);
     });
+
+    testWidgets('not a host yet (onboarding): the fixed price is asked for '
+        'the user, never "set your own rate"', (tester) async {
+      final backend = await resetHost();
+      backend.replies['GET /api/call-pricing/mine'] = (_) => {
+        'active': true,
+        'level': 1,
+        'voiceEarn': 8,
+        'videoEarn': 14,
+        'currency': '₹',
+      };
+      draft = HostDraftController('rates', persist: false)
+        ..audioOn.value = true
+        ..videoOn.value = true;
+      await open(tester);
+      expect(find.text('Set by VibeLive'), findsNWidgets(2));
+      expect(find.text('₹8'), findsOneWidget);
+      expect(find.text('₹14'), findsOneWidget);
+      expect(find.bySemanticsLabel('Decrease rate'), findsNothing);
+      expect(backend.sent('GET', '/call-pricing/mine'), hasLength(1));
+      await finishHost(tester);
+    });
+
+    testWidgets('not a host yet, pricing not for them: the editable screen', (
+      tester,
+    ) async {
+      final backend = await resetHost();
+      backend.replies['GET /api/call-pricing/mine'] = (_) => {'active': false};
+      await open(tester);
+      expect(find.text('See how earnings work'), findsOneWidget);
+      expect(find.text('Set by VibeLive'), findsNothing);
+      await finishHost(tester);
+    });
   });
 
   group('Discovery price overlay (§7.2)', () {

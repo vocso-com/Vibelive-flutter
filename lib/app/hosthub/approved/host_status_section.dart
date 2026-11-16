@@ -10,6 +10,7 @@ import '../../api/hosthub/profile_models.dart';
 import '../common/moderation_banners.dart';
 import 'widgets/moderation_messages_card.dart';
 import 'widgets/review_status_card.dart';
+import 'widgets/training_card.dart';
 
 /// The host's onboarding state on the ME tab, above the host dashboard:
 /// moderation news, then under review / changes needed / finish setup until
@@ -46,6 +47,9 @@ class HostStatusSection extends StatelessWidget {
           ),
         // Its own padding; nothing when there are no messages.
         HostModerationMessagesCard(open: open, host: host),
+        // The admin's training, when shown to existing hosts (optional);
+        // nothing when off or done.
+        const HostTrainingCard(),
       ],
     );
   }
