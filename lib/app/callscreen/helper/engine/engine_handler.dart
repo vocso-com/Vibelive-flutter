@@ -16,6 +16,7 @@ extension _EngineHandler on CallEngine {
     onLocalVideoStateChanged: (_, state, _) => _onLocalVideo(state),
     onRemoteVideoStateChanged: (_, uid, state, _, _) =>
         _onRemoteVideo(uid, state),
+    onAudioRoutingChanged: (routing) => _audioRoute = routing,
     onError: (code, message) => Log.w('CallEngine', 'error $code $message'),
   );
 

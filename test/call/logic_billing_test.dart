@@ -131,6 +131,156 @@ void main() {
     });
   });
 
+  group('"Add money" during a call', () {
+    var buzzes = 0;
+    setUp(() {
+      buzzes = 0;
+      CallBilling.buzz = () async => buzzes++;
+    });
+
+    Future<void> connect({String id = '77'}) async {
+      calls.startOutgoing(
+        CallSession(callId: id, callerId: '9', receiverId: '5'),
+      );
+      calls
+        ..setAccepted()
+        ..setConnected();
+      await settle(50);
+    }
+
+    test(
+      'time to spare: armed for 2 min before the end; nothing shows yet',
+      () async {
+        backend.cash = 100; // 10 min at 10/min: ends at 580 s
+        CallBilling.rememberRate('77', 10);
+        await connect();
+        expect(CallTimers.instance.isArmed(CallTimers.topUpPrompt), isTrue);
+        expect(CallBilling.topUpDue.value, isNull);
+        final limit = CallBilling.limit.value!;
+        expect(limit.callId, '77');
+        expect(limit.extendable, isTrue);
+        expect(limit.freeLimit, isFalse);
+        final left = limit.leftAt(DateTime.now());
+        expect(left.inSeconds, inInclusiveRange(575, 580));
+        expect(buzzes, 0);
+      },
+    );
+
+    test('2 min or less from the start: it comes up a moment after connect, '
+        'with one buzz', () async {
+      backend.cash = 25; // 2 whole minutes: ends at 100 s
+      CallBilling.rememberRate('77', 10);
+      await connect();
+      expect(CallBilling.topUpDue.value, isNull, reason: 'not on second 0');
+      await settleUntil(
+        () => CallBilling.topUpDue.value == '77',
+        timeoutMs: 5000,
+      );
+      expect(buzzes, 1);
+    });
+
+    test(
+      'money added: the end moves, the prompt goes, the next is armed',
+      () async {
+        backend.cash = 25;
+        CallBilling.rememberRate('77', 10);
+        await connect();
+        await settleUntil(
+          () => CallBilling.topUpDue.value == '77',
+          timeoutMs: 5000,
+        );
+        final before = CallBilling.limit.value!.endsAt;
+        backend.cash = 525; // +50 min
+        expect(await CallBilling.rearm('77'), isTrue);
+        expect(CallBilling.limit.value!.endsAt.isAfter(before), isTrue);
+        expect(
+          CallBilling.limit.value!.leftAt(DateTime.now()).inMinutes,
+          greaterThanOrEqualTo(50),
+        );
+        expect(CallBilling.topUpDue.value, isNull);
+        expect(CallTimers.instance.isArmed(CallTimers.topUpPrompt), isTrue);
+        expect(CallTimers.instance.isArmed(CallTimers.maxDuration), isTrue);
+        expect(buzzes, 1, reason: 'no second buzz');
+      },
+    );
+
+    test('too little added: the prompt stays, no second buzz', () async {
+      backend.cash = 25;
+      CallBilling.rememberRate('77', 10);
+      await connect();
+      await settleUntil(
+        () => CallBilling.topUpDue.value == '77',
+        timeoutMs: 5000,
+      );
+      backend.cash = 29; // still 2 whole minutes: the same end
+      expect(await CallBilling.rearm('77'), isTrue);
+      await settle(100);
+      expect(CallBilling.topUpDue.value, '77');
+      expect(buzzes, 1);
+    });
+
+    test('a free call that just stops: no "Add money" (money cannot extend '
+        'it)', () async {
+      CallBilling.rememberRate('77', 10);
+      CallBilling.rememberFree(
+        '77',
+        const FreeCallTerms(minutes: 1, continuePaid: false),
+      );
+      await connect();
+      expect(CallBilling.limit.value?.extendable, isFalse);
+      expect(CallTimers.instance.isArmed(CallTimers.topUpPrompt), isFalse);
+      await settle(3300);
+      expect(CallBilling.topUpDue.value, isNull);
+      expect(buzzes, 0);
+    });
+
+    test('a free call that goes on paid, with no money: "Add money" before '
+        'the free minutes end', () async {
+      backend.cash = 0;
+      CallBilling.rememberRate('77', 10);
+      CallBilling.rememberFree('77', const FreeCallTerms(minutes: 1));
+      await connect();
+      final limit = CallBilling.limit.value!;
+      expect(limit.freeLimit, isTrue);
+      expect(limit.extendable, isTrue);
+      await settleUntil(
+        () => CallBilling.topUpDue.value == '77',
+        timeoutMs: 5000,
+      );
+      // Money added: the paid minutes after the free one.
+      backend.cash = 100;
+      await CallBilling.rearm('77');
+      expect(CallBilling.limit.value!.freeLimit, isFalse);
+      expect(CallBilling.topUpDue.value, isNull);
+    });
+
+    test('the call is over: nothing re-armed, nothing left showing', () async {
+      backend.cash = 25;
+      CallBilling.rememberRate('77', 10);
+      await connect();
+      await settleUntil(
+        () => CallBilling.topUpDue.value == '77',
+        timeoutMs: 5000,
+      );
+      CallBilling.forget('77');
+      expect(CallBilling.topUpDue.value, isNull);
+      expect(CallBilling.limit.value, isNull);
+      expect(await CallBilling.rearm('77'), isFalse);
+    });
+
+    test('never for the receiver', () async {
+      calls.receive(
+        const CallSession(callId: '42', callerId: '5', receiverId: '9'),
+      );
+      calls
+        ..setAccepted()
+        ..setConnected();
+      await settle(50);
+      expect(CallBilling.limit.value, isNull);
+      expect(CallTimers.instance.isArmed(CallTimers.topUpPrompt), isFalse);
+    });
+  });
+
   group('free calls (docs/free_calls.md)', () {
     const twoFree = FreeCallTerms(minutes: 2, continuePaid: false);
     const twoThenPaid = FreeCallTerms(minutes: 2);

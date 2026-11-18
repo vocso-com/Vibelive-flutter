@@ -27,6 +27,9 @@ import 'package:vibelive/core/theme/theme_controller.dart';
 import 'package:vibelive/core/utils/scale.dart';
 import 'package:vibelive/main.dart';
 import 'package:vibelive/app/api/homescreen/feed_shuffle.dart';
+import 'package:vibelive/app/api/host_status/vibe_video_cache.dart';
+import 'package:video_player_platform_interface/video_player_platform_interface.dart';
+import 'dart:async';
 
 /// Feed of 2 pages x 6 hosts, a support-topic form and a wallet. [rich]:
 /// hosts with a long rate and a rating, no district, and a huge balance.
@@ -38,6 +41,9 @@ class _Backend implements HttpClientAdapter {
 
   /// `/instant-call/config`: Talk Now on (both call types) or off.
   bool talkNow = false;
+
+  /// Hosts (by id) with an approved video intro.
+  static final videoHosts = <int>{};
 
   @override
   Future<ResponseBody> fetch(
@@ -114,6 +120,10 @@ class _Backend implements HttpClientAdapter {
     'documentId': 'exp$id',
     'tagline': 'Tagline $id',
     'user': {'id': id * 10, 'documentId': 'usr$id', 'name': 'Host $id'},
+    if (videoHosts.contains(id)) ...{
+      'video_intro': {'url': 'https://cdn.example/v$id.mp4'},
+      'video_intro_status': 'approved',
+    },
   };
 
   static Map<String, Object?> _richHost(int id) => {
@@ -130,6 +140,83 @@ class _Backend implements HttpClientAdapter {
 
   @override
   void close({bool force = false}) {}
+}
+
+/// Players that open at once; records what plays, at what volume.
+class _FakeVideo extends VideoPlayerPlatform {
+  final opened = <int, String>{};
+  final playing = <int>{};
+  final volume = <int, double>{};
+  bool? mixWithOthers;
+  int _next = 0;
+  final _events = <int, StreamController<VideoEvent>>{};
+
+  Set<String> get playingUrls => {for (final id in playing) opened[id]!};
+
+  @override
+  Future<void> init() async {}
+
+  @override
+  Future<int?> create(DataSource dataSource) async {
+    final id = _next++;
+    opened[id] = dataSource.uri ?? '';
+    final events = StreamController<VideoEvent>();
+    _events[id] = events;
+    scheduleMicrotask(
+      () => events.add(
+        VideoEvent(
+          eventType: VideoEventType.initialized,
+          duration: const Duration(seconds: 8),
+          size: const Size(720, 1280),
+        ),
+      ),
+    );
+    return id;
+  }
+
+  @override
+  Future<int?> createWithOptions(VideoCreationOptions options) =>
+      create(options.dataSource);
+
+  @override
+  Stream<VideoEvent> videoEventsFor(int playerId) => _events[playerId]!.stream;
+
+  @override
+  Future<void> dispose(int playerId) async {
+    playing.remove(playerId);
+    unawaited(_events.remove(playerId)?.close());
+  }
+
+  @override
+  Future<void> play(int playerId) async => playing.add(playerId);
+
+  @override
+  Future<void> pause(int playerId) async => playing.remove(playerId);
+
+  @override
+  Future<Duration> getPosition(int playerId) async => Duration.zero;
+
+  @override
+  Future<void> setLooping(int playerId, bool looping) async {}
+
+  @override
+  Future<void> setVolume(int playerId, double v) async => volume[playerId] = v;
+
+  @override
+  Future<void> setPlaybackSpeed(int playerId, double speed) async {}
+
+  @override
+  Future<void> seekTo(int playerId, Duration position) async {}
+
+  @override
+  Future<void> setMixWithOthers(bool mix) async => mixWithOthers = mix;
+
+  @override
+  Widget buildView(int playerId) => const SizedBox.expand();
+
+  @override
+  Widget buildViewWithOptions(VideoViewOptions options) =>
+      const SizedBox.expand();
 }
 
 Future<void> _pump(WidgetTester tester, int ms) async {
@@ -395,5 +482,85 @@ void main() {
     await tester.pump();
     expect(tester.takeException(), isNull);
     expect(find.text('🌐 Hindi'), findsOneWidget);
+  });
+
+  group('video intros on the cards', () {
+    late _FakeVideo video;
+    final cardVideo = find.byKey(const ValueKey('discover-card-video'));
+    Finder list() => find.byWidgetPredicate(
+      (w) => w is Scrollable && w.axisDirection == AxisDirection.down,
+    );
+
+    setUp(() {
+      video = _FakeVideo();
+      VideoPlayerPlatform.instance = video;
+      VibeVideoCache.enabled = false;
+    });
+    tearDown(() {
+      _Backend.videoHosts.clear();
+      VibeVideoCache.enabled = true;
+    });
+
+    testWidgets('on screen when the list rests: they play, muted; the other '
+        'cards keep their photos', (tester) async {
+      _Backend.videoHosts.addAll({1, 2});
+      await openHome(tester);
+      await _pump(tester, 1500);
+      expect(cardVideo, findsNWidgets(2));
+      expect(video.playingUrls, {
+        'https://cdn.example/v1.mp4',
+        'https://cdn.example/v2.mp4',
+      });
+      expect(video.volume.values, everyElement(0));
+      expect(video.mixWithOthers, isTrue, reason: "never stops the music");
+      await finish(tester);
+    });
+
+    testWidgets('scrolled away it stops; back on screen and at rest it plays '
+        'again', (tester) async {
+      _Backend.videoHosts.add(1);
+      await openHome(tester);
+      await _pump(tester, 1500);
+      expect(video.playingUrls, {'https://cdn.example/v1.mp4'});
+
+      await tester.drag(list().first, const Offset(0, -900));
+      await _pump(tester, 1000);
+      expect(video.playing, isEmpty);
+
+      await tester.drag(list().first, const Offset(0, 900));
+      await _pump(tester, 1500);
+      expect(video.playingUrls, {'https://cdn.example/v1.mp4'});
+      await finish(tester);
+    });
+
+    testWidgets('another tab, or a profile opened over Discover: it stops', (
+      tester,
+    ) async {
+      _Backend.videoHosts.add(1);
+      await openHome(tester);
+      await _pump(tester, 1500);
+      expect(video.playing, hasLength(1));
+
+      await tester.tap(find.bySemanticsLabel('History'));
+      await _pump(tester, 600);
+      expect(video.playing, isEmpty);
+      await tester.tap(find.bySemanticsLabel('Discover'));
+      await _pump(tester, 1500);
+      expect(video.playing, hasLength(1));
+
+      // Another host's profile over Discover: the card's video stops.
+      await tester.tap(find.textContaining('HOST 2'));
+      await _pump(tester, 900);
+      expect(video.playingUrls, isNot(contains('https://cdn.example/v1.mp4')));
+      await finish(tester);
+    });
+
+    testWidgets('no host with a video: no player at all', (tester) async {
+      await openHome(tester);
+      await _pump(tester, 1500);
+      expect(cardVideo, findsNothing);
+      expect(video.opened, isEmpty);
+      await finish(tester);
+    });
   });
 }

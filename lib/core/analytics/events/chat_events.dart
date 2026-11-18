@@ -104,6 +104,17 @@ abstract final class ChatEvents {
   static void privatePhotoSent(double price) =>
       Analytics.log('chat_private_photo_sent', {'price': price});
 
+  /// The host-side pointers to private photos. [action]: `shown` (once per
+  /// spot per run) / `tapped` / `closed`; [spot]: `tip` (in a chat) / `list`
+  /// (the Chats list banner).
+  static void privatePromo(String action, {required String spot}) =>
+      action == 'shown'
+      ? Analytics.logOnce('chat_private_promo_$spot', 'chat_private_promo', {
+          'action': action,
+          'spot': spot,
+        })
+      : Analytics.log('chat_private_promo', {'action': action, 'spot': spot});
+
   /// [step]: `asked` / `confirmed` / `paid` / `failed`.
   static void privatePhotoUnlock({
     required String step,

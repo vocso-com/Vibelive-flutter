@@ -225,6 +225,7 @@ Helpers: `lib/core/analytics/events/discover_events.dart` (`DiscoverEvents`). Al
 | discover_load_more | infinite scroll asks for next page | page, loaded | |
 | discover_empty_shown | tab / filter has no hosts | tab, topic, filtered | |
 | discover_load_error | feed failed to load | tab, error | |
+| discover_card_video_play | a card's muted video intro started (the user stopped with it on screen); once per host per run | host_id | |
 | filter_opened | filter sheet opened | source (discover/search), active_count | |
 | filter_applied | Apply | source, languages_count, languages, has_topic, topic | |
 | filter_cleared | Clear all, then closed | source | |
@@ -286,6 +287,9 @@ Lifecycle events (call_initiated … call_failed) are in `CallAnalytics`, not he
 | call_camera_flipped | flip camera (video) | call ctx, front | |
 | call_hangup_tapped | red hang-up button (not system UI) | call ctx, elapsed_seconds | |
 | call_minimized | header back during a live call | call ctx | |
+| call_topup_prompt_shown | "Add money" came up on the call screen, 2 min before the balance / free minutes run out (phone buzzes) | seconds_left, free | |
+| call_topup_tapped | "Add money" tapped during a call | from (prompt / pill), speaker (moved to the speaker for it) | |
+| call_topup_finished | the in-call Add Money closed | result (success / pending / failure / closed), extended (the call's end moved) | |
 | call_return_tapped | "return to call" bar on Home | call ctx | |
 | call_video_swapped | small video tile tapped | call ctx, swapped | |
 | call_capture_shielded | iOS screen recording/mirroring started, call hidden | — | |
@@ -671,6 +675,7 @@ File: `lib/core/analytics/events/chat_events.dart` (ChatEvents). Ids, counts and
 | chat_private_photo_sent | a host sent a private photo | price |
 | chat_private_photo_unlock | the unlock flow | step (`asked` / `confirmed` / `paid` / `failed`), price, error? |
 | chat_private_photo_viewed | the viewer closed | view_seconds |
+| chat_private_promo | the host-side pointers to private photos (tip above the composer, Chats list banner) | action (`shown` once per run / `tapped` / `closed`), spot (`tip` / `list`) |
 | chat_menu_action | the chat ⋮ menu | action (`prices` / `report` / `block` / `dismissed`) |
 | chat_reported / chat_report_failed | `POST /chats/report` | category / error |
 | chat_block | block from the chat menu | step (`confirmed` / `cancelled` / `success` / `failed`) |

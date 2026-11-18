@@ -22,6 +22,7 @@ import '../helper/chat_pricing.dart';
 import '../helper/chat_room_controller.dart';
 import '../helper/low_balance.dart';
 import '../helper/pending_queue.dart';
+import '../helper/private_photo_promo.dart';
 import 'chat_sheets.dart';
 import 'private_photo_viewer.dart';
 import 'private_price_sheet.dart';
@@ -90,11 +91,16 @@ class ChatScreenActions implements ChatBubbleActions {
   Future<void> attachPhoto() async {
     final o = _open;
     if (o == null) return;
-    final canSell =
-        o.mySide == ChatSide.host &&
-        o.conversationId != null &&
-        _config.privatePhotos.enabled;
-    final choice = await showAttachSheet(context, canSellPrivate: canSell);
+    final canSell = canSellPrivate;
+    final promo = PrivatePhotoPromo.instance;
+    final highlight = canSell && !promo.sent;
+    // The dot on the photo button has done its job once the sheet is open.
+    if (canSell) unawaited(promo.dismiss(PrivatePhotoSpot.button));
+    final choice = await showAttachSheet(
+      context,
+      canSellPrivate: canSell,
+      highlightPrivate: highlight,
+    );
     if (choice == null || !context.mounted) return;
     if (choice == ChatAttach.private) return _privatePhoto();
     final camera = choice == ChatAttach.camera;
@@ -108,6 +114,23 @@ class ChatScreenActions implements ChatBubbleActions {
       paying: o.paying,
       pricePaise: price.paise,
     );
+  }
+
+  /// This side may sell a private photo here: the host, in a chat that
+  /// exists, with private photos switched on.
+  bool get canSellPrivate {
+    final o = _open;
+    return o != null &&
+        o.mySide == ChatSide.host &&
+        o.conversationId != null &&
+        _config.privatePhotos.enabled;
+  }
+
+  /// "Send one" on the private photo tip: straight to the private photo flow.
+  Future<void> privatePhotoFromTip() async {
+    ChatEvents.privatePromo('tapped', spot: 'tip');
+    if (!canSellPrivate) return;
+    await _privatePhoto();
   }
 
   Future<ChatPickedPhoto?> _pick({required bool camera}) async {
@@ -141,6 +164,7 @@ class ChatScreenActions implements ChatBubbleActions {
     if (price == null) return;
     controller.sendPrivatePhoto(photo.path, price);
     ChatEvents.privatePhotoSent(price);
+    unawaited(PrivatePhotoPromo.instance.markSent());
   }
 
   /// 402: nothing was saved. A text goes back in the box, and the

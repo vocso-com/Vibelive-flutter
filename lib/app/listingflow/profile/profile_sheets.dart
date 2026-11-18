@@ -196,6 +196,7 @@ class SheetActionRow extends StatelessWidget {
     required this.onTap,
     this.iconBg,
     this.labelColor,
+    this.trailing,
   });
 
   final IconData icon;
@@ -206,6 +207,9 @@ class SheetActionRow extends StatelessWidget {
   final VoidCallback onTap;
   final Color? iconBg;
   final Color? labelColor;
+
+  /// After the label (a "New" pill, say).
+  final Widget? trailing;
 
   @override
   Widget build(BuildContext context) {
@@ -244,6 +248,7 @@ class SheetActionRow extends StatelessWidget {
                 maxLines: 1,
               ),
             ),
+            if (trailing != null) ...[SizedBox(width: 8.ms), trailing!],
           ],
         ),
       ),

@@ -265,5 +265,14 @@
     "new_message": "New message",
     "channel": "Chat messages",
     "you": "You"
+  },
+  "private_promo": {
+    "tip_title": "Earn from private photos",
+    "tip_body": "Send a blurred photo. They pay to open it, and you choose what you earn: {{min}} to {{max}} per photo.",
+    "tip_action": "Send one",
+    "list_title": "New: earn from private photos",
+    "list_body": "Open a chat, tap the photo button and pick Private photo. You choose what you earn: {{min}} to {{max}} per photo.",
+    "new": "New",
+    "close": "Close"
   }
 }

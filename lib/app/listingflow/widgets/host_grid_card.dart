@@ -26,9 +26,14 @@ class HostGridCard extends StatelessWidget {
     this.featured = false,
     this.onCall,
     this.freeCall = FreeCallStatus.off,
+    this.media,
   });
 
   final HostCard host;
+
+  /// Over the photo, under the shade and text (Discover: the muted video
+  /// intro). Never takes taps.
+  final Widget? media;
 
   /// The user's free calls (docs/free_calls.md): a call this card's price
   /// is for that would start free shows "Free call" instead.
@@ -83,6 +88,7 @@ class HostGridCard extends StatelessWidget {
                       height: box.maxHeight,
                     ),
             ),
+            ?media,
             const Positioned.fill(
               child: Align(
                 alignment: Alignment.bottomCenter,

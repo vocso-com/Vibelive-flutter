@@ -98,6 +98,11 @@ class CallEngine {
   ({String channel, int uid})? _joined;
   _JoinArgs? _args;
 
+  /// Where the call's sound goes (Agora `AudioRoute`: -1 default, 0 / 2 a
+  /// wired headset, 1 the earpiece, 3 the speaker, 5+ Bluetooth and the
+  /// like); null until Agora says.
+  int? _audioRoute;
+
   /// Bumped by every NEW join and by [leave]: an in-flight join whose
   /// generation is no longer current gives up. Merging flags into the
   /// running join (a repeated accept, [ensureVideoIfNeeded]) replaces
@@ -116,6 +121,13 @@ class CallEngine {
   String? get channelId => _joined?.channel ?? _args?.channel;
 
   bool get isJoined => _joined != null;
+
+  /// The sound goes to a headset or Bluetooth device (not the phone's own
+  /// earpiece or speaker): moving it to the speaker would take it away.
+  bool get audioOnAccessory {
+    final r = _audioRoute;
+    return r != null && r != -1 && r != 1 && r != 3 && r != 4;
+  }
 
   /// The other side is in the channel now.
   bool get hasRemote => _remoteUids.isNotEmpty;
@@ -386,6 +398,11 @@ class CallEngine {
     _setMedia((m) => m.copyWith(speakerOn: on));
   }
 
+  /// The speaker [on] or off; nothing when it already is.
+  Future<void> setSpeaker(bool on) async {
+    if (_media.value.speakerOn != on) await toggleSpeaker();
+  }
+
   /// Own camera on/off (video calls).
   Future<void> toggleVideo() async {
     final off = !_media.value.localVideoOff;
@@ -438,6 +455,10 @@ class CallEngine {
   /// Tests only.
   @visibleForTesting
   void debugSetMedia(CallMedia media) => _media.value = media;
+
+  /// Where the sound goes, as Agora would say (see [audioOnAccessory]).
+  @visibleForTesting
+  void debugSetAudioRoute(int? route) => _audioRoute = route;
 
   /// Tests only: forget every engine and flag (no platform calls).
   @visibleForTesting

@@ -18,6 +18,9 @@ class CallTimers {
   static const maxDuration = 'maxDuration';
   static const lowBalance = 'lowBalance';
 
+  /// "Add money" on the call screen, a little before [maxDuration].
+  static const topUpPrompt = 'topUpPrompt';
+
   final _timers = <String, Timer>{};
 
   void arm(String name, Duration after, void Function() fire) {

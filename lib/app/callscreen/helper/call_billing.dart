@@ -1,7 +1,10 @@
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
+import 'package:vibration/vibration.dart';
 
+import '../../../core/analytics/events/call_ui_events.dart';
 import '../../../core/utils/log.dart';
 import '../../api/free_call/free_call_models.dart';
 import '../../api/listingflow/listing_queries.dart';
@@ -106,8 +109,59 @@ class MaxDuration {
   }
 }
 
+/// When the live call (the caller's) will be hung up, for the call screen's
+/// "Add money": [endsAt] on the phone's clock.
+@immutable
+class CallLimit {
+  const CallLimit({
+    required this.callId,
+    required this.endsAt,
+    required this.freeLimit,
+    required this.extendable,
+  });
+
+  final String callId;
+  final DateTime endsAt;
+
+  /// The end is a free call's free limit (no money in the wallet yet).
+  final bool freeLimit;
+
+  /// Money added moves the end: a paid call, or a free call that goes on
+  /// paid after its free minutes. A free call that just stops is not.
+  final bool extendable;
+
+  /// What is left at [now] (never negative).
+  Duration leftAt(DateTime now) {
+    final left = endsAt.difference(now);
+    return left.isNegative ? Duration.zero : left;
+  }
+}
+
 /// Arms the max-duration timer for the caller at connect.
 abstract final class CallBilling {
+  /// "Add money" comes up this long before the call would be hung up.
+  static const topUpLead = Duration(minutes: 2);
+
+  /// ...and never sooner than this after connect (a call that can only
+  /// afford a minute or two: not on the very first second).
+  static const topUpEarliest = Duration(seconds: 3);
+
+  /// RN's in-call buzz: the phone may be at the ear on a voice call.
+  static const topUpBuzz = [0, 400, 300, 400];
+
+  /// The live call's end (caller only, while it is capped); null otherwise.
+  static final limit = ValueNotifier<CallLimit?>(null);
+
+  /// The call whose "Add money" prompt is due (the call screen shows it).
+  static final topUpDue = ValueNotifier<String?>(null);
+
+  /// How each call hangs up at its limit (kept to re-arm after a top-up).
+  static final _onLimit = <String, void Function()>{};
+
+  /// Buzzes the phone (tests swap it).
+  @visibleForTesting
+  static Future<void> Function() buzz = _buzz;
+
   /// Per-minute rate of each outgoing call (the host card's), by call id.
   static final _rates = <String, double>{};
 
@@ -163,18 +217,43 @@ abstract final class CallBilling {
     required void Function() onLimit,
   }) async {
     final callId = call.callId;
+    if (!call.isCaller || callId == null || call.connectedAt == null) return;
+    _onLimit[callId] = onLimit;
+    await _apply(call, onLimit, rearm: false);
+  }
+
+  /// Money was added during [callId]: the balance is read again and the
+  /// call's end (and its "Add money") moved to what it now pays for. True
+  /// when it was re-armed. A call that is no longer live is left alone.
+  static Future<bool> rearm(String callId) async {
+    final live = CallController.instance.value;
+    final onLimit = _onLimit[callId];
+    if (onLimit == null ||
+        !live.isSameCall(callId) ||
+        live.phase != CallPhase.ongoing) {
+      return false;
+    }
+    return _apply(live, onLimit, rearm: true);
+  }
+
+  static Future<bool> _apply(
+    CallSession call,
+    void Function() onLimit, {
+    required bool rearm,
+  }) async {
+    final callId = call.callId;
     final connectedAt = call.connectedAt;
-    if (!call.isCaller || callId == null || connectedAt == null) return;
+    if (!call.isCaller || callId == null || connectedAt == null) return false;
     final company = call.callerIsCompany || CallIdentity.isCompany;
     final free = _free[callId];
     // A company caller pays nothing: no cap, unless it is a free call that
     // stops at its free limit (testing free calls on a company account).
-    if (company && (free == null || free.continuePaid)) return;
+    if (company && (free == null || free.continuePaid)) return false;
     final uid = CallIdentity.userDocumentId;
-    if (uid == null) return;
+    if (uid == null) return false;
     try {
       final rate = _rates[callId] ?? await _lookupRate(call);
-      if (free == null && (rate == null || rate <= 0)) return;
+      if (free == null && (rate == null || rate <= 0)) return false;
       // The balance matters only for what is paid: not for a company caller,
       // nor for a free call that ends at its limit.
       final paysAfter = !company && (free == null || free.continuePaid);
@@ -188,13 +267,24 @@ abstract final class CallBilling {
         free: free,
       );
       final live = CallController.instance.value;
-      if (cap == null ||
-          !live.isSameCall(callId) ||
-          live.phase != CallPhase.ongoing) {
-        return;
+      if (!live.isSameCall(callId) || live.phase != CallPhase.ongoing) {
+        return false;
       }
-      final elapsed = DateTime.now().difference(connectedAt);
       final timers = CallTimers.instance;
+      if (cap == null) {
+        // Nothing to pay any more (a re-read found a company caller or no
+        // rate): no end, no "Add money".
+        if (rearm) {
+          timers.cancel(CallTimers.maxDuration);
+          timers.cancel(CallTimers.lowBalance);
+          timers.cancel(CallTimers.topUpPrompt);
+          if (limit.value?.callId == callId) limit.value = null;
+          if (topUpDue.value == callId) topUpDue.value = null;
+        }
+        return rearm;
+      }
+      final now = DateTime.now();
+      final elapsed = now.difference(connectedAt);
       timers.arm(CallTimers.maxDuration, cap.end - elapsed, () {
         if (!CallController.instance.value.isSameCall(callId)) return;
         CallAlerts.toast(
@@ -209,8 +299,83 @@ abstract final class CallBilling {
           () => cap.freeLimit ? _freeWarnOnce(callId) : warnOnce(callId),
         );
       }
+      // "Add money" only where money helps: a company caller and a free
+      // call that just stops cannot be extended.
+      final extendable = !company && (free == null || free.continuePaid);
+      limit.value = CallLimit(
+        callId: callId,
+        endsAt: connectedAt.add(cap.end),
+        freeLimit: cap.freeLimit,
+        extendable: extendable,
+      );
+      _armTopUp(callId, cap, elapsed, extendable: extendable, rearm: rearm);
+      return true;
     } catch (e) {
       Log.w('CallBilling', 'max duration skipped: $e');
+      return false;
+    }
+  }
+
+  /// The "Add money" prompt, [topUpLead] before the end ([topUpEarliest]
+  /// after connect at the soonest). After a top-up ([rearm]) a prompt still
+  /// showing goes when the call now runs past [topUpLead], and stays (no
+  /// second buzz) when it still does not.
+  static void _armTopUp(
+    String callId,
+    MaxDuration cap,
+    Duration elapsed, {
+    required bool extendable,
+    required bool rearm,
+  }) {
+    final timers = CallTimers.instance;
+    timers.cancel(CallTimers.topUpPrompt);
+    if (!extendable || cap.end <= Duration.zero) {
+      if (topUpDue.value == callId) topUpDue.value = null;
+      return;
+    }
+    final left = cap.end - elapsed;
+    if (left > topUpLead) {
+      if (topUpDue.value == callId) topUpDue.value = null;
+      timers.arm(
+        CallTimers.topUpPrompt,
+        left - topUpLead,
+        () => _promptTopUp(callId),
+      );
+      return;
+    }
+    // Already up (a top-up that still does not cover [topUpLead]): it stays,
+    // with no second buzz.
+    if (topUpDue.value == callId) return;
+    final wait = rearm ? Duration.zero : topUpEarliest - elapsed;
+    timers.arm(
+      CallTimers.topUpPrompt,
+      wait.isNegative ? Duration.zero : wait,
+      () => _promptTopUp(callId),
+    );
+  }
+
+  /// Puts "Add money" on the call screen and buzzes the phone (once each
+  /// time it comes up).
+  static void _promptTopUp(String callId) {
+    final live = CallController.instance.value;
+    if (!live.isSameCall(callId) || !live.phase.isLive) return;
+    if (topUpDue.value == callId) return;
+    topUpDue.value = callId;
+    final l = limit.value;
+    CallUiEvents.topUpPromptShown(
+      secondsLeft: l?.callId == callId
+          ? l!.leftAt(DateTime.now()).inSeconds
+          : null,
+      free: l?.freeLimit ?? false,
+    );
+    unawaited(buzz());
+  }
+
+  static Future<void> _buzz() async {
+    try {
+      await Vibration.vibrate(pattern: topUpBuzz);
+    } catch (_) {
+      // No vibrator / plugin: the prompt still shows.
     }
   }
 
@@ -226,14 +391,21 @@ abstract final class CallBilling {
   static void debugReset() {
     _rates.clear();
     _free.clear();
+    _onLimit.clear();
     _warned = null;
     _freeWarned = null;
+    limit.value = null;
+    topUpDue.value = null;
+    buzz = _buzz;
   }
 
   static void forget(String? callId) {
     _rates.remove(callId);
     _free.remove(callId);
+    _onLimit.remove(callId);
     if (_warned == callId) _warned = null;
     if (_freeWarned == callId) _freeWarned = null;
+    if (callId != null && limit.value?.callId == callId) limit.value = null;
+    if (callId != null && topUpDue.value == callId) topUpDue.value = null;
   }
 }

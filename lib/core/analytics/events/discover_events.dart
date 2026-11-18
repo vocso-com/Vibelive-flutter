@@ -56,6 +56,11 @@ abstract final class DiscoverEvents {
   static void videoIntroAutoplayed({required String hostId}) =>
       Analytics.log('video_intro_autoplay', {'host_id': hostId});
 
+  /// A Discover card started its muted video intro (the user stopped with
+  /// it on screen). Once per host per run.
+  static void cardVideoPlayed({required String hostId}) =>
+      Analytics.log('discover_card_video_play', {'host_id': hostId});
+
   /// Sound on / off on the profile's video intro.
   static void videoIntroMuteToggled({
     required String hostId,

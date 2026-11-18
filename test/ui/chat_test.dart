@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
@@ -27,7 +28,9 @@ import 'package:vibelive/app/chatscreen/conversation/private_photo_viewer.dart';
 import 'package:vibelive/app/chatscreen/helper/chat_outbox.dart';
 import 'package:vibelive/app/chatscreen/helper/chat_room_controller.dart';
 import 'package:vibelive/app/chatscreen/helper/chat_screen_guard.dart';
+import 'package:vibelive/app/chatscreen/helper/chat_device.dart';
 import 'package:vibelive/app/chatscreen/helper/chat_sync.dart';
+import 'package:vibelive/app/chatscreen/helper/private_photo_promo.dart';
 import 'package:vibelive/app/chatscreen/list/chat_tab.dart';
 import 'package:vibelive/app/chatscreen/list/chats_view.dart';
 import 'package:vibelive/app/component/pressable.dart';
@@ -73,6 +76,10 @@ class _Backend implements HttpClientAdapter {
   /// `/chats/config`: an HTTP status, or `malformed` / `offline`.
   Object config = 200;
   bool hostTakesChats = true;
+
+  /// The side the signed-in person is on in chat c1 (`host`: they sell).
+  String mySide = 'payer';
+  bool privatePhotosOn = true;
   bool offline = false;
 
   /// Company-only chat with someone who isn't a company account.
@@ -168,7 +175,7 @@ class _Backend implements HttpClientAdapter {
         'mediaMaxMb': 10,
         'hostMediaPercent': 50,
         'privatePhotos': {
-          'enabled': true,
+          'enabled': privatePhotosOn,
           'minPrice': 10,
           'maxPrice': 2000,
           'hostSharePercent': 70,
@@ -227,7 +234,7 @@ class _Backend implements HttpClientAdapter {
           'items': [
             {
               'id': 'c1',
-              'mySide': 'payer',
+              'mySide': mySide,
               'peer': _peer,
               'lastMessage': {
                 'type': 'text',
@@ -245,7 +252,7 @@ class _Backend implements HttpClientAdapter {
       case 'GET /api/chats/with/7':
         return {
           'conversationId': 'c1',
-          'mySide': 'payer',
+          'mySide': mySide,
           'peer': longName
               ? {..._peer, 'name': 'Priyadarshini Venkataraman Subramanian'}
               : _peer,
@@ -494,6 +501,32 @@ Map<String, Object?> _host() => {
   'user': {'id': 7, 'documentId': 'usr7', 'name': 'Priya'},
 };
 
+/// Picks a real (tiny) PNG, so the send has a file to upload.
+class _FakeDevice extends ChatDevice {
+  _FakeDevice();
+
+  final picks = <bool>[];
+
+  @override
+  Future<ChatPickedPhoto?> pickPhoto({required bool camera}) async {
+    picks.add(camera);
+    final f = File('${Directory.systemTemp.path}/chat_private_promo.png')
+      ..writeAsBytesSync(_png);
+    return ChatPickedPhoto(f.path, width: 1, height: 1, bytes: _png.length);
+  }
+
+  @override
+  Future<bool> micPermission() async => false;
+  @override
+  Future<String> startRecording() async => '';
+  @override
+  Future<String?> stopRecording() async => null;
+  @override
+  Future<void> cancelRecording() async {}
+  @override
+  Future<void> dispose() async {}
+}
+
 Future<void> _pump(WidgetTester tester, int ms) async {
   for (var t = 0; t < ms; t += 50) {
     await tester.pump(const Duration(milliseconds: 50));
@@ -526,6 +559,9 @@ void main() {
     ChatOutbox.instance.debugReset();
     ChatScreenGuard.instance.debugReset();
     ChatRoomController.clearCache();
+    for (final k in AppPrefs.keysWithPrefix(PrivatePhotoPromo.prefix)) {
+      await AppPrefs.remove(k);
+    }
     // The first-time vanish tip has its own tests.
     ChatMessageList.vanishTipEnabled = false;
     NotificationTapRouter.debugReset();
@@ -1632,6 +1668,172 @@ void main() {
 
   // Every language, large text, a small phone with the keyboard up, a long
   // name and long messages, in and out of vanish mode: nothing may overflow.
+  group('private photos, pointed out to hosts', () {
+    final tip = find.byKey(const ValueKey('private-promo-tip'));
+    final dot = find.byKey(const ValueKey('chat-attach-dot'));
+    final attach = find.descendant(
+      of: find.byType(ChatComposer),
+      matching: find.byIcon(LucideIcons.imagePlus),
+    );
+
+    setUp(() {
+      backend.mySide = 'host';
+      backend.messages.add(_Backend._message('m1', text: 'hello'));
+    });
+
+    testWidgets('a host sees the tip, the dot and "New"; closing the tip '
+        'keeps it closed next time', (tester) async {
+      await openApp(tester, location: AppRoutes.chatWith('7'));
+      expect(tip, findsOneWidget);
+      expect(find.text('Earn from private photos'), findsOneWidget);
+      expect(find.textContaining('₹10 to ₹2000'), findsOneWidget);
+      expect(dot, findsOneWidget);
+
+      // The photo button: private photo first, marked New; the dot goes.
+      await tester.tap(attach);
+      await _pump(tester, 600);
+      final private = find.byKey(const ValueKey('chat-attach-private'));
+      expect(private, findsOneWidget);
+      expect(find.byKey(const ValueKey('private-promo-new')), findsOneWidget);
+      expect(
+        tester.getTopLeft(private).dy,
+        lessThan(tester.getTopLeft(find.text('Choose from gallery')).dy),
+      );
+      Navigator.of(tester.element(private)).pop();
+      await _pump(tester, 600);
+      expect(dot, findsNothing);
+      expect(tip, findsOneWidget, reason: 'the tip has its own close');
+
+      await tester.tap(find.byKey(const ValueKey('private-promo-tip-close')));
+      await _pump(tester, 600);
+      expect(tip, findsNothing);
+      await finish(tester);
+
+      ChatRoomController.clearCache();
+      await openApp(tester, location: AppRoutes.chatWith('7'));
+      expect(tip, findsNothing);
+      expect(dot, findsNothing);
+      await finish(tester);
+    });
+
+    testWidgets('"Send one" goes straight to the private photo; once sent, '
+        'every pointer is gone for good', (tester) async {
+      final device = ChatDevice.instance;
+      final fake = ChatDevice.instance = _FakeDevice();
+      addTearDown(() => ChatDevice.instance = device);
+      await openApp(tester, location: AppRoutes.chatWith('7'));
+      await tester.tap(find.byKey(const ValueKey('private-promo-send')));
+      await _pump(tester, 600);
+      // Where from: gallery or camera, no private row (already chosen).
+      expect(find.byKey(const ValueKey('chat-attach-private')), findsNothing);
+      await tester.tap(find.text('Choose from gallery'));
+      await _pump(tester, 800);
+      expect(fake.picks, [false]);
+      await tester.enterText(
+        find.byKey(const ValueKey('chat-private-price')),
+        '50',
+      );
+      await _pump(tester, 200);
+      await tester.tap(find.byKey(const ValueKey('chat-private-send')));
+      await _pump(tester, 1200);
+      expect(PrivatePhotoPromo.instance.sent, isTrue);
+      expect(tip, findsNothing);
+      expect(dot, findsNothing);
+
+      await tester.tap(attach);
+      await _pump(tester, 600);
+      expect(find.byKey(const ValueKey('chat-attach-private')), findsOneWidget);
+      expect(find.byKey(const ValueKey('private-promo-new')), findsNothing);
+      Navigator.of(
+        tester.element(find.byKey(const ValueKey('chat-attach-private'))),
+      ).pop();
+      await _pump(tester, 600);
+      await finish(tester);
+    });
+
+    testWidgets('folds away while the keyboard is up', (tester) async {
+      await openApp(tester, location: AppRoutes.chatWith('7'));
+      expect(tip, findsOneWidget);
+      tester.view.viewInsets = const FakeViewPadding(bottom: 300 * 3);
+      await _pump(tester, 600);
+      expect(tip, findsNothing);
+      tester.view.resetViewInsets();
+      await _pump(tester, 600);
+      expect(tip, findsOneWidget);
+      await finish(tester);
+    });
+
+    testWidgets('never for the paying side, with private photos off, or in '
+        'vanish mode', (tester) async {
+      backend.mySide = 'payer';
+      await openApp(tester, location: AppRoutes.chatWith('7'));
+      expect(tip, findsNothing);
+      expect(dot, findsNothing);
+      await tester.tap(attach);
+      await _pump(tester, 600);
+      expect(find.byKey(const ValueKey('chat-attach-private')), findsNothing);
+      Navigator.of(tester.element(find.text('Choose from gallery'))).pop();
+      await _pump(tester, 600);
+      await finish(tester);
+
+      backend
+        ..mySide = 'host'
+        ..privatePhotosOn = false;
+      ChatRoomController.clearCache();
+      queryCache.clear();
+      await openApp(tester, location: AppRoutes.chatWith('7'));
+      expect(tip, findsNothing);
+      expect(dot, findsNothing);
+      await finish(tester);
+
+      backend
+        ..privatePhotosOn = true
+        ..vanishOn = true;
+      ChatRoomController.clearCache();
+      queryCache.clear();
+      await openApp(tester, location: AppRoutes.chatWith('7'));
+      expect(tip, findsNothing);
+      await finish(tester);
+    });
+
+    testWidgets('the Chats list: a banner for a host until closed; none for '
+        'a user', (tester) async {
+      final banner = find.byKey(const ValueKey('private-promo-list'));
+      await openApp(tester);
+      await tester.tap(
+        find.descendant(
+          of: find.byType(BottomNavbar),
+          matching: find.byIcon(LucideIcons.messageCircle),
+        ),
+      );
+      await _pump(tester, 900);
+      expect(find.byType(ChatsView), findsOneWidget);
+      expect(banner, findsNothing, reason: 'a user, not a host');
+      await finish(tester);
+
+      await SessionStore.instance.signIn(
+        user: {'id': 1, 'documentId': 'u1', 'name': 'Asha'},
+        expert: {'id': 5, 'documentId': 'e5'},
+        accessToken: 'access',
+      );
+      queryCache.clear();
+      await openApp(tester);
+      await tester.tap(
+        find.descendant(
+          of: find.byType(BottomNavbar),
+          matching: find.byIcon(LucideIcons.messageCircle),
+        ),
+      );
+      await _pump(tester, 900);
+      expect(banner, findsOneWidget);
+      expect(find.text('New: earn from private photos'), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('private-promo-list-close')));
+      await _pump(tester, 600);
+      expect(banner, findsNothing);
+      await finish(tester);
+    });
+  });
+
   group('no overflow anywhere in a chat', () {
     for (final lang in const ['en', 'hi', 'bn', 'mr', 'ta', 'gu', 'ur', 'kn', 'or']) {
       for (final on in const [false, true]) {

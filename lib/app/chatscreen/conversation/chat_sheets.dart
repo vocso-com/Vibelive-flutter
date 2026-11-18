@@ -13,6 +13,7 @@ import '../../component/c_text.dart';
 import '../../listingflow/profile/helper/host_profile_rules.dart';
 import '../../listingflow/profile/profile_sheets.dart';
 import '../components/photo_bubble.dart';
+import '../components/private_photo_tip.dart';
 import '../helper/chat_device.dart';
 import '../helper/chat_pricing.dart';
 
@@ -80,12 +81,26 @@ Future<ChatMenuAction?> showChatMenu(
 enum ChatAttach { gallery, camera, private }
 
 /// The photo button: gallery, camera, and (host side) a private photo.
+/// [highlightPrivate]: the host has never sent one, so it comes first with
+/// a "New" pill (see `PrivatePhotoPromo`).
 Future<ChatAttach?> showAttachSheet(
   BuildContext context, {
   required bool canSellPrivate,
+  bool highlightPrivate = false,
 }) => showProfileSheet<ChatAttach>(context, (sheet) {
   final accent = sheet.colors.accent;
   void pick(ChatAttach a) => Navigator.of(sheet).pop(a);
+  Widget privateRow() => SheetActionRow(
+    key: const ValueKey('chat-attach-private'),
+    icon: LucideIcons.lockKeyhole,
+    tint: BrandColors.lime,
+    label: 'chat:composer.private',
+    onTap: () => pick(ChatAttach.private),
+    trailing: highlightPrivate
+        ? PrivatePhotoNewPill(color: accent, onColor: sheet.colors.onAccent)
+        : null,
+  );
+  final privateFirst = canSellPrivate && highlightPrivate;
   return SheetCard(
     handle: true,
     child: Padding(
@@ -93,6 +108,7 @@ Future<ChatAttach?> showAttachSheet(
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
+          if (privateFirst) privateRow(),
           SheetActionRow(
             icon: LucideIcons.image,
             tint: accent,
@@ -105,13 +121,7 @@ Future<ChatAttach?> showAttachSheet(
             label: 'chat:composer.camera',
             onTap: () => pick(ChatAttach.camera),
           ),
-          if (canSellPrivate)
-            SheetActionRow(
-              icon: LucideIcons.lockKeyhole,
-              tint: BrandColors.lime,
-              label: 'chat:composer.private',
-              onTap: () => pick(ChatAttach.private),
-            ),
+          if (canSellPrivate && !privateFirst) privateRow(),
         ],
       ),
     ),
@@ -373,7 +383,9 @@ Future<bool> showChatPrices(
                   CText(
                     'chat:prices.your_earnings',
                     variables: {
-                      'amount': ChatPricing.money(open.earnings ?? balance ?? 0),
+                      'amount': ChatPricing.money(
+                        open.earnings ?? balance ?? 0,
+                      ),
                     },
                     size: 14,
                     weight: FontWeight.w800,

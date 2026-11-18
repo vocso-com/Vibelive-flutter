@@ -157,5 +157,13 @@
   },
   "free": {
     "left": "Free call · {{time}} left"
+  },
+  "topup": {
+    "title": "Only {{time}} of talk time left",
+    "free_title": "Free minutes end in {{time}}",
+    "body": "Add money to keep talking. Your call stays on while you pay.",
+    "add": "Add money",
+    "pill": "{{time}} left · Add money",
+    "close": "Close"
   }
 }

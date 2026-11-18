@@ -26,6 +26,8 @@ import '../../navbar/bottombar/navbar_collapse.dart';
 import '../../navbar/topbar/top_bar_button.dart';
 import '../components/chat_palette.dart';
 import '../components/chat_secure_zone.dart';
+import '../components/private_photo_tip.dart';
+import '../helper/private_photo_promo.dart';
 import 'conversation_row.dart';
 
 const _filters = ['all', 'unread', 'online'];
@@ -185,6 +187,14 @@ class ChatsView extends HookWidget {
               },
             ),
           ),
+          // A host who has chats and never sent a private photo: where it is.
+          if (items.isNotEmpty &&
+              config.enabled &&
+              config.privatePhotos.enabled &&
+              SessionStore.instance.value.isExpert)
+            SliverToBoxAdapter(
+              child: _PrivatePhotoBanner(rules: config.privatePhotos),
+            ),
           if (items.isEmpty)
             SliverFillRemaining(
               hasScrollBody: false,
@@ -215,6 +225,39 @@ class ChatsView extends HookWidget {
     final at = items == null || items.isEmpty ? null : items.last.updatedAt;
     return at?.toUtc().toIso8601String();
   }
+}
+
+/// "New: earn from private photos" over the list, until the host closes it
+/// or sends one (`PrivatePhotoPromo`).
+class _PrivatePhotoBanner extends StatelessWidget {
+  const _PrivatePhotoBanner({required this.rules});
+
+  final ChatPrivatePhotoRules rules;
+
+  @override
+  Widget build(BuildContext context) => ListenableBuilder(
+    listenable: PrivatePhotoPromo.instance,
+    builder: (context, _) {
+      final promo = PrivatePhotoPromo.instance;
+      final show = promo.showing(PrivatePhotoSpot.list);
+      if (show) ChatEvents.privatePromo('shown', spot: 'list');
+      return AnimatedSize(
+        duration: const Duration(milliseconds: 220),
+        curve: Curves.easeOutCubic,
+        alignment: Alignment.topCenter,
+        child: show
+            ? PrivatePhotoTip(
+                min: rules.minPrice,
+                max: rules.maxPrice,
+                onClose: () {
+                  ChatEvents.privatePromo('closed', spot: 'list');
+                  unawaited(promo.dismiss(PrivatePhotoSpot.list));
+                },
+              )
+            : const SizedBox(width: double.infinity),
+      );
+    },
+  );
 }
 
 /// CHATS header, built like the History one: back to Discover, the title.

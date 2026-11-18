@@ -29,6 +29,8 @@ import '../../navbar/bottombar/navbar_collapse.dart';
 import '../helper/discover_layout.dart';
 import '../helper/home_controller.dart';
 import 'active_filters.dart';
+import 'card_video_focus.dart';
+import 'discover_card_video.dart';
 import '../../api/host_status/host_status_models.dart';
 import '../../api/host_status/host_status_queries.dart';
 import '../../api/listingflow/host_index.dart';
@@ -63,6 +65,10 @@ class DiscoverView extends HookWidget {
     final form = useInterestForm(context);
     final filter = useValueListenable(home.filter);
     final scroll = useScrollController();
+    // Video intros on the cards the user stops on (muted, see CardVideoFocus).
+    final videoFocus = useMemoized(CardVideoFocus.new);
+    useEffect(() => videoFocus.dispose, const []);
+    final listKey = useMemoized(GlobalKey.new);
 
     final formTopics = useMemoized(() => _topicsOf(form.data), [form.data]);
     final topics = useMemoized(
@@ -279,6 +285,13 @@ class DiscoverView extends HookWidget {
     final dockGap = 12.ms;
     // RN: 140 above the bottom safe area, clear of the floating navbar; and
     // the last cards scroll clear of the open Talk Now pill too.
+    // The list's area the user sees: its box, less the floating navbar.
+    videoFocus.viewport = () {
+      final box = listKey.currentContext?.findRenderObject();
+      if (box is! RenderBox || !box.attached || !box.hasSize) return null;
+      final r = box.localToGlobal(Offset.zero) & box.size;
+      return Rect.fromLTRB(r.left, r.top, r.right, r.bottom - navbar);
+    };
     final padding = EdgeInsets.fromLTRB(
       10.ms,
       10.ms,
@@ -338,82 +351,104 @@ class DiscoverView extends HookWidget {
               child: LayoutBuilder(
                 builder: (context, box) {
                   listWidth.value = box.maxWidth;
-                  return InfiniteScroll(
-                    controller: scroll,
-                    padding: padding,
-                    hasMore: !loading && !isPopular && feed.hasMore,
-                    loadingMore: feed.isLoadingMore,
-                    loadMoreFailed: feed.query.isFetchNextPageError,
-                    onLoadMore: () {
-                      DiscoverEvents.feedLoadMore(
-                        page: (feed.query.data?.pages.length ?? 0) + 1,
-                        loaded: feed.hosts.length,
-                      );
-                      feed.loadMore();
+                  return NotificationListener<ScrollNotification>(
+                    onNotification: (n) {
+                      if (n.depth != 0) return false;
+                      if (n is ScrollStartNotification) {
+                        videoFocus.scrollStarted();
+                      } else if (n is ScrollUpdateNotification) {
+                        videoFocus.scrolled();
+                      } else if (n is ScrollEndNotification) {
+                        videoFocus.scrollEnded();
+                      }
+                      return false;
                     },
-                    // A page is ~8 rows (~2.5 screens): ask while that much is
-                    // still below, so it lands before the user gets there.
-                    loadAhead: 2.5,
-                    onRefresh: () => refresh(),
-                    endLabel: loading || rows.isEmpty ? null : 'home:feed.end',
-                    onScroll: NavbarCollapse.instance.track,
-                    // Filtered view: the count is unknown, so one plain pair
-                    // row (never a spinner in a list).
-                    loadingBuilder: next == null
-                        ? (_) => const Shimmer(child: _SkeletonRow())
-                        : (_) => _MoreSkeleton(next),
-                    slivers: [
-                      SliverToBoxAdapter(child: header),
-                      if (loading)
-                        const SliverToBoxAdapter(child: _FeedSkeleton())
-                      else if (error != null)
-                        SliverFillRemaining(
-                          hasScrollBody: false,
-                          child: _LoadError(
-                            error: error,
-                            onRetry: () => refresh(trigger: 'retry'),
-                          ),
-                        )
-                      else if (rows.isEmpty)
-                        SliverFillRemaining(
-                          hasScrollBody: false,
-                          child: CStateView.empty(
-                            title: tab.value.emptyKey,
-                            message: null,
-                          ),
-                        )
-                      else
-                        SliverVariedExtentList.builder(
-                          itemCount: rows.length,
-                          itemExtentBuilder: (i, _) =>
-                              i < rows.length ? rows[i].height + 12.ms : null,
-                          findChildIndexCallback: (key) =>
-                              key is ValueKey<String>
-                              ? rowIndex[key.value]
-                              : null,
-                          itemBuilder: (context, i) {
-                            final row = rows[i];
-                            // The half row the next card lands in: its empty
-                            // slot shows that card's skeleton meanwhile.
-                            if ((next?.fillsSlot ?? false) &&
-                                i == rows.length - 1) {
-                              return _Row(
-                                row,
-                                key: ValueKey(row.key),
-                                pendingSlot: true,
-                                onCard: onCard,
-                                freeCall: freeCall,
-                              );
-                            }
-                            return rowWidgets[row] ??= _Row(
-                              row,
-                              key: ValueKey(row.key),
-                              onCard: onCard,
-                              freeCall: freeCall,
+                    child: CardVideoScope(
+                      focus: videoFocus,
+                      child: KeyedSubtree(
+                        key: listKey,
+                        child: InfiniteScroll(
+                          controller: scroll,
+                          padding: padding,
+                          hasMore: !loading && !isPopular && feed.hasMore,
+                          loadingMore: feed.isLoadingMore,
+                          loadMoreFailed: feed.query.isFetchNextPageError,
+                          onLoadMore: () {
+                            DiscoverEvents.feedLoadMore(
+                              page: (feed.query.data?.pages.length ?? 0) + 1,
+                              loaded: feed.hosts.length,
                             );
+                            feed.loadMore();
                           },
+                          // A page is ~8 rows (~2.5 screens): ask while that much is
+                          // still below, so it lands before the user gets there.
+                          loadAhead: 2.5,
+                          onRefresh: () => refresh(),
+                          endLabel: loading || rows.isEmpty
+                              ? null
+                              : 'home:feed.end',
+                          onScroll: NavbarCollapse.instance.track,
+                          // Filtered view: the count is unknown, so one plain pair
+                          // row (never a spinner in a list).
+                          loadingBuilder: next == null
+                              ? (_) => const Shimmer(child: _SkeletonRow())
+                              : (_) => _MoreSkeleton(next),
+                          slivers: [
+                            SliverToBoxAdapter(child: header),
+                            if (loading)
+                              const SliverToBoxAdapter(child: _FeedSkeleton())
+                            else if (error != null)
+                              SliverFillRemaining(
+                                hasScrollBody: false,
+                                child: _LoadError(
+                                  error: error,
+                                  onRetry: () => refresh(trigger: 'retry'),
+                                ),
+                              )
+                            else if (rows.isEmpty)
+                              SliverFillRemaining(
+                                hasScrollBody: false,
+                                child: CStateView.empty(
+                                  title: tab.value.emptyKey,
+                                  message: null,
+                                ),
+                              )
+                            else
+                              SliverVariedExtentList.builder(
+                                itemCount: rows.length,
+                                itemExtentBuilder: (i, _) => i < rows.length
+                                    ? rows[i].height + 12.ms
+                                    : null,
+                                findChildIndexCallback: (key) =>
+                                    key is ValueKey<String>
+                                    ? rowIndex[key.value]
+                                    : null,
+                                itemBuilder: (context, i) {
+                                  final row = rows[i];
+                                  // The half row the next card lands in: its empty
+                                  // slot shows that card's skeleton meanwhile.
+                                  if ((next?.fillsSlot ?? false) &&
+                                      i == rows.length - 1) {
+                                    return _Row(
+                                      row,
+                                      key: ValueKey(row.key),
+                                      pendingSlot: true,
+                                      onCard: onCard,
+                                      freeCall: freeCall,
+                                    );
+                                  }
+                                  return rowWidgets[row] ??= _Row(
+                                    row,
+                                    key: ValueKey(row.key),
+                                    onCard: onCard,
+                                    freeCall: freeCall,
+                                  );
+                                },
+                              ),
+                          ],
                         ),
-                    ],
+                      ),
+                    ),
                   );
                 },
               ),
@@ -490,6 +525,17 @@ class _Row extends StatelessWidget {
   final bool pendingSlot;
   final _CardTap onCard;
 
+  /// The muted video intro over the photo, for hosts who have one.
+  static Widget? _video(HostCard h) {
+    final url = h.videoIntro;
+    if (url == null || url.isEmpty) return null;
+    return DiscoverCardVideo(
+      key: ValueKey('card-video-$url'),
+      url: url,
+      hostId: h.expertProfileDocumentId ?? h.name,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     void open(HostCard h) =>
@@ -507,6 +553,7 @@ class _Row extends StatelessWidget {
               onTap: open,
               onCall: call,
               freeCall: freeCall,
+              media: _video(row.hosts.first),
             )
           : Row(
               children: [
@@ -516,6 +563,7 @@ class _Row extends StatelessWidget {
                     onTap: open,
                     onCall: call,
                     freeCall: freeCall,
+                    media: _video(row.hosts.first),
                   ),
                 ),
                 gap,
@@ -526,6 +574,7 @@ class _Row extends StatelessWidget {
                           onTap: open,
                           onCall: call,
                           freeCall: freeCall,
+                          media: _video(row.hosts[1]),
                         )
                       : pendingSlot
                       ? const Shimmer(child: HostGridCardSkeleton())

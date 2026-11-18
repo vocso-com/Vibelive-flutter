@@ -5,6 +5,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:vibelive/app/callscreen/call/call_pip.dart';
 import 'package:vibelive/app/callscreen/call/call_screen.dart';
+import 'package:vibelive/app/callscreen/call/call_topup.dart';
+import 'package:vibelive/app/callscreen/helper/call_billing.dart';
+import 'package:vibelive/app/paymentscreen/wallet/helper/topup_checkout.dart';
 import 'package:vibelive/app/callscreen/call/helper/call_nav.dart';
 import 'package:vibelive/app/callscreen/call/helper/pip_clamp.dart';
 import 'package:vibelive/app/callscreen/helper/call_controller.dart';
@@ -500,4 +503,232 @@ void main() {
       await finishCall(tester);
     });
   }
+
+  group('"Add money" during a call', () {
+    tearDown(() {
+      CallBilling.debugReset();
+      InCallTopUp.debugReset();
+      CallEngine.instance.debugSetAudioRoute(null);
+    });
+
+    final card = find.byKey(const ValueKey('call-topup-card'));
+    final pill = find.byKey(const ValueKey('call-topup-pill'));
+    bool speaker() => CallEngine.instance.media.value.speakerOn;
+
+    /// A live paid call 100 s from its end, with "Add money" due.
+    Future<void> openDue(
+      WidgetTester tester, {
+      bool video = false,
+      bool free = false,
+    }) async {
+      final now = DateTime.now();
+      await openCall(
+        tester,
+        callOf(
+          phase: CallPhase.ongoing,
+          role: CallRole.caller,
+          video: video,
+          connectedAt: now.subtract(const Duration(seconds: 20)),
+        ),
+        media: _live,
+      );
+      CallBilling.limit.value = CallLimit(
+        callId: '501',
+        endsAt: now.add(const Duration(seconds: 100)),
+        freeLimit: free,
+        extendable: true,
+      );
+      CallBilling.topUpDue.value = '501';
+      await pumpMs(tester, 400);
+    }
+
+    for (final video in const [false, true]) {
+      testWidgets('${video ? 'video' : 'voice'}: the card over the call; Add '
+          'money pays on the speaker, then back to the earpiece', (
+        tester,
+      ) async {
+        final during = <bool>[];
+        InCallTopUp.pay = (_) async {
+          during.add(speaker());
+          return TopUpResult.success;
+        };
+        await openDue(tester, video: video);
+        expect(card, findsOneWidget);
+        expect(find.textContaining('of talk time left'), findsOneWidget);
+        expect(find.textContaining('01:3'), findsOneWidget); // ~1:39 left
+        expect(speaker(), isFalse);
+
+        await tester.tap(find.byKey(const ValueKey('call-topup-add')));
+        await pumpMs(tester, 300);
+        expect(during, [true], reason: 'talking on while paying');
+        expect(speaker(), isFalse, reason: 'back to the earpiece');
+        // The call goes on.
+        expect(CallController.instance.value.phase, CallPhase.ongoing);
+        await finishCall(tester);
+      });
+    }
+
+    testWidgets('a headset or Bluetooth carries the call: left alone', (
+      tester,
+    ) async {
+      final during = <bool>[];
+      InCallTopUp.pay = (_) async {
+        during.add(speaker());
+        return null;
+      };
+      CallEngine.instance.debugSetAudioRoute(5); // Bluetooth
+      await openDue(tester);
+      await tester.tap(find.byKey(const ValueKey('call-topup-add')));
+      await pumpMs(tester, 300);
+      expect(during, [false]);
+      expect(speaker(), isFalse);
+      await finishCall(tester);
+    });
+
+    testWidgets('already on the speaker: it stays on after', (tester) async {
+      InCallTopUp.pay = (_) async => null;
+      await openDue(tester);
+      CallEngine.instance.debugSetMedia(_live.copyWith(speakerOn: true));
+      await tester.tap(find.byKey(const ValueKey('call-topup-add')));
+      await pumpMs(tester, 300);
+      expect(speaker(), isTrue);
+      await finishCall(tester);
+    });
+
+    testWidgets('closed: a pill with the time left, which opens it again', (
+      tester,
+    ) async {
+      var paid = 0;
+      InCallTopUp.pay = (_) async {
+        paid++;
+        return null;
+      };
+      await openDue(tester);
+      await tester.tap(find.byKey(const ValueKey('call-topup-close')));
+      await pumpMs(tester, 400);
+      expect(card, findsNothing);
+      expect(pill, findsOneWidget);
+      expect(find.textContaining('left · Add money'), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('call-topup-pill-add')));
+      await pumpMs(tester, 300);
+      expect(paid, 1);
+      await finishCall(tester);
+    });
+
+    // Tamil, Kannada and Bengali are not here: their larger strings never
+    // finish loading in widget tests (decoded off the main isolate).
+    for (final lang in const ['hi', 'ur', 'en']) {
+      testWidgets('320 wide, $lang, video: card and pill fit', (tester) async {
+        final now = DateTime.now();
+        await openCall(
+          tester,
+          callOf(
+            phase: CallPhase.ongoing,
+            role: CallRole.caller,
+            video: true,
+            connectedAt: now,
+          ),
+          media: _live,
+          size: narrow,
+          locale: Locale(lang),
+        );
+        CallBilling.limit.value = CallLimit(
+          callId: '501',
+          endsAt: now.add(const Duration(seconds: 100)),
+          freeLimit: true,
+          extendable: true,
+        );
+        CallBilling.topUpDue.value = '501';
+        void noError() {
+          final e = tester.takeException();
+          expect(
+            e,
+            isNull,
+            reason: e is FlutterError ? e.toStringDeep() : '$e',
+          );
+        }
+
+        await pumpMs(tester, 400);
+        noError();
+        expect(card, findsOneWidget);
+        await tester.tap(find.byKey(const ValueKey('call-topup-close')));
+        await pumpMs(tester, 400);
+        noError();
+        expect(pill, findsOneWidget);
+        await finishCall(tester);
+      });
+    }
+
+    testWidgets('free minutes running out: their own words', (tester) async {
+      await openDue(tester, free: true);
+      expect(find.textContaining('Free minutes end in'), findsOneWidget);
+      await finishCall(tester);
+    });
+
+    testWidgets('not due, not extendable, or the receiver: nothing', (
+      tester,
+    ) async {
+      await openDue(tester);
+      CallBilling.topUpDue.value = null;
+      await pumpMs(tester, 400);
+      expect(card, findsNothing);
+      expect(pill, findsNothing);
+
+      CallBilling.topUpDue.value = '501';
+      CallBilling.limit.value = CallLimit(
+        callId: '501',
+        endsAt: DateTime.now().add(const Duration(seconds: 60)),
+        freeLimit: true,
+        extendable: false,
+      );
+      await pumpMs(tester, 400);
+      expect(card, findsNothing);
+      await finishCall(tester);
+
+      await openCall(
+        tester,
+        callOf(phase: CallPhase.ongoing, connectedAt: DateTime.now()),
+        media: _live,
+      );
+      CallBilling.limit.value = CallLimit(
+        callId: '501',
+        endsAt: DateTime.now().add(const Duration(seconds: 60)),
+        freeLimit: false,
+        extendable: true,
+      );
+      CallBilling.topUpDue.value = '501';
+      await pumpMs(tester, 400);
+      expect(card, findsNothing, reason: 'the receiver pays nothing');
+      await finishCall(tester);
+    });
+
+    testWidgets('the call ends while paying: the rating waits until Add money '
+        'is done, and nothing is pulled from under it', (tester) async {
+      final paying = Completer<TopUpResult?>();
+      InCallTopUp.pay = (_) => paying.future;
+      await openDue(tester);
+      await tester.tap(find.byKey(const ValueKey('call-topup-add')));
+      await pumpMs(tester, 200);
+
+      await setCall(
+        tester,
+        callOf(
+          phase: CallPhase.ended,
+          role: CallRole.caller,
+          connectedAt: DateTime.now().subtract(const Duration(seconds: 90)),
+          endedAt: DateTime.now(),
+        ),
+      );
+      await pumpMs(tester, 2000);
+      expect(find.text('RATE YOUR CALL EXPERIENCE'), findsNothing);
+      expect(find.byType(CallScreen), findsOneWidget);
+      expect(card, findsNothing, reason: 'nothing to add to an ended call');
+
+      paying.complete(TopUpResult.success);
+      await pumpMs(tester, 800);
+      expect(find.text('RATE YOUR CALL EXPERIENCE'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+      await finishCall(tester);
+    });
+  });
 }

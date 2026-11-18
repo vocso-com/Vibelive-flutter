@@ -27,6 +27,7 @@ class ChatComposer extends StatefulWidget {
     required this.onAttach,
     required this.onVoice,
     this.textOnly = false,
+    this.attachDot = false,
   });
 
   final TextEditingController controller;
@@ -35,6 +36,10 @@ class ChatComposer extends StatefulWidget {
   /// Vanish mode: text only — no photo button and no voice notes (the server
   /// refuses them there too).
   final bool textOnly;
+
+  /// A small dot on the photo button: something new is in its sheet (a
+  /// host's private photos, until they open it once).
+  final bool attachDot;
 
   final int voiceMaxSeconds;
   final ValueChanged<String> onSend;
@@ -129,14 +134,15 @@ class _ChatComposerState extends State<ChatComposer> {
                         child: widget.textOnly
                             ? const SizedBox(height: 0)
                             : Padding(
-                                padding: EdgeInsetsDirectional.only(
-                                  end: 6.ms,
-                                ),
-                                child: _RoundButton(
-                                  icon: LucideIcons.imagePlus,
-                                  label: 'chat:composer.attach',
-                                  onTap: widget.onAttach,
-                                  filled: false,
+                                padding: EdgeInsetsDirectional.only(end: 6.ms),
+                                child: _Dotted(
+                                  show: widget.attachDot,
+                                  child: _RoundButton(
+                                    icon: LucideIcons.imagePlus,
+                                    label: 'chat:composer.attach',
+                                    onTap: widget.onAttach,
+                                    filled: false,
+                                  ),
                                 ),
                               ),
                       ),
@@ -418,6 +424,42 @@ class _RoundButton extends StatelessWidget {
       onPressed: onTap,
       semanticLabel: context.t(label),
       child: circle,
+    );
+  }
+}
+
+/// [child] with a small accent dot at its top end while [show].
+class _Dotted extends StatelessWidget {
+  const _Dotted({required this.show, required this.child});
+
+  final bool show;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    if (!show) return child;
+    final p = ChatPalette.of(context);
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        child,
+        PositionedDirectional(
+          top: 1.ms,
+          end: 1.ms,
+          child: IgnorePointer(
+            child: Container(
+              key: const ValueKey('chat-attach-dot'),
+              width: 11.ms,
+              height: 11.ms,
+              decoration: BoxDecoration(
+                color: p.accent,
+                shape: BoxShape.circle,
+                border: Border.all(color: p.bar, width: 2),
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

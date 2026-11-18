@@ -52,6 +52,27 @@ abstract final class CallUiEvents {
       });
 
   /// Header back during a live call: Home, the call keeps running.
+  /// The call screen's "Add money" came up (the caller's balance or free
+  /// minutes run out soon). [secondsLeft]: before the call would end.
+  static void topUpPromptShown({int? secondsLeft, required bool free}) =>
+      Analytics.log('call_topup_prompt_shown', {
+        'seconds_left': ?secondsLeft,
+        'free': free,
+      });
+
+  /// "Add money" tapped on the call screen. [from]: `prompt` / `pill`;
+  /// [speaker]: the call was moved to the speaker for it.
+  static void topUpTapped({required String from, required bool speaker}) =>
+      Analytics.log('call_topup_tapped', {'from': from, 'speaker': speaker});
+
+  /// How the in-call top-up ended: `success` / `pending` / `failure` /
+  /// `closed`; [extended]: the call's end moved.
+  static void topUpFinished({required String result, required bool extended}) =>
+      Analytics.log('call_topup_finished', {
+        'result': result,
+        'extended': extended,
+      });
+
   static void minimized(CallInfo call) =>
       Analytics.log('call_minimized', _call(call));
 

@@ -27,12 +27,14 @@ import '../components/chat_header.dart';
 import '../components/chat_palette.dart';
 import '../components/chat_secure_zone.dart';
 import '../components/low_balance_bar.dart';
+import '../components/private_photo_tip.dart';
 import '../components/vanish_mode.dart';
 import '../helper/low_balance.dart';
 import '../helper/chat_room_controller.dart';
 import '../helper/chat_screen_guard.dart';
 import '../helper/chat_sync.dart';
 import '../helper/chat_voice_player.dart';
+import '../helper/private_photo_promo.dart';
 import 'chat_calls.dart';
 import 'chat_report_sheet.dart';
 import 'chat_screen_actions.dart';
@@ -217,6 +219,9 @@ class ChatScreen extends HookWidget {
                   actions: actions,
                   text: text,
                   vanish: vanish,
+                  // Read here, above the Scaffold: its body never sees the
+                  // keyboard's inset.
+                  keyboardUp: MediaQuery.viewInsetsOf(context).bottom > 0,
                 ),
         ),
       ),
@@ -501,6 +506,7 @@ class _Bottom extends StatelessWidget {
     required this.actions,
     required this.text,
     required this.vanish,
+    this.keyboardUp = false,
   });
 
   final ChatOpen open;
@@ -509,6 +515,10 @@ class _Bottom extends StatelessWidget {
   final ChatScreenActions actions;
   final TextEditingController text;
   final ChatVanishInfo vanish;
+
+  /// The keyboard is up: the private photo tip folds away (typing keeps
+  /// its room).
+  final bool keyboardUp;
 
   @override
   Widget build(BuildContext context) {
@@ -526,6 +536,51 @@ class _Bottom extends StatelessWidget {
     if (notice != null) return _Notice(text: notice);
     // A host's own (shorter) limit when the server says so.
     final voiceMax = open.voiceMaxSeconds ?? config.voice.maxSeconds;
+    // Private photos, pointed out to a host who has never sent one. Not in
+    // vanish mode: the photo button is gone there.
+    final promoHere =
+        open.mySide == ChatSide.host &&
+        open.conversationId != null &&
+        config.privatePhotos.enabled &&
+        !vanish.on;
+    return ListenableBuilder(
+      listenable: PrivatePhotoPromo.instance,
+      builder: (context, _) {
+        final promo = PrivatePhotoPromo.instance;
+        final tip =
+            promoHere && !keyboardUp && promo.showing(PrivatePhotoSpot.tip);
+        if (tip) ChatEvents.privatePromo('shown', spot: 'tip');
+        return Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            AnimatedSize(
+              duration: const Duration(milliseconds: 220),
+              curve: Curves.easeOutCubic,
+              alignment: Alignment.bottomCenter,
+              child: tip
+                  ? PrivatePhotoTip(
+                      min: config.privatePhotos.minPrice,
+                      max: config.privatePhotos.maxPrice,
+                      onAction: () => unawaited(actions.privatePhotoFromTip()),
+                      onClose: () {
+                        ChatEvents.privatePromo('closed', spot: 'tip');
+                        unawaited(promo.dismiss(PrivatePhotoSpot.tip));
+                      },
+                    )
+                  : const SizedBox(width: double.infinity),
+            ),
+            _bar(
+              context,
+              voiceMax,
+              attachDot: promoHere && promo.showing(PrivatePhotoSpot.button),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _bar(BuildContext context, int voiceMax, {required bool attachDot}) {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -551,6 +606,7 @@ class _Bottom extends StatelessWidget {
           maxLength: config.maxMessageLength,
           voiceMaxSeconds: voiceMax,
           textOnly: vanish.on,
+          attachDot: attachDot,
           onSend: actions.sendText,
           onAttach: () => unawaited(actions.attachPhoto()),
           onVoice: actions.sendVoice,

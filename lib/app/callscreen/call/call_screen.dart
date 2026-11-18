@@ -17,6 +17,7 @@ import 'call_controls.dart';
 import 'call_header.dart';
 import 'call_permission_bar.dart';
 import 'call_safety_panel.dart';
+import 'call_topup.dart';
 import 'feedback_sheet.dart';
 import 'helper/call_format.dart';
 import 'helper/call_nav.dart';
@@ -91,6 +92,9 @@ class CallScreen extends HookWidget {
                   ),
                 ),
                 const _PermissionLayer(),
+                // "Add money" when the balance or free minutes run out soon;
+                // the post-call step waits while it is in use.
+                CallTopUpLayer(onHold: runner.hold),
                 ValueListenableBuilder<bool>(
                   valueListenable: ui.safetyOpen,
                   builder: (_, open, _) => open
