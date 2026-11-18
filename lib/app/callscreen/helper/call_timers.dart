@@ -21,6 +21,9 @@ class CallTimers {
   /// "Add money" on the call screen, a little before [maxDuration].
   static const topUpPrompt = 'topUpPrompt';
 
+  /// The longest a call is held while its caller pays.
+  static const topUpHoldMax = 'topUpHoldMax';
+
   final _timers = <String, Timer>{};
 
   void arm(String name, Duration after, void Function() fire) {

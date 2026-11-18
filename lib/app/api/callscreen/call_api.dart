@@ -119,6 +119,22 @@ abstract final class CallApi {
     return CallHistoryPage.fromResponse(body, page: page, pageSize: pageSize);
   }
 
+  /// The caller is paying in the middle of call [callId] (the call record's
+  /// id): [active] keeps the backend's low-balance guard from ending it for a
+  /// few minutes; false when done. True when the server took it (an older
+  /// backend without the route: false, nothing else changes).
+  static Future<bool> topUpHold(String callId, {required bool active}) async {
+    try {
+      final body = await ApiClient.post(
+        '/call/topup-hold',
+        data: {'callId': int.tryParse(callId) ?? callId, 'active': active},
+      );
+      return body is Map && body['ok'] == true;
+    } on ApiException {
+      return false;
+    }
+  }
+
   /// Expert nudge to a client who missed or declined their call.
   static Future<void> pingClient(String clientDocumentId) =>
       withCallFallback(CallErrorKeys.pingFailed, () async {

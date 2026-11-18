@@ -18,7 +18,6 @@ import '../../../core/session/session_store.dart';
 import '../../../core/utils/log.dart';
 import '../../../core/utils/scale.dart';
 import '../../api/client/client_queries.dart';
-import '../../api/paymentscreen/transaction_api.dart';
 import '../../api/paymentscreen/checkout_models.dart';
 import '../../api/paymentscreen/payment_queries.dart';
 import '../../api/paymentscreen/runtime_config_queries.dart';
@@ -27,6 +26,8 @@ import '../../component/c_alert.dart';
 import '../../component/c_text.dart';
 import '../../component/status_bar_style.dart';
 import '../../component/vibe_background.dart';
+import 'helper/add_money_flow.dart';
+import 'helper/first_topup_offer.dart';
 import 'helper/topup_bonus.dart';
 import 'helper/topup_checkout.dart';
 import 'helper/transaction_pager.dart';
@@ -137,30 +138,27 @@ class WalletScreen extends HookWidget {
       return usable ? st.rows : null;
     }
 
-    /// The bonus this top-up gets. The history may not be loaded yet (the
-    /// call balance gate opens Add Money on the wallet's first frame): then
-    /// the server says whether this user ever paid, as the app-open offer
-    /// asks it, so the first-top-up bonus shows the same from every way in.
+    /// The bonus this top-up gets, the same from every way in (here, the
+    /// call screen, the app-open offer). A paid top-up in the loaded history
+    /// settles it; otherwise the server says (the whole history: the loaded
+    /// page cannot prove "never paid" — an account with 28 newer rows was
+    /// promised a 100% bonus the backend would never grant).
     Future<TopUpBonus?> bonusFor({required bool comeback}) async {
       final history = paidHistory();
+      final provenPaid =
+          history != null && FirstTopupOffer.hasPaidTopup(history);
       // Early (the gate's path): the settings as fresh as the offer reads them.
       final config = history == null
           ? await ensureFreshRuntimeConfig()
           : configRef.value;
-      bool? paidBefore;
-      if (history == null && config.bonus.firstTopupOn) {
+      bool? paidBefore = provenPaid ? true : null;
+      if (!provenPaid && config.bonus.firstTopupOn) {
         final uid = SessionStore.instance.value.userDocumentId;
-        if (uid != null) {
-          try {
-            paidBefore = await TransactionApi.hasPaidTopup(uid);
-          } catch (e) {
-            Log.w(_tag, 'paid-before check failed, no first-top-up bonus: $e');
-          }
-        }
+        if (uid != null) paidBefore = await AddMoneyFlow.paidBefore(uid);
       }
       return TopUpBonus.resolve(
         config: config,
-        history: history,
+        history: null,
         comeback: comeback,
         paidBefore: paidBefore,
       );
@@ -225,6 +223,8 @@ class WalletScreen extends HookWidget {
           }),
         );
       } else {
+        // Paid: no first-top-up bonus anywhere from now on.
+        AddMoneyFlow.forgetPaid();
         unawaited(afterPayment());
       }
       final shown = status.result.name;

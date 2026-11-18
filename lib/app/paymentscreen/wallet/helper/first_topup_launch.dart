@@ -7,8 +7,8 @@ import '../../../../core/session/session_store.dart';
 import '../../../../core/utils/log.dart';
 import '../../../component/c_toast.dart';
 import '../../../api/paymentscreen/runtime_config_queries.dart';
-import '../../../api/paymentscreen/transaction_api.dart';
 import '../widgets/first_topup_popup.dart';
+import 'add_money_flow.dart';
 import 'first_topup_offer.dart';
 import 'quick_topup.dart';
 
@@ -46,7 +46,9 @@ abstract final class FirstTopupLaunch {
       if (amounts.isEmpty || !FirstTopupOffer.mayShow(percent: percent)) {
         return null;
       }
-      if (await TransactionApi.hasPaidTopup(uid)) return null;
+      // Ever paid (the server, the whole history; the same check as the
+      // wallet and the call screen). Unknown: no offer this time.
+      if (await AddMoneyFlow.paidBefore(uid) != false) return null;
       return FirstTopupPlan(
         percent: percent,
         amounts: amounts,

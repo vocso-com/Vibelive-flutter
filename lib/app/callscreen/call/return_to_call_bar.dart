@@ -28,12 +28,14 @@ class ReturnToCallBar extends HookWidget {
 
   @override
   Widget build(BuildContext context) {
-    final (show, name, phase) = useSelect(
+    final (show, name, phase, search) = useSelect(
       CallController.instance.session,
       (s) => (
         s.phase.isActive && !(s.isReceiver && s.phase == CallPhase.ringing),
-        nonEmpty(s.remote.name),
+        // A Talk Now search names nobody until a host has connected.
+        s.isSearch && s.phase.isPreConnect ? null : nonEmpty(s.remote.name),
         s.phase,
+        s.isSearch,
       ),
     );
     final router = GoRouter.maybeOf(context);
@@ -47,9 +49,7 @@ class ReturnToCallBar extends HookWidget {
       padding: EdgeInsets.fromLTRB(16.ms, 6.ms, 16.ms, 4.ms),
       child: Pressable(
         onPressed: () {
-          CallUiEvents.returnTapped(
-            callInfoOf(CallController.instance.value),
-          );
+          CallUiEvents.returnTapped(callInfoOf(CallController.instance.value));
           CallActions.returnToCall();
         },
         activeOpacity: 0.85,
@@ -100,7 +100,10 @@ class ReturnToCallBar extends HookWidget {
               ),
               SizedBox(width: 8.ms),
               // Shrinks before it overflows (long status in Hindi).
-              Flexible(flex: 2, child: _Status(phase: phase)),
+              Flexible(
+                flex: 2,
+                child: _Status(phase: phase, search: search),
+              ),
               SizedBox(width: 4.ms),
               Icon(
                 LucideIcons.chevronRight,
@@ -117,8 +120,11 @@ class ReturnToCallBar extends HookWidget {
 
 /// Live timer once connected, else what the call is doing.
 class _Status extends StatelessWidget {
-  const _Status({required this.phase});
+  const _Status({required this.phase, this.search = false});
   final CallPhase phase;
+
+  /// A Talk Now search: "Ringing" (never "Calling" or "Searching").
+  final bool search;
 
   @override
   Widget build(BuildContext context) {
@@ -136,7 +142,8 @@ class _Status extends StatelessWidget {
         builder: (_, s, _) => label(formatCallTime(s)),
       );
     }
-    final key = callStatusKey(phase) ?? 'call:return_bar.connecting';
+    final key =
+        callStatusKey(phase, instant: search) ?? 'call:return_bar.connecting';
     return label(context.t(key));
   }
 }

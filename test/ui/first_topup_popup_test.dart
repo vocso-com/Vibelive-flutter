@@ -9,6 +9,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
+import 'package:vibelive/app/paymentscreen/wallet/helper/add_money_flow.dart';
 import 'package:vibelive/app/paymentscreen/wallet/helper/first_topup_launch.dart';
 import 'package:vibelive/app/api/paymentscreen/checkout_models.dart';
 import 'package:vibelive/app/paymentscreen/wallet/helper/first_topup_offer.dart';
@@ -31,6 +32,7 @@ void main() {
 
   final realPrepare = FirstTopupLaunch.prepare;
   setUp(() async {
+    AddMoneyFlow.debugReset();
     await PromoPopupStore.clear();
     ExternalOpen.reset();
     PromoPopupController.instance.debugReset();

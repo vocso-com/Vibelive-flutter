@@ -30,6 +30,7 @@ import 'package:vibelive/core/storage/app_prefs.dart';
 import 'package:vibelive/core/theme/app_colors.dart';
 import 'package:vibelive/core/theme/app_theme.dart';
 import 'package:vibelive/core/utils/scale.dart';
+import 'package:vibelive/app/paymentscreen/wallet/helper/add_money_flow.dart';
 import 'package:vibelive/app/paymentscreen/wallet/helper/topup_celebration.dart';
 import 'package:vibelive/app/paymentscreen/wallet/widgets/payment_status_motion.dart';
 
@@ -83,6 +84,10 @@ class _Backend implements HttpClientAdapter {
 
   /// The first-top-up bonus % in app-config (0: off).
   double firstTopupPercent = 0;
+
+  /// A paid top-up long ago, past every page the wallet loads: only the
+  /// server's "ever paid?" question finds it.
+  bool paidLongAgo = false;
   final requests = <String>[];
   final pages = <int>[];
   final posted = <String, Object?>{};
@@ -121,6 +126,11 @@ class _Backend implements HttpClientAdapter {
             {'id': 1, 'wallet_type': 'CASH_WALLET', 'balance': cash},
             {'id': 2, 'wallet_type': 'EARNINGS_WALLET', 'balance': earnings},
           ],
+        };
+      case 'GET /api/transactions'
+          when paidLongAgo && q.containsKey(r'filters[transactionType][$eq]'):
+        return {
+          'data': [_tx(1)],
         };
       case 'GET /api/transactions':
         final page = int.parse('${q['pagination[page]']}');
@@ -266,6 +276,7 @@ void main() {
     await QueryPersist.clearAll();
     ApiClient.dio.httpClientAdapter = backend = _Backend();
     RazorpayGateway.instance = checkout = _FakeCheckout();
+    AddMoneyFlow.debugReset();
     await SessionStore.instance.signIn(user: _me(), accessToken: 'access');
   });
 
@@ -585,6 +596,21 @@ void main() {
     await finish(tester);
   });
 
+  testWidgets('paid long ago, past the loaded history: no first-top-up bonus '
+      '(the backend would not grant it)', (tester) async {
+    backend
+      ..firstTopupPercent = 50
+      ..totalTx =
+          0 // the loaded page shows no top-up
+      ..paidLongAgo = true;
+    await open(tester);
+    await tester.tap(find.text('Add money'));
+    await _pump(tester, 600);
+    expect(find.byKey(const ValueKey('add-money-bonus')), findsNothing);
+    expect(find.textContaining('EXTRA'), findsNothing);
+    await finish(tester);
+  });
+
   testWidgets('add money, first top-up: the bonus banner and FREE extras', (
     tester,
   ) async {
@@ -597,7 +623,11 @@ void main() {
     expect(find.byKey(const ValueKey('add-money-bonus')), findsOneWidget);
     expect(find.text('+50% EXTRA'), findsOneWidget);
     expect(find.text('+₹250 BONUS'), findsOneWidget); // on ₹500
-    expect(find.textContaining('FREE'), findsNothing, reason: 'a bonus, not free');
+    expect(
+      find.textContaining('FREE'),
+      findsNothing,
+      reason: 'a bonus, not free',
+    );
     expect(find.text('incl. ₹250 bonus'), findsOneWidget); // in the summary
     expect(find.text('Pay ₹590'), findsOneWidget, reason: 'GST on ₹500 only');
     final gets = tester.widget<Text>(

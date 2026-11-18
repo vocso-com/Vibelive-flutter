@@ -158,6 +158,18 @@ abstract final class CallBilling {
   /// How each call hangs up at its limit (kept to re-arm after a top-up).
   static final _onLimit = <String, void Function()>{};
 
+  /// Calls whose caller is paying right now: their end waits ([hold]).
+  static final _holding = <String>{};
+
+  /// Calls whose end came while they were held: decided on release.
+  static final _endDue = <String>{};
+
+  /// Calls the caller paid into: their limit strips are gone ([markPaid]).
+  static final _paid = <String>{};
+
+  /// The longest a call waits for a payment (the backend's hold is as long).
+  static const holdMax = Duration(minutes: 5);
+
   /// Buzzes the phone (tests swap it).
   @visibleForTesting
   static Future<void> Function() buzz = _buzz;
@@ -221,6 +233,37 @@ abstract final class CallBilling {
     _onLimit[callId] = onLimit;
     await _apply(call, onLimit, rearm: false);
   }
+
+  /// The caller is paying ([on]): the call is not hung up meanwhile, for at
+  /// most [holdMax]. Released, an end that came meanwhile is decided again
+  /// on the balance now (enough money: it goes on; none: it ends now).
+  static void hold(String callId, {required bool on}) {
+    final timers = CallTimers.instance;
+    if (on) {
+      _holding.add(callId);
+      timers.arm(
+        CallTimers.topUpHoldMax,
+        holdMax,
+        () => hold(callId, on: false),
+      );
+      return;
+    }
+    timers.cancel(CallTimers.topUpHoldMax);
+    if (!_holding.remove(callId)) return;
+    if (_endDue.remove(callId)) unawaited(rearm(callId));
+  }
+
+  static bool holding(String? callId) => _holding.contains(callId);
+
+  /// The caller paid during [callId] (as soon as the gateway says so): the
+  /// "Add money" strip and the free-time strip go at once.
+  static void markPaid(String callId) {
+    _paid.add(callId);
+    if (topUpDue.value == callId) topUpDue.value = null;
+  }
+
+  /// The caller paid into this call (the call screen drops its limit strips).
+  static bool paidDuring(String? callId) => _paid.contains(callId);
 
   /// Money was added during [callId]: the balance is read again and the
   /// call's end (and its "Add money") moved to what it now pays for. True
@@ -287,6 +330,11 @@ abstract final class CallBilling {
       final elapsed = now.difference(connectedAt);
       timers.arm(CallTimers.maxDuration, cap.end - elapsed, () {
         if (!CallController.instance.value.isSameCall(callId)) return;
+        // Paying right now: never cut off mid-payment; decided on release.
+        if (_holding.contains(callId)) {
+          _endDue.add(callId);
+          return;
+        }
         CallAlerts.toast(
           cap.freeLimit ? CallFlowKeys.freeEnded : CallFlowKeys.lowBalanceEnded,
         );
@@ -346,6 +394,9 @@ abstract final class CallBilling {
     // Already up (a top-up that still does not cover [topUpLead]): it stays,
     // with no second buzz.
     if (topUpDue.value == callId) return;
+    // Just paid: not straight back up (the money may still be on its way;
+    // the call's own end decides).
+    if (rearm && _paid.contains(callId)) return;
     final wait = rearm ? Duration.zero : topUpEarliest - elapsed;
     timers.arm(
       CallTimers.topUpPrompt,
@@ -392,6 +443,9 @@ abstract final class CallBilling {
     _rates.clear();
     _free.clear();
     _onLimit.clear();
+    _holding.clear();
+    _endDue.clear();
+    _paid.clear();
     _warned = null;
     _freeWarned = null;
     limit.value = null;
@@ -403,6 +457,9 @@ abstract final class CallBilling {
     _rates.remove(callId);
     _free.remove(callId);
     _onLimit.remove(callId);
+    _holding.remove(callId);
+    _endDue.remove(callId);
+    _paid.remove(callId);
     if (_warned == callId) _warned = null;
     if (_freeWarned == callId) _freeWarned = null;
     if (callId != null && limit.value?.callId == callId) limit.value = null;

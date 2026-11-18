@@ -164,6 +164,7 @@
     "body": "Add money to keep talking. Your call stays on while you pay.",
     "add": "Add money",
     "pill": "{{time}} left · Add money",
-    "close": "Close"
+    "close": "Close",
+    "bonus": "{{percent}}% extra on your first top-up"
   }
 }

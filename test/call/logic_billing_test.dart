@@ -268,6 +268,63 @@ void main() {
       expect(await CallBilling.rearm('77'), isFalse);
     });
 
+    test('paying: an end that comes meanwhile waits; money in, the call goes '
+        'on', () async {
+      backend.cash = 0; // its end is now
+      CallBilling.rememberRate('77', 10);
+      CallBilling.hold('77', on: true);
+      await connect();
+      await settle(100);
+      expect(calls.value.phase, CallPhase.ongoing, reason: 'held');
+      expect(backend.to('POST', callEnd), isEmpty);
+
+      backend.cash = 500;
+      CallBilling.markPaid('77');
+      CallBilling.hold('77', on: false);
+      await settle(150);
+      expect(calls.value.phase, CallPhase.ongoing);
+      expect(backend.to('POST', callEnd), isEmpty);
+      expect(
+        CallBilling.limit.value!.leftAt(DateTime.now()).inMinutes,
+        greaterThanOrEqualTo(48),
+      );
+      expect(CallBilling.paidDuring('77'), isTrue);
+    });
+
+    test('paying, then nothing paid: released, the call ends then', () async {
+      backend.cash = 0;
+      CallBilling.rememberRate('77', 10);
+      CallBilling.hold('77', on: true);
+      await connect();
+      await settle(100);
+      expect(calls.value.phase, CallPhase.ongoing);
+
+      CallBilling.hold('77', on: false);
+      await settleUntil(
+        () => backend.to('POST', callEnd).isNotEmpty,
+        reason: 'released with no money: it ends',
+      );
+      expect(alertLog(), contains('toast|callflow:low_balance.ended'));
+    });
+
+    test('paid: "Add money" does not come straight back while the money is '
+        'on its way', () async {
+      backend.cash = 25;
+      CallBilling.rememberRate('77', 10);
+      await connect();
+      await settleUntil(
+        () => CallBilling.topUpDue.value == '77',
+        timeoutMs: 5000,
+      );
+      CallBilling.markPaid('77');
+      expect(CallBilling.topUpDue.value, isNull);
+      // The balance not updated yet (pending): still the same end.
+      await CallBilling.rearm('77');
+      await settle(200);
+      expect(CallBilling.topUpDue.value, isNull);
+      expect(buzzes, 1);
+    });
+
     test('never for the receiver', () async {
       calls.receive(
         const CallSession(callId: '42', callerId: '5', receiverId: '9'),

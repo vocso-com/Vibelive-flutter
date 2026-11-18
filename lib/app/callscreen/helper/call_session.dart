@@ -100,6 +100,7 @@ class CallSession {
     this.isInstantCall = false,
     this.instantCallSessionId,
     this.serverCallId,
+    this.rollover = false,
   });
 
   static const idle = CallSession();
@@ -161,6 +162,14 @@ class CallSession {
   /// host-accept reply; caller: `INSTANT_CALL_CONNECTED`).
   final String? serverCallId;
 
+  /// A call to the host the caller chose (their profile), run by the Talk
+  /// Now engine only so it can roll over to others: the caller sees a
+  /// normal call ("Calling", "Ringing"), never a search.
+  final bool rollover;
+
+  /// The Talk Now button's search for any free host ("Searching...").
+  bool get isSearch => isInstantCall && !rollover;
+
   /// The id `/call/Callend` takes: the call record. A Talk Now call has
   /// none until a host accepts (then nothing is billed: the session is
   /// cancelled or declined through `/instant-call/*` instead).
@@ -221,6 +230,7 @@ class CallSession {
     bool? isInstantCall,
     String? instantCallSessionId,
     String? serverCallId,
+    bool? rollover,
   }) => CallSession(
     phase: phase ?? this.phase,
     role: role ?? this.role,
@@ -246,6 +256,7 @@ class CallSession {
     isInstantCall: isInstantCall ?? this.isInstantCall,
     instantCallSessionId: instantCallSessionId ?? this.instantCallSessionId,
     serverCallId: serverCallId ?? this.serverCallId,
+    rollover: rollover ?? this.rollover,
   );
 }
 

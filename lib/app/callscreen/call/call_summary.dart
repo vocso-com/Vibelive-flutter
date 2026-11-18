@@ -9,6 +9,7 @@ import '../../component/c_text.dart';
 import 'call_avatar.dart';
 import 'call_motion_widgets.dart';
 import 'call_pulse.dart';
+import 'search_galaxy.dart';
 import 'helper/call_format.dart';
 import 'helper/call_motion.dart';
 import 'helper/call_select.dart';
@@ -31,7 +32,8 @@ class CallSummary extends HookWidget {
         s.remote.id,
         s.isVideo,
         s.phase,
-        s.isInstantCall,
+        // A rolled-over profile call is a normal call to the caller.
+        s.isSearch,
       ),
     );
     final accent = context.colors.accent;
@@ -80,6 +82,15 @@ class CallSummary extends HookWidget {
       ],
     );
 
+    // The Talk Now search: a galaxy, not the hosts being rung one by one.
+    final searching = instant && !ended && phase.isPreConnect;
+    // Only the galaxy (and "Ringing" under it): no host's name until one
+    // has connected.
+    final searchView = SearchGalaxy(
+      key: const ValueKey('call-search-view'),
+      size: 220.sw,
+    );
+
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -92,15 +103,12 @@ class CallSummary extends HookWidget {
               opacity: animation,
               child: SlideTransition(
                 position: animation.drive(
-                  Tween(
-                    begin: const Offset(0, 0.05),
-                    end: Offset.zero,
-                  ),
+                  Tween(begin: const Offset(0, 0.05), end: Offset.zero),
                 ),
                 child: child,
               ),
             ),
-            child: avatarAndName,
+            child: searching ? searchView : avatarAndName,
           )
         else
           avatarAndName,
@@ -108,16 +116,17 @@ class CallSummary extends HookWidget {
           padding: EdgeInsets.only(top: 8.vs),
           child: _Status(labelKey: statusKey, color: accent),
         ),
-        Padding(
-          padding: EdgeInsets.only(top: 16.vs),
-          child: CText(
-            callTypeKey(video: video),
-            color: AppColors.whiteA(0.85),
-            weight: FontWeight.w800,
-            size: 20,
-            align: TextAlign.center,
+        if (!searching)
+          Padding(
+            padding: EdgeInsets.only(top: 16.vs),
+            child: CText(
+              callTypeKey(video: video),
+              color: AppColors.whiteA(0.85),
+              weight: FontWeight.w800,
+              size: 20,
+              align: TextAlign.center,
+            ),
           ),
-        ),
         Padding(
           padding: EdgeInsets.only(top: 32.vs),
           child: ended
@@ -150,7 +159,7 @@ class _Duration extends HookWidget {
       (s) => (
         s.everConnected,
         s.everConnected ? s.durationSeconds() : 0,
-        s.isInstantCall,
+        s.isSearch,
       ),
     );
     final label = connected

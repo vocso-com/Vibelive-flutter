@@ -174,6 +174,8 @@ abstract final class InstantCallFlow {
       sentAt: DateTime.now(),
       isInstantCall: true,
       instantCallSessionId: started.sessionId,
+      // A call from a host's profile: shown as a normal call, not a search.
+      rollover: chosen != null,
     );
     // The balance cap (hang up before the wallet runs out) needs the rate
     // the caller pays: the chosen host's, or Talk Now's (the connected push

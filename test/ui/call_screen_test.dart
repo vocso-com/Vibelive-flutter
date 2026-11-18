@@ -4,9 +4,12 @@ import 'package:clock/clock.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:vibelive/app/callscreen/call/call_pip.dart';
+import 'package:vibelive/app/api/free_call/free_call_models.dart';
 import 'package:vibelive/app/callscreen/call/call_screen.dart';
+import 'package:vibelive/app/callscreen/call/return_to_call_bar.dart';
 import 'package:vibelive/app/callscreen/call/call_topup.dart';
 import 'package:vibelive/app/callscreen/helper/call_billing.dart';
+import 'package:vibelive/app/paymentscreen/wallet/helper/topup_bonus.dart';
 import 'package:vibelive/app/paymentscreen/wallet/helper/topup_checkout.dart';
 import 'package:vibelive/app/callscreen/call/helper/call_nav.dart';
 import 'package:vibelive/app/callscreen/call/helper/pip_clamp.dart';
@@ -504,7 +507,105 @@ void main() {
     });
   }
 
+  group('searching vs a normal call (caller)', () {
+    CallSession instant({required bool rollover, CallPhase? phase}) => callOf(
+      phase: phase ?? CallPhase.calling,
+      role: CallRole.caller,
+    ).copyWith(isInstantCall: true, rollover: rollover);
+
+    testWidgets('Talk Now button: only the galaxy and "Ringing" — no '
+        '"Searching", no name of whoever is being rung', (tester) async {
+      await openCall(tester, instant(rollover: false));
+      expect(find.byKey(const ValueKey('search-galaxy')), findsOneWidget);
+      expect(find.text('RINGING'), findsOneWidget);
+      expect(find.textContaining('SEARCHING'), findsNothing);
+      expect(find.textContaining('Finding someone'), findsNothing);
+      expect(find.text('Audio Call'), findsNothing);
+      expect(find.text('Ananya'), findsNothing);
+      await setCall(tester, instant(rollover: false, phase: CallPhase.ringing));
+      expect(find.text('RINGING'), findsOneWidget);
+      expect(find.text('Ananya'), findsNothing);
+      expect(tester.takeException(), isNull);
+
+      // A host joined: their photo and name, and only theirs.
+      await setCall(
+        tester,
+        instant(
+          rollover: false,
+          phase: CallPhase.ongoing,
+        ).copyWith(connectedAt: DateTime.now()),
+        media: _live,
+      );
+      await pumpMs(tester, 600);
+      expect(find.byKey(const ValueKey('search-galaxy')), findsNothing);
+      expect(find.text('Ananya'), findsOneWidget);
+      await finishCall(tester);
+    });
+
+    testWidgets('minimised while it searches: the bar names nobody', (
+      tester,
+    ) async {
+      CallEngine.instance.debugSetMedia(CallMedia.initial);
+      CallController.instance.debugSet(instant(rollover: false));
+      final router = await pumpCallApp(tester);
+      unawaited(router.push(AppRoutes.home));
+      await pumpMs(tester, 300);
+      expect(find.text('HOME PAGE'), findsOneWidget);
+      final bar = find.byType(ReturnToCallBar);
+      Finder inBar(String s) =>
+          find.descendant(of: bar, matching: find.textContaining(s));
+      expect(inBar('Ananya'), findsNothing);
+      expect(inBar('RINGING'), findsOneWidget);
+      expect(inBar('CALLING'), findsNothing);
+      await finishCall(tester);
+    });
+
+    testWidgets('320 wide: the galaxy fits with everything else', (
+      tester,
+    ) async {
+      await openCall(tester, instant(rollover: false), size: narrow);
+      await pumpMs(tester, 300);
+      expect(find.byKey(const ValueKey('search-galaxy')), findsOneWidget);
+      expect(tester.takeException(), isNull);
+      await finishCall(tester);
+    });
+
+    testWidgets('a call from a host\'s profile (rolls over): a normal call, '
+        'no "Searching"', (tester) async {
+      await openCall(tester, instant(rollover: true));
+      expect(find.textContaining('SEARCHING'), findsNothing);
+      expect(find.byKey(const ValueKey('search-galaxy')), findsNothing);
+      expect(find.text('Ananya'), findsOneWidget);
+      expect(find.text('CALLING'), findsOneWidget);
+      await setCall(tester, instant(rollover: true, phase: CallPhase.ringing));
+      expect(find.textContaining('SEARCHING'), findsNothing);
+      expect(find.text('RINGING'), findsOneWidget);
+
+      // Nobody took it: said like a normal call, not a search.
+      await setCall(
+        tester,
+        instant(
+          rollover: true,
+          phase: CallPhase.ended,
+        ).copyWith(endedAt: DateTime.now()),
+      );
+      expect(find.textContaining("Everyone's busy"), findsNothing);
+      expect(find.text('Declined'), findsOneWidget);
+      await pumpMs(tester, 1300);
+      await finishCall(tester);
+    });
+  });
+
   group('"Add money" during a call', () {
+    final holds = <String>[];
+    setUp(() {
+      holds.clear();
+      InCallTopUp.serverHold = (record, {required active}) async {
+        holds.add('$record:$active');
+        return true;
+      };
+      InCallTopUp.bonus = () async => null;
+    });
     tearDown(() {
       CallBilling.debugReset();
       InCallTopUp.debugReset();
@@ -548,7 +649,7 @@ void main() {
         tester,
       ) async {
         final during = <bool>[];
-        InCallTopUp.pay = (_) async {
+        InCallTopUp.pay = (_, _) async {
           during.add(speaker());
           return TopUpResult.success;
         };
@@ -568,11 +669,63 @@ void main() {
       });
     }
 
+    testWidgets('paid: the strip goes the moment the gateway says so (the '
+        'status dialog is still up), the server hold is taken and let go', (
+      tester,
+    ) async {
+      final dialogOpen = Completer<void>();
+      InCallTopUp.pay = (_, onPaid) async {
+        onPaid(TopUpResult.success);
+        // The status dialog: still on screen until this completes.
+        await dialogOpen.future;
+        return TopUpResult.success;
+      };
+      await openDue(tester);
+      await tester.tap(find.byKey(const ValueKey('call-topup-add')));
+      await pumpMs(tester, 400);
+      // The dialog is still up: the strip is already gone.
+      expect(CallBilling.topUpDue.value, isNull);
+      expect(card, findsNothing);
+      expect(holds, ['501:true'], reason: 'held while paying');
+      dialogOpen.complete();
+      await pumpMs(tester, 300);
+      expect(holds, ['501:true', '501:false']);
+      expect(CallController.instance.value.phase, CallPhase.ongoing);
+      await finishCall(tester);
+    });
+
+    testWidgets('free call paid into: the green free-time strip goes too', (
+      tester,
+    ) async {
+      final now = DateTime.now();
+      CallBilling.rememberFree('501', const FreeCallTerms(minutes: 3));
+      InCallTopUp.pay = (_, onPaid) async {
+        onPaid(TopUpResult.success);
+        return TopUpResult.success;
+      };
+      await openDue(tester, free: true);
+      CallController.instance.debugSet(
+        callOf(
+          phase: CallPhase.ongoing,
+          role: CallRole.caller,
+          connectedAt: now.subtract(const Duration(seconds: 20)),
+        ),
+      );
+      await pumpMs(tester, 1200);
+      final freePill = find.byKey(const ValueKey('call-free-pill'));
+      expect(freePill, findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('call-topup-add')));
+      await pumpMs(tester, 1200);
+      expect(freePill, findsNothing);
+      expect(card, findsNothing);
+      await finishCall(tester);
+    });
+
     testWidgets('a headset or Bluetooth carries the call: left alone', (
       tester,
     ) async {
       final during = <bool>[];
-      InCallTopUp.pay = (_) async {
+      InCallTopUp.pay = (_, _) async {
         during.add(speaker());
         return null;
       };
@@ -586,7 +739,7 @@ void main() {
     });
 
     testWidgets('already on the speaker: it stays on after', (tester) async {
-      InCallTopUp.pay = (_) async => null;
+      InCallTopUp.pay = (_, _) async => null;
       await openDue(tester);
       CallEngine.instance.debugSetMedia(_live.copyWith(speakerOn: true));
       await tester.tap(find.byKey(const ValueKey('call-topup-add')));
@@ -599,7 +752,7 @@ void main() {
       tester,
     ) async {
       var paid = 0;
-      InCallTopUp.pay = (_) async {
+      InCallTopUp.pay = (_, _) async {
         paid++;
         return null;
       };
@@ -638,6 +791,9 @@ void main() {
           freeLimit: true,
           extendable: true,
         );
+        // The most text there is: with the first-top-up line.
+        InCallTopUp.bonus = () async =>
+            const TopUpBonus(TopUpBonusKind.firstTopup, 100);
         CallBilling.topUpDue.value = '501';
         void noError() {
           final e = tester.takeException();
@@ -658,6 +814,32 @@ void main() {
         await finishCall(tester);
       });
     }
+
+    testWidgets('a first top-up bonus: said on the card, and on the pill', (
+      tester,
+    ) async {
+      InCallTopUp.bonus = () async =>
+          const TopUpBonus(TopUpBonusKind.firstTopup, 100);
+      await openDue(tester);
+      expect(find.byKey(const ValueKey('call-topup-bonus')), findsOneWidget);
+      expect(
+        find.textContaining('100% extra on your first top-up'),
+        findsOneWidget,
+      );
+      await tester.tap(find.byKey(const ValueKey('call-topup-close')));
+      await pumpMs(tester, 400);
+      expect(find.text('+100%'), findsOneWidget);
+      await finishCall(tester);
+    });
+
+    testWidgets('no bonus: nothing about one', (tester) async {
+      await openDue(tester);
+      expect(find.byKey(const ValueKey('call-topup-bonus')), findsNothing);
+      await tester.tap(find.byKey(const ValueKey('call-topup-close')));
+      await pumpMs(tester, 400);
+      expect(find.byKey(const ValueKey('call-topup-pill-bonus')), findsNothing);
+      await finishCall(tester);
+    });
 
     testWidgets('free minutes running out: their own words', (tester) async {
       await openDue(tester, free: true);
@@ -705,7 +887,7 @@ void main() {
     testWidgets('the call ends while paying: the rating waits until Add money '
         'is done, and nothing is pulled from under it', (tester) async {
       final paying = Completer<TopUpResult?>();
-      InCallTopUp.pay = (_) => paying.future;
+      InCallTopUp.pay = (_, _) => paying.future;
       await openDue(tester);
       await tester.tap(find.byKey(const ValueKey('call-topup-add')));
       await pumpMs(tester, 200);

@@ -134,10 +134,10 @@ class _StatusPill extends HookWidget {
 
   @override
   Widget build(BuildContext context) {
-    final (phase, instant) = useCallSelect(
-      (s) => (s.phase, s.isInstantCall),
-    );
-    if (phase.isPreConnect && !instant) return const SizedBox.shrink();
+    // Nothing up here before it connects: a search shows only its galaxy
+    // and "Ringing" below (no "Searching", no names).
+    final (phase, instant) = useCallSelect((s) => (s.phase, s.isSearch));
+    if (phase.isPreConnect) return const SizedBox.shrink();
     const style = (color: AppColors.white, size: 13.0, weight: FontWeight.w900);
     final Widget text;
     if (phase == CallPhase.ongoing) {
@@ -176,7 +176,8 @@ class _StatusPill extends HookWidget {
 }
 
 /// The caller's free time left on a free call (docs/free_calls.md), under
-/// the timer; gone once the free minutes are over.
+/// the timer; gone once the free minutes are over, or once the caller has
+/// paid into the call (it no longer stops there).
 class _FreePill extends HookWidget {
   const _FreePill();
 
@@ -193,7 +194,9 @@ class _FreePill extends HookWidget {
       valueListenable: CallController.instance.elapsed,
       builder: (context, seconds, _) {
         final left = free.duration.inSeconds - seconds;
-        if (left <= 0) return const SizedBox.shrink();
+        if (left <= 0 || CallBilling.paidDuring(callId)) {
+          return const SizedBox.shrink();
+        }
         return Padding(
           key: const ValueKey('call-free-pill'),
           padding: EdgeInsets.only(top: 6.vs),

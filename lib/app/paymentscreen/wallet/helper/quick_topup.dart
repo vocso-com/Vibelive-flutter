@@ -20,6 +20,7 @@ import '../../../component/c_alert.dart';
 import '../../../component/c_loader.dart';
 import '../widgets/payment_status.dart';
 import '../widgets/web_checkout_page.dart';
+import 'add_money_flow.dart';
 import 'topup_checkout.dart';
 import 'wallet_palette.dart';
 import 'wallet_amounts.dart';
@@ -68,6 +69,15 @@ abstract final class QuickTopUp {
       ),
     );
     Overlay.of(context, rootOverlay: true).insert(overlay);
+    // Removed once: `mounted` stays true until the next frame, so it cannot
+    // tell (a second remove() asserts, and throws in release).
+    var removed = false;
+    void drop() {
+      if (removed) return;
+      removed = true;
+      overlay.remove();
+    }
+
     RechargeCheckout? order;
     try {
       PaymentEvents.payTapped(
@@ -121,7 +131,7 @@ abstract final class QuickTopUp {
       if (status == null) {
         // Closed by them: the come-back offer, once, as on the wallet.
         if (!abandoned || comeback || paid is! RazorpayCheckout) return;
-        overlay.remove();
+        drop();
         final again = await WalletOffers.afterAbandon(
           context,
           config: config,
@@ -138,21 +148,22 @@ abstract final class QuickTopUp {
         return;
       }
       invalidateWalletQueries();
+      if (status.result != TopUpResult.failure) AddMoneyFlow.forgetPaid();
       final result = status.result.name;
       PaymentEvents.paymentStatusShown(
         status: result,
         source: source,
         amount: paid.baseAmount,
       );
-      if (overlay.mounted) overlay.remove();
+      drop();
       await showPaymentStatus(context, status);
       PaymentEvents.paymentStatusClosed(status: result, source: source);
     } on ApiException catch (e) {
       PaymentEvents.orderFailed(amount: amount, error: Analytics.errorCode(e));
-      if (overlay.mounted) overlay.remove();
+      drop();
       unawaited(CAlert.error(e));
     } finally {
-      if (overlay.mounted) overlay.remove();
+      drop();
       backdrop.dispose();
       flow.dispose();
     }
