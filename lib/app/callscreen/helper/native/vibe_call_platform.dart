@@ -97,9 +97,7 @@ class VibeCallPlatform extends CallPlatform {
     await CallKitService.startOngoing(
       callId,
       // A Talk Now search names nobody: the host rung first is not the call.
-      name: call.isSearch
-          ? CallKitParamsBuilder.appName
-          : call.remote.name ?? CallKitParamsBuilder.appName,
+      name: call.shownName ?? CallKitParamsBuilder.appName,
       video: call.isVideo,
       extra: _extraOf(call),
     );
@@ -232,8 +230,8 @@ class VibeCallPlatform extends CallPlatform {
     'receiverId': ?call.receiverId,
     'calleridDocID': ?call.callerDocId,
     'type': call.isVideo ? 'videoCall' : 'voiceCall',
-    if (!call.isSearch) 'callerName': ?call.remote.name,
-    if (!call.isSearch) 'ProfilePic': ?call.remote.avatarUrl,
+    'callerName': ?call.shownName,
+    'ProfilePic': ?call.shownAvatar,
     // Talk Now: a background Hang up ends a session / bills its record.
     if (call.isInstantCall) 'isInstantCall': 'true',
     'instantCallSessionId': ?call.instantCallSessionId,

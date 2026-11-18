@@ -118,7 +118,7 @@ class _Tile extends HookWidget {
   @override
   Widget build(BuildContext context) {
     final (remoteName, remoteUrl, channel) = useCallSelect(
-      (s) => (nonEmpty(s.remote.name), s.remote.avatarUrl, s.channelName),
+      (s) => (nonEmpty(s.shownName), s.shownAvatar, s.channelName),
     );
     final m = useMediaSelect(
       (m) => (

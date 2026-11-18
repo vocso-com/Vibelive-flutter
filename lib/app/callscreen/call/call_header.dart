@@ -97,7 +97,8 @@ class _Centre extends HookWidget {
       (s) => (
         s.isCaller && s.callerIsCompany,
         s.isReceiver && s.remote.isCompany,
-        nonEmpty(s.remote.name),
+        // Nobody named while a Talk Now search rings hosts.
+        nonEmpty(s.shownName),
       ),
     );
     return Column(

@@ -33,7 +33,7 @@ class ReturnToCallBar extends HookWidget {
       (s) => (
         s.phase.isActive && !(s.isReceiver && s.phase == CallPhase.ringing),
         // A Talk Now search names nobody until a host has connected.
-        s.isSearch && s.phase.isPreConnect ? null : nonEmpty(s.remote.name),
+        nonEmpty(s.shownName),
         s.phase,
         s.isSearch,
       ),

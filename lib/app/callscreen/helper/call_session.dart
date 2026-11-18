@@ -170,6 +170,24 @@ class CallSession {
   /// The Talk Now button's search for any free host ("Searching...").
   bool get isSearch => isInstantCall && !rollover;
 
+  /// The caller's Talk Now search that no host has joined: whoever is being
+  /// rung is not the call, so no name or photo shows anywhere (screen,
+  /// header, bar, picture-in-picture, notification) until one connects;
+  /// nor after, when it ended without anyone (the caller hung up, nobody
+  /// took it). Only the Talk Now button's search: a call to a chosen host
+  /// (a rolled-over profile call too) names its host as ever.
+  bool get hidesPeer =>
+      isCaller &&
+      isSearch &&
+      !everConnected &&
+      (phase.isPreConnect ||
+          phase == CallPhase.ended ||
+          phase == CallPhase.idle);
+
+  /// The other side's name / photo as the caller may see them now.
+  String? get shownName => hidesPeer ? null : remote.name;
+  String? get shownAvatar => hidesPeer ? null : remote.avatarUrl;
+
   /// The id `/call/Callend` takes: the call record. A Talk Now call has
   /// none until a host accepts (then nothing is billed: the session is
   /// cancelled or declined through `/instant-call/*` instead).

@@ -38,7 +38,7 @@ class CallSafetyPanel extends HookWidget {
   Widget build(BuildContext context) {
     final ui = CallScope.of(context).ui!;
     final busy = useState<_Kind?>(null);
-    final name = useCallSelect((s) => nonEmpty(s.remote.name));
+    final name = useCallSelect((s) => nonEmpty(s.shownName));
 
     Future<void> run(_Kind kind) async {
       if (busy.value != null) return;

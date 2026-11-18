@@ -43,8 +43,8 @@ class _VideoLayer extends HookWidget {
       (s) => (
         s.isVideo,
         isCallOver(s.phase),
-        nonEmpty(s.remote.name),
-        s.remote.avatarUrl,
+        nonEmpty(s.shownName),
+        s.shownAvatar,
         s.channelName,
       ),
     );

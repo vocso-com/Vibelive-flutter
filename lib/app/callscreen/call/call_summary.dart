@@ -25,7 +25,7 @@ class CallSummary extends HookWidget {
 
   @override
   Widget build(BuildContext context) {
-    final (name, url, remoteId, video, phase, instant) = useCallSelect(
+    final (name, url, remoteId, video, phase, instant, hidden) = useCallSelect(
       (s) => (
         nonEmpty(s.remote.name),
         s.remote.avatarUrl,
@@ -34,6 +34,8 @@ class CallSummary extends HookWidget {
         s.phase,
         // A rolled-over profile call is a normal call to the caller.
         s.isSearch,
+        // The caller's search no host joined: nobody to name, ended or not.
+        s.hidesPeer,
       ),
     );
     final accent = context.colors.accent;
@@ -82,8 +84,9 @@ class CallSummary extends HookWidget {
       ],
     );
 
-    // The Talk Now search: a galaxy, not the hosts being rung one by one.
-    final searching = instant && !ended && phase.isPreConnect;
+    // The Talk Now search: a galaxy, not the hosts being rung one by one;
+    // also once it ended with nobody (no last-rung host's name then either).
+    final searching = hidden;
     // Only the galaxy (and "Ringing" under it): no host's name until one
     // has connected.
     final searchView = SearchGalaxy(
@@ -111,7 +114,7 @@ class CallSummary extends HookWidget {
             child: searching ? searchView : avatarAndName,
           )
         else
-          avatarAndName,
+          searching ? searchView : avatarAndName,
         Padding(
           padding: EdgeInsets.only(top: 8.vs),
           child: _Status(labelKey: statusKey, color: accent),

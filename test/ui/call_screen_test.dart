@@ -522,10 +522,33 @@ void main() {
       expect(find.textContaining('Finding someone'), findsNothing);
       expect(find.text('Audio Call'), findsNothing);
       expect(find.text('Ananya'), findsNothing);
+      // Not up top either (the header's name line).
+      expect(find.text('ANANYA'), findsNothing);
       await setCall(tester, instant(rollover: false, phase: CallPhase.ringing));
       expect(find.text('RINGING'), findsOneWidget);
       expect(find.text('Ananya'), findsNothing);
       expect(tester.takeException(), isNull);
+
+      // The search moves on to another host (host-changed push): still
+      // nobody named, anywhere on the screen.
+      await setCall(
+        tester,
+        instant(rollover: false, phase: CallPhase.ringing).copyWith(
+          remote: const CallPeer(id: '71', name: 'Divya'),
+        ),
+      );
+      expect(find.textContaining('Divya'), findsNothing);
+      expect(find.textContaining('DIVYA'), findsNothing);
+      // A host accepted (connected push), not joined yet: still nobody.
+      await setCall(
+        tester,
+        instant(rollover: false, phase: CallPhase.ringing).copyWith(
+          remote: const CallPeer(id: '72', name: 'Ananya'),
+          serverCallId: '901',
+        ),
+      );
+      expect(find.text('Ananya'), findsNothing);
+      expect(find.text('ANANYA'), findsNothing);
 
       // A host joined: their photo and name, and only theirs.
       await setCall(
@@ -539,7 +562,28 @@ void main() {
       await pumpMs(tester, 600);
       expect(find.byKey(const ValueKey('search-galaxy')), findsNothing);
       expect(find.text('Ananya'), findsOneWidget);
+      expect(find.text('ANANYA'), findsOneWidget, reason: 'header, connected');
       await finishCall(tester);
+    });
+
+    test('only the caller\'s search hides the other side: a host being '
+        'rung by Talk Now still sees who calls', () {
+      final caller = instant(rollover: false);
+      expect(caller.hidesPeer, isTrue);
+      expect(caller.shownName, isNull);
+      expect(caller.shownAvatar, isNull);
+      final host = callOf(
+        phase: CallPhase.ringing,
+      ).copyWith(isInstantCall: true);
+      expect(host.hidesPeer, isFalse);
+      expect(host.shownName, 'Ananya');
+      // A profile call (rolls over) names its host from the start.
+      expect(instant(rollover: true).shownName, 'Ananya');
+      // Connected: the host who answered.
+      expect(
+        instant(rollover: false, phase: CallPhase.ongoing).shownName,
+        'Ananya',
+      );
     });
 
     testWidgets('minimised while it searches: the bar names nobody', (
@@ -591,6 +635,56 @@ void main() {
       );
       expect(find.textContaining("Everyone's busy"), findsNothing);
       expect(find.text('Declined'), findsOneWidget);
+      // A normal call keeps naming its host at the end.
+      expect(find.text('Ananya'), findsOneWidget);
+      expect(find.byKey(const ValueKey('search-galaxy')), findsNothing);
+      await pumpMs(tester, 1300);
+      await finishCall(tester);
+    });
+
+    testWidgets('the caller hangs up the search (nobody joined): the end '
+        'screen names nobody, not the last host it rang', (tester) async {
+      await openCall(
+        tester,
+        instant(rollover: false, phase: CallPhase.ringing),
+      );
+      await setCall(
+        tester,
+        instant(rollover: false, phase: CallPhase.ended).copyWith(
+          remote: const CallPeer(id: '71', name: 'Divya'),
+          endedAt: DateTime.now(),
+        ),
+      );
+      expect(find.text('CALL ENDED'), findsOneWidget);
+      expect(find.textContaining('Divya'), findsNothing);
+      expect(find.textContaining('DIVYA'), findsNothing);
+      expect(find.byKey(const ValueKey('search-galaxy')), findsOneWidget);
+      expect(tester.takeException(), isNull);
+      await pumpMs(tester, 1300);
+      await finishCall(tester);
+    });
+
+    testWidgets('a search a host joined, then ended: that host is named', (
+      tester,
+    ) async {
+      final connected = DateTime.now().subtract(const Duration(seconds: 30));
+      await openCall(
+        tester,
+        instant(
+          rollover: false,
+          phase: CallPhase.ongoing,
+        ).copyWith(connectedAt: connected),
+        media: _live,
+      );
+      await setCall(
+        tester,
+        instant(
+          rollover: false,
+          phase: CallPhase.ended,
+        ).copyWith(connectedAt: connected, endedAt: DateTime.now()),
+      );
+      expect(find.text('Ananya'), findsOneWidget);
+      expect(find.byKey(const ValueKey('search-galaxy')), findsNothing);
       await pumpMs(tester, 1300);
       await finishCall(tester);
     });
